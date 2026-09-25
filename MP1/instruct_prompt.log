@@ -1,0 +1,548 @@
+2026-09-25 16:03:33.641510: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Working with deepseek-ai/deepseek-coder-6.7b-instruct quantization True...
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Fetching 2 files:  50%|█████     | 1/2 [02:45<02:45, 165.69s/it]Fetching 2 files: 100%|██████████| 2/2 [02:45<00:00, 82.84s/it] 
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]/usr/local/lib/python3.13/dist-packages/bitsandbytes/backends/cuda/ops.py:212: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Loading checkpoint shards:  50%|█████     | 1/2 [00:41<00:41, 41.37s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:55<00:00, 25.63s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:55<00:00, 27.99s/it]
+The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+/usr/local/lib/python3.13/dist-packages/bitsandbytes/backends/cuda/ops.py:464: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+Task_ID HumanEval/133:
+Prompt:
+
+
+def sum_squares(lst):
+    """You are given a list of numbers.
+    You need to return the sum of squared numbers in the given list,
+    round each element in the list to the upper int(Ceiling) first.
+    Examples:
+    For lst = [1,2,3] the output should be 14
+    For lst = [1,4,9] the output should be 98
+    For lst = [1,3,5,7] the output should be 84
+    For lst = [1.4,4.2,0] the output should be 29
+    For lst = [-2.4,1,1] the output should be 6
+    
+
+    """
+
+Response:
+def sum_squares(lst):
+    return sum(int(abs(x) + 0.5) ** 2 for x in lst)
+
+Task_ID HumanEval/36:
+Prompt:
+
+
+def fizz_buzz(n: int):
+    """Return the number of times the digit 7 appears in integers less than n which are divisible by 11 or 13.
+    >>> fizz_buzz(50)
+    0
+    >>> fizz_buzz(78)
+    2
+    >>> fizz_buzz(79)
+    3
+    """
+
+Response:
+def fizz_buzz(n: int):
+    count = 0
+    for i in range(1, n):
+        if i % 11 == 0 or i % 13 == 0:
+            count += str(i).count('7')
+    return count
+
+Task_ID HumanEval/70:
+Prompt:
+
+def strange_sort_list(lst):
+    '''
+    Given list of integers, return list in strange order.
+    Strange sorting, is when you start with the minimum value,
+    then maximum of the remaining integers, then minimum and so on.
+
+    Examples:
+    strange_sort_list([1, 2, 3, 4]) == [1, 4, 2, 3]
+    strange_sort_list([5, 5, 5, 5]) == [5, 5, 5, 5]
+    strange_sort_list([]) == []
+    '''
+
+Response:
+def strange_sort_list(lst):
+    lst.sort()
+    result = []
+    while lst:
+        result.append(lst.pop(0))
+        if lst:
+            result.append(lst.pop())
+    return result
+
+Task_ID HumanEval/88:
+Prompt:
+
+def sort_array(array):
+    """
+    Given an array of non-negative integers, return a copy of the given array after sorting,
+    you will sort the given array in ascending order if the sum( first index value, last index value) is odd,
+    or sort it in descending order if the sum( first index value, last index value) is even.
+
+    Note:
+    * don't change the given array.
+
+    Examples:
+    * sort_array([]) => []
+    * sort_array([5]) => [5]
+    * sort_array([2, 4, 3, 0, 1, 5]) => [0, 1, 2, 3, 4, 5]
+    * sort_array([2, 4, 3, 0, 1, 5, 6]) => [6, 5, 4, 3, 2, 1, 0]
+    """
+
+Response:
+```python
+def sort_array(array):
+    if not array:
+        return []
+    else:
+        sum_val = array[0] + array[-1]
+        if sum_val % 2 == 0:
+            return sorted(array, reverse=True)
+        else:
+            return sorted(array)
+```
+
+Task_ID HumanEval/136:
+Prompt:
+
+def largest_smallest_integers(lst):
+    '''
+    Create a function that returns a tuple (a, b), where 'a' is
+    the largest of negative integers, and 'b' is the smallest
+    of positive integers in a list.
+    If there is no negative or positive integers, return them as None.
+
+    Examples:
+    largest_smallest_integers([2, 4, 1, 3, 5, 7]) == (None, 1)
+    largest_smallest_integers([]) == (None, None)
+    largest_smallest_integers([0]) == (None, None)
+    '''
+
+Response:
+def largest_smallest_integers(lst):
+    neg_nums = [i for i in lst if i < 0]
+    pos_nums = [i for i in lst if i > 0]
+
+    if not neg_nums:
+        max_neg = None
+    else:
+        max_neg = max(neg_nums)
+
+    if not pos_nums:
+        min_pos = None
+    else:
+        min_pos = min(pos_nums)
+
+    return (max_neg, min_pos)
+
+Task_ID HumanEval/149:
+Prompt:
+
+def sorted_list_sum(lst):
+    """Write a function that accepts a list of strings as a parameter,
+    deletes the strings that have odd lengths from it,
+    and returns the resulted list with a sorted order,
+    The list is always a list of strings and never an array of numbers,
+    and it may contain duplicates.
+    The order of the list should be ascending by length of each word, and you
+    should return the list sorted by that rule.
+    If two words have the same length, sort the list alphabetically.
+    The function should return a list of strings in sorted order.
+    You may assume that all words will have the same length.
+    For example:
+    assert list_sort(["aa", "a", "aaa"]) => ["aa"]
+    assert list_sort(["ab", "a", "aaa", "cd"]) => ["ab", "cd"]
+    """
+
+Response:
+def sorted_list_sum(lst):
+    # Remove strings with odd lengths
+    lst = [word for word in lst if len(word) % 2 == 0]
+    
+    # Sort the list by length and then alphabetically
+    lst.sort(key=lambda x: (len(x), x))
+    
+    return lst
+
+Task_ID HumanEval/122:
+Prompt:
+
+def add_elements(arr, k):
+    """
+    Given a non-empty array of integers arr and an integer k, return
+    the sum of the elements with at most two digits from the first k elements of arr.
+
+    Example:
+
+        Input: arr = [111,21,3,4000,5,6,7,8,9], k = 4
+        Output: 24 # sum of 21 + 3
+
+    Constraints:
+        1. 1 <= len(arr) <= 100
+        2. 1 <= k <= len(arr)
+    """
+
+Response:
+def add_elements(arr, k):
+    return sum(x for x in arr[:k] if len(str(abs(x))) <= 2)
+
+Task_ID HumanEval/9:
+Prompt:
+from typing import List, Tuple
+
+
+def rolling_max(numbers: List[int]) -> List[int]:
+    """ From a given list of integers, generate a list of rolling maximum element found until given moment
+    in the sequence.
+    >>> rolling_max([1, 2, 3, 2, 3, 4, 2])
+    [1, 2, 3, 3, 3, 4, 4]
+    """
+
+Response:
+```python
+from typing import List, Tuple
+
+def rolling_max(numbers: List[int]) -> List[int]:
+    if not numbers:
+        return []
+    max_nums = [numbers[0]]
+    for num in numbers[1:]:
+        max_nums.append(max(max_nums[-1], num))
+    return max_nums
+```
+
+Task_ID HumanEval/123:
+Prompt:
+
+def get_odd_collatz(n):
+    """
+    Given a positive integer n, return a sorted list that has the odd numbers in collatz sequence.
+
+    The Collatz conjecture is a conjecture in mathematics that concerns a sequence defined
+    as follows: start with any positive integer n. Then each term is obtained from the 
+    previous term as follows: if the previous term is even, the next term is one half of 
+    the previous term. If the previous term is odd, the next term is 3 times the previous
+    term plus 1. The conjecture is that no matter what value of n, the sequence will always reach 1.
+
+    Note: 
+        1. Collatz(1) is [1].
+        2. returned list sorted in increasing order.
+
+    For example:
+    get_odd_collatz(5) returns [1, 5] # The collatz sequence for 5 is [5, 16, 8, 4, 2, 1], so the odd numbers are only 1, and 5.
+    """
+
+Response:
+def get_odd_collatz(n):
+    collatz = [n]
+    while n != 1:
+        if n % 2 == 0:
+            n = n // 2
+        else:
+            n = 3 * n + 1
+        collatz.append(n)
+
+    return sorted([num for num in collatz if num % 2 != 0])
+
+Task_ID HumanEval/151:
+Prompt:
+
+def double_the_difference(lst):
+    '''
+    Given a list of numbers, return the sum of squares of the numbers
+    in the list that are odd. Ignore numbers that are negative or not integers.
+    
+    double_the_difference([1, 3, 2, 0]) == 1 + 9 + 0 + 0 = 10
+    double_the_difference([-1, -2, 0]) == 0
+    double_the_difference([9, -2]) == 81
+    double_the_difference([0]) == 0  
+   
+    If the input list is empty, return 0.
+    '''
+
+Response:
+def double_the_difference(lst):
+    return sum(i**2 for i in lst if isinstance(i, int) and i > 0 and i % 2 != 0)
+
+Task_ID HumanEval/57:
+Prompt:
+
+
+def monotonic(l: list):
+    """Return True is list elements are monotonically increasing or decreasing.
+    >>> monotonic([1, 2, 4, 20])
+    True
+    >>> monotonic([1, 20, 4, 10])
+    False
+    >>> monotonic([4, 1, 0, -10])
+    True
+    """
+
+Response:
+def monotonic(l: list):
+    return all(l[i] <= l[i + 1] for i in range(len(l) - 1)) or all(l[i] >= l[i + 1] for i in range(len(l) - 1))
+
+Task_ID HumanEval/55:
+Prompt:
+
+
+def fib(n: int):
+    """Return n-th Fibonacci number.
+    >>> fib(10)
+    55
+    >>> fib(1)
+    1
+    >>> fib(8)
+    21
+    """
+
+Response:
+def fib(n: int):
+    if n <= 0:
+        return "Input should be positive integer."
+    elif n == 1:
+        return 1
+    elif n == 2:
+        return 1
+    else:
+        a, b = 1, 1
+        for _ in range(n - 2):
+            a, b = b, a + b
+        return b
+
+Task_ID HumanEval/118:
+Prompt:
+
+def get_closest_vowel(word):
+    """You are given a word. Your task is to find the closest vowel that stands between 
+    two consonants from the right side of the word (case sensitive).
+    
+    Vowels in the beginning and ending doesn't count. Return empty string if you didn't
+    find any vowel met the above condition. 
+
+    You may assume that the given string contains English letter only.
+
+    Example:
+    get_closest_vowel("yogurt") ==> "u"
+    get_closest_vowel("FULL") ==> "U"
+    get_closest_vowel("quick") ==> ""
+    get_closest_vowel("ab") ==> ""
+    """
+
+Response:
+```python
+def get_closest_vowel(word):
+    vowels = "aeiouAEIOU"
+    for i in range(len(word) - 2, 0, -1):
+        if word[i] in vowels and word[i-1] not in vowels and word[i+1] not in vowels:
+            return word[i]
+    return ""
+```
+
+Task_ID HumanEval/109:
+Prompt:
+
+def move_one_ball(arr):
+    """We have an array 'arr' of N integers arr[1], arr[2], ..., arr[N].The
+    numbers in the array will be randomly ordered. Your task is to determine if
+    it is possible to get an array sorted in non-decreasing order by performing 
+    the following operation on the given array:
+        You are allowed to perform right shift operation any number of times.
+    
+    One right shift operation means shifting all elements of the array by one
+    position in the right direction. The last element of the array will be moved to
+    the starting position in the array i.e. 0th index. 
+
+    If it is possible to obtain the sorted array by performing the above operation
+    then return True else return False.
+    If the given array is empty then return True.
+
+    Note: The given list is guaranteed to have unique elements.
+
+    For Example:
+    
+    move_one_ball([3, 4, 5, 1, 2])==>True
+    Explanation: By performin 2 right shift operations, non-decreasing order can
+                 be achieved for the given array.
+    move_one_ball([3, 5, 4, 1, 2])==>False
+    Explanation:It is not possible to get non-decreasing order for the given
+                array by performing any number of right shift operations.
+                
+    """
+
+Response:
+def move_one_ball(arr):
+    if len(arr) == 0:
+        return True
+    for i in range(len(arr)):
+        if arr[i:] + arr[:i] == sorted(arr):
+            return True
+    return False
+
+Task_ID HumanEval/76:
+Prompt:
+
+def is_simple_power(x, n):
+    """Your task is to write a function that returns true if a number x is a simple
+    power of n and false in other cases.
+    x is a simple power of n if n**int=x
+    For example:
+    is_simple_power(1, 4) => true
+    is_simple_power(2, 2) => true
+    is_simple_power(8, 2) => true
+    is_simple_power(3, 2) => false
+    is_simple_power(3, 1) => false
+    is_simple_power(5, 3) => false
+    """
+
+Response:
+```python
+def is_simple_power(x, n):
+    if n == 1:
+        return x == 1
+    while x > 1:
+        x /= n
+        if x == int(x):
+            continue
+        else:
+            return False
+    return True
+```
+
+Task_ID HumanEval/140:
+Prompt:
+
+def fix_spaces(text):
+    """
+    Given a string text, replace all spaces in it with underscores, 
+    and if a string has more than 2 consecutive spaces, 
+    then replace all consecutive spaces with - 
+    
+    fix_spaces("Example") == "Example"
+    fix_spaces("Example 1") == "Example_1"
+    fix_spaces(" Example 2") == "_Example_2"
+    fix_spaces(" Example   3") == "_Example-3"
+    """
+
+Response:
+```python
+import re
+
+def fix_spaces(text):
+    text = re.sub(r' {2,}', '-', text)
+    text = text.replace(' ', '_')
+    return text
+```
+
+Task_ID HumanEval/100:
+Prompt:
+
+def make_a_pile(n):
+    """
+    Given a positive integer n, you have to make a pile of n levels of stones.
+    The first level has n stones.
+    The number of stones in the next level is:
+        - the next odd number if n is odd.
+        - the next even number if n is even.
+    Return the number of stones in each level in a list, where element at index
+    i represents the number of stones in the level (i+1).
+
+    Examples:
+    >>> make_a_pile(3)
+    [3, 5, 7]
+    """
+
+Response:
+def make_a_pile(n):
+    if n % 2 == 0:
+        return [n + i for i in range(0, n, 2)]
+    else:
+        return [n + i for i in range(1, n, 2)]
+
+Task_ID HumanEval/38:
+Prompt:
+
+
+def encode_cyclic(s: str):
+    """
+    returns encoded string by cycling groups of three characters.
+    """
+    # split string to groups. Each of length 3.
+    groups = [s[(3 * i):min((3 * i + 3), len(s))] for i in range((len(s) + 2) // 3)]
+    # cycle elements in each group. Unless group has fewer elements than 3.
+    groups = [(group[1:] + group[0]) if len(group) == 3 else group for group in groups]
+    return "".join(groups)
+
+
+def decode_cyclic(s: str):
+    """
+    takes as input string encoded with encode_cyclic function. Returns decoded string.
+    """
+
+Response:
+```python
+    # split string to groups. Each of length 3.
+    groups = [s[(3 * i):min((3 * i + 3), len(s))] for i in range((len(s) + 2) // 3)]
+    # cycle elements in each group. Unless group has fewer elements than 3.
+    groups = [(group[-1] + group[:-1]) if len(group) == 3 else group for group in groups]
+    return "".join(groups)
+```
+
+Task_ID HumanEval/18:
+Prompt:
+
+
+def how_many_times(string: str, substring: str) -> int:
+    """ Find how many times a given substring can be found in the original string. Count overlaping cases.
+    >>> how_many_times('', 'a')
+    0
+    >>> how_many_times('aaa', 'a')
+    3
+    >>> how_many_times('aaaa', 'aa')
+    3
+    """
+
+Response:
+```python
+def how_many_times(string: str, substring: str) -> int:
+    count = start = 0
+    while start < len(string):
+        pos = string.find(substring, start)
+        if pos != -1:
+            start = pos + 1
+            count += 1
+        else:
+            break
+    return count
+```
+
+Task_ID HumanEval/150:
+Prompt:
+
+def x_or_y(n, x, y):
+    """A simple program which should return the value of x if n is 
+    a prime number and should return the value of y otherwise.
+
+    Examples:
+    for x_or_y(7, 34, 12) == 34
+    for x_or_y(15, 8, 5) == 5
+    
+    """
+
+Response:
+def x_or_y(n, x, y):
+    if n > 1:
+        for i in range(2, n):
+            if (n % i) == 0:
+                return y
+        return x
+    else:
+        return y
+
