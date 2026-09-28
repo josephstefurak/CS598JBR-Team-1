@@ -76,7 +76,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
         print(test_string)
         selection = select_assertion(test_string)
         candidate = selection['candidate']
-        assertion = selection['assertion'].lower() == "true"
+        assertion = selection['assertion']
         canonical_solution = entry['canonical_solution']
 
         if vanilla:
