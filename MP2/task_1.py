@@ -80,41 +80,48 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
 
         if vanilla:
             prompt = f"""
-            You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
-            For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
+For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
 
-            ### Instruction:
+### Instruction:
 
-            If the string is '{candidate}', what will the following code return?
+If the string is '{candidate}', what will the following code return?
 
-            The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
+The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
-            { canonical_solution }
-            ### Response:
+```python
+{ canonical_solution }
+```
+### Response:
             """
         else:
             prompt = f"""
-            You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
-            For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
+For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
 
-            ### Instruction:
+### Instruction:
 
-            If the string is '{candidate}', what will the following code return?
+If the string is '{candidate}', what will the following code return?
 
-            The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
+The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
 
-            Before attempting to return a prediction, do the following:
-            1. Evaluate the given function by going line by line. Come up with a hypothesis about what the function is trying to acompish and give concrete, line-numbered answers to back up the hypothesis
-            2. Go step by step to solve the problem
-            3. Give an inital prediction
-            4. For the given initial prediction, explain clearly why the initial prediction is made
-            5. Again go through the problem step by step seeing if the initial prediction holds
-                a. if it does, return the initial prediction as the final prediction and end
-                b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
-            6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
+Before attempting to return a prediction, do the following:
+1. Evaluate the given function by going line by line. Come up with a hypothesis about what the function is trying to acompish and give concrete, line-numbered answers to back up the hypothesis
+2. Go step by step to solve the problem
+3. Give an inital prediction
+4. For the given initial prediction, explain clearly why the initial prediction is made
+5. Again go through the problem step by step seeing if the initial prediction holds
+    a. if it does, return the initial prediction as the final prediction and end
+    b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
+6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
-            { canonical_solution }
-            ### Response:
+
+You are allowed (and encoraged to) convert the input string into the appropriate type (array, int, object, float, boolean). Assume that if you ar
+The code:
+```python
+{ canonical_solution }
+```
+### Response:
             """
 
         input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
