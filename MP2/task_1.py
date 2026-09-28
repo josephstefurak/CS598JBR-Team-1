@@ -73,6 +73,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
         test_string = entry['test']
+        print(test_string)
         selection = select_assertion(test_string)
         candidate = selection['candidate']
         assertion = selection['assertion'].lower() == "true"
