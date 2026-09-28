@@ -42,7 +42,8 @@ def get_verdict(response_str: str, assertion: bool) -> bool:
     matches = re.match(regex, response_str)
     if matches is None:
         return False
-    actual = matches[1]
+    actual_match = matches[1].lower()
+    actual = actual_match == "True"
     return assertion == actual
 
 
