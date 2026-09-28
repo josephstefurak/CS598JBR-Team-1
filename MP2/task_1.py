@@ -2,6 +2,8 @@ import jsonlines
 import sys
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import random
+import re
 
 #####################################################
 # Please finish all TODOs in this file for MP2;
@@ -11,24 +13,128 @@ def save_file(content, file_path):
     with open(file_path, 'w') as file:
         file.write(content)
 
+def select_assertion(test_str: str) -> dict[str, str]:
+    lines = test_str.split('\n')
+    filtered: list[str] = []
+    regex = r'assert candidate\(\'([\[\]]+)\'\) == (True|False)$'
+    for line in lines:
+        if len(line) == 0:
+            continue
+        line = line.strip()
+        is_found = re.match(regex, line)
+        if is_found is None:
+            continue
+        filtered.append(line)
+    random_choice = random.choice(filtered)
+    matches = re.match(regex, random_choice)
+    if matches is None:
+        return {}
+    candidate = matches[1]
+    assertion = matches[2]
+
+    return {
+        "candidate": candidate,
+        "assertion": assertion
+    }
+
+def get_verdict(response_str: str, assertion: bool) -> bool:
+    regex = r"\[Output\](True|False|true|false)\[\/Output\]"
+    matches = re.match(regex, response_str)
+    if matches is None:
+        return False
+    actual = matches[1]
+    return assertion == actual
+
+
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
     print(f"Working with {model_name} prompt type {vanilla}...")
     
     # TODO: download the model
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     # TODO: load the model with quantization
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.bfloat16
+    )
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        quantifzation_config=bnb_config,
+        device_map="auto",
+        torch_dtype=torch.bfloat16,
+        trust_remote_code=True
+    )
     
     results = []
     for entry in dataset:
         # TODO: create prompt for the model
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
-        prompt = ""
+        test_string = entry['test']
+        selection = select_assertion(test_string)
+        candidate = selection['candidate']
+        assertion = selection['assertion'].lower() == "true"
+        canonical_solution = entry['canonical_solution']
+
+        if vanilla:
+            prompt = f"""
+            You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
+            For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+
+            ### Instruction:
+
+            If the string is '{candidate}', what will the following code return?
+
+            The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a boolean value such as "True" or "False". For example : [Output]prediction[/Output]
+
+            def solution(string):
+                { canonical_solution }
+            ### Response:
+            """
+        else:
+            prompt = f"""
+            You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
+            For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+
+            ### Instruction:
+
+            If the string is '{candidate}', what will the following code return?
+
+            The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a boolean value such as "True" or "False". For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
+
+            Before attempting to return a prediction, do the following:
+            1. Evaluate the given function by going line by line. Come up with a hypothesis about what the function is trying to acompish and give concrete, line-numbered answers to back up the hypothesis
+            2. Go step by step to solve the problem
+            3. Give an inital prediction
+            4. For the given initial prediction, explain clearly why the initial prediction is made
+                a. in the case where the initial prediction is 'False', explain where at in the program where a 'False' prediction is justified
+                b. in the case where the initial prediction is 'True', explain why a 'True' prediction is justified
+            5. Again go through the problem step by step seeing if the initial prediction holds
+                a. if it does, return the initial prediction as the final prediction and end
+                b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
+            6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a boolean value such as "True" or "False". For example : [Output]prediction[/Output]
+
+
+            def solution(string):
+               { canonical_solution }
+            ### Response:
+            """
+
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
         
         # TODO: prompt the model and get the response
-        response = ""
+        outputs = model.generate(
+            input_ids,
+            max_length=500,
+            do_sample=False,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.eos_token_id
+        )
+        response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
         # TODO: process the response and save it to results
-        verdict = False
+        verdict = get_verdict(response, assertion)
 
         print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_correct:\n{verdict}")
         results.append({
