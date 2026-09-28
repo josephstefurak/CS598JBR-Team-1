@@ -16,7 +16,7 @@ def save_file(content, file_path):
 def select_assertion(test_str: str) -> dict[str, str]:
     lines = test_str.split('\n')
     filtered: list[str] = []
-    regex = r'assert candidate\((.*)\)==([a-zA-Z0-9]+)'
+    regex = r'assert candidate\((.*)\)(?:==| == | ==|== )([a-zA-Z0-9]+)'
     for line in lines:
         if len(line) == 0:
             continue
@@ -37,14 +37,14 @@ def select_assertion(test_str: str) -> dict[str, str]:
         "assertion": assertion
     }
 
-def get_verdict(response_str: str, assertion: str) -> bool:
+def get_verdict(response_str: str, expected: str) -> bool:
     regex = r"\[Output\](.*)\[\/Output\]"
     matches = re.match(regex, response_str)
     if matches is None:
         return False
-    actual_match = matches[1].lower()
-    actual = actual_match == "True"
-    return assertion == actual
+    actual = matches[1].lower()
+    print(f"Expected: {expected}\tActual: {actual} ")
+    return expected == actual
 
 
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
@@ -73,7 +73,6 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
         test_string = entry['test']
-        print(test_string)
         selection = select_assertion(test_string)
         candidate = selection['candidate']
         assertion = selection['assertion']
