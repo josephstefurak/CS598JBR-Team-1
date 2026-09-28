@@ -16,7 +16,7 @@ def save_file(content, file_path):
 def select_assertion(test_str: str) -> dict[str, str]:
     lines = test_str.split('\n')
     filtered: list[str] = []
-    regex = r'assert candidate\(\'([\[\]]+)\'\) == (True|False)$'
+    regex = r'assert candidate\((.*)\) == (True|False)$'
     for line in lines:
         if len(line) == 0:
             continue
