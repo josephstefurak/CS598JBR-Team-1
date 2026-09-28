@@ -90,8 +90,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
 
             The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
-            def solution(string):
-                { canonical_solution }
+            { canonical_solution }
             ### Response:
             """
         else:
@@ -103,7 +102,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
 
             If the string is '{candidate}', what will the following code return?
 
-            The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
+            The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
 
             Before attempting to return a prediction, do the following:
             1. Evaluate the given function by going line by line. Come up with a hypothesis about what the function is trying to acompish and give concrete, line-numbered answers to back up the hypothesis
@@ -115,9 +114,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
                 b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
             6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
-
-            def solution(string):
-               { canonical_solution }
+            { canonical_solution }
             ### Response:
             """
 
