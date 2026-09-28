@@ -129,7 +129,7 @@ The code:
         # TODO: prompt the model and get the response
         outputs = model.generate(
             input_ids,
-            max_length=500,
+            max_length=500000,
             do_sample=False,
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.eos_token_id
