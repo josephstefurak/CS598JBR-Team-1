@@ -16,7 +16,7 @@ def save_file(content, file_path):
 def select_assertion(test_str: str) -> dict[str, str]:
     lines = test_str.split('\n')
     filtered: list[str] = []
-    regex = r'assert candidate\((.*)\) == (True|False)$'
+    regex = r'assert candidate\((.*)\)==([a-zA-Z0-9]+)'
     for line in lines:
         if len(line) == 0:
             continue
@@ -37,8 +37,8 @@ def select_assertion(test_str: str) -> dict[str, str]:
         "assertion": assertion
     }
 
-def get_verdict(response_str: str, assertion: bool) -> bool:
-    regex = r"\[Output\](True|False|true|false)\[\/Output\]"
+def get_verdict(response_str: str, assertion: str) -> bool:
+    regex = r"\[Output\](.*)\[\/Output\]"
     matches = re.match(regex, response_str)
     if matches is None:
         return False
@@ -88,7 +88,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
 
             If the string is '{candidate}', what will the following code return?
 
-            The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a boolean value such as "True" or "False". For example : [Output]prediction[/Output]
+            The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
             def solution(string):
                 { canonical_solution }
@@ -103,19 +103,17 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
 
             If the string is '{candidate}', what will the following code return?
 
-            The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a boolean value such as "True" or "False". For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
+            The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
 
             Before attempting to return a prediction, do the following:
             1. Evaluate the given function by going line by line. Come up with a hypothesis about what the function is trying to acompish and give concrete, line-numbered answers to back up the hypothesis
             2. Go step by step to solve the problem
             3. Give an inital prediction
             4. For the given initial prediction, explain clearly why the initial prediction is made
-                a. in the case where the initial prediction is 'False', explain where at in the program where a 'False' prediction is justified
-                b. in the case where the initial prediction is 'True', explain why a 'True' prediction is justified
             5. Again go through the problem step by step seeing if the initial prediction holds
                 a. if it does, return the initial prediction as the final prediction and end
                 b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
-            6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a boolean value such as "True" or "False". For example : [Output]prediction[/Output]
+            6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
 
             def solution(string):
