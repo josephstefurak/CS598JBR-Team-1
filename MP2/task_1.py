@@ -69,17 +69,18 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
     
     results = []
     for entry in dataset:
-        # TODO: create prompt for the model
-        # Tip : Use can use any data from the dataset to create 
-        #       the prompt including prompt, canonical_solution, test, etc.
-        test_string = entry['test']
-        selection = select_assertion(test_string)
-        candidate = selection['candidate']
-        assertion = selection['assertion']
-        canonical_solution = entry['canonical_solution']
+        try:
+            # TODO: create prompt for the model
+            # Tip : Use can use any data from the dataset to create 
+            #       the prompt including prompt, canonical_solution, test, etc.
+            test_string = entry['test']
+            selection = select_assertion(test_string)
+            candidate = selection['candidate']
+            assertion = selection['assertion']
+            canonical_solution = entry['canonical_solution']
 
-        if vanilla:
-            prompt = f"""
+            if vanilla:
+                prompt = f"""
 You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
 For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
 
@@ -94,8 +95,8 @@ The return value 'prediction' must be enclosed between [Output] and [/Output] ta
 ```
 ### Response:
             """
-        else:
-            prompt = f"""
+            else:
+                prompt = f"""
 You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
 For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
 
@@ -124,28 +125,30 @@ The code:
 ### Response:
             """
 
-        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
-        
-        # TODO: prompt the model and get the response
-        outputs = model.generate(
-            input_ids,
-            max_length=500000,
-            do_sample=False,
-            eos_token_id=tokenizer.eos_token_id,
-            pad_token_id=tokenizer.eos_token_id
-        )
-        response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+            
+            # TODO: prompt the model and get the response
+            outputs = model.generate(
+                input_ids,
+                max_length=500000,
+                do_sample=False,
+                eos_token_id=tokenizer.eos_token_id,
+                pad_token_id=tokenizer.eos_token_id
+            )
+            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
-        # TODO: process the response and save it to results
-        verdict = get_verdict(response, assertion)
+            # TODO: process the response and save it to results
+            verdict = get_verdict(response, assertion)
 
-        print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_correct:\n{verdict}")
-        results.append({
-            "task_id": entry["task_id"],
-            "prompt": prompt,
-            "response": response,
-            "is_correct": verdict
-        })
+            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_correct:\n{verdict}")
+            results.append({
+                "task_id": entry["task_id"],
+                "prompt": prompt,
+                "response": response,
+                "is_correct": verdict
+            })
+        except Exception as e:
+            print(f"Exception rasied: {e}")
         
     return results
 
