@@ -25,6 +25,8 @@ def select_assertion(test_str: str) -> dict[str, str]:
         if is_found is None:
             continue
         filtered.append(line)
+    if len(filtered) == 0:
+        raise RuntimeError(f"test string: {test_str} did not produce any assertions")
     random_choice = random.choice(filtered)
     matches = re.match(regex, random_choice)
     if matches is None:
@@ -74,6 +76,8 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
             # Tip : Use can use any data from the dataset to create 
             #       the prompt including prompt, canonical_solution, test, etc.
             test_string = entry['test']
+            task_prompt = entry['prompt']
+            entry_point = entry['entry_point']
             selection = select_assertion(test_string)
             candidate = selection['candidate']
             assertion = selection['assertion']
@@ -102,7 +106,7 @@ For politically sensitive questions, security and privacy issues, and other non-
 
 ### Instruction:
 
-If the string is '{candidate}', what will the following code return?
+If the input is '{candidate}', what will the following code return?
 
 The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
 
@@ -114,10 +118,20 @@ Before attempting to return a prediction, do the following:
 5. Again go through the problem step by step seeing if the initial prediction holds
     a. if it does, return the initial prediction as the final prediction and end
     b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
-6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
+6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. 
+
+Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags and be one singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]
 
 
-You are allowed (and encoraged to) convert the input string into the appropriate type (array, int, object, float, boolean). Assume that if you ar
+You are allowed (and encoraged to) convert the input into the appropriate type (array, int, object, float, boolean). 
+
+The tasks's prompt:
+{ task_prompt }
+
+Function entry point:
+{ entry_point }
+
+
 The code:
 ```python
 { canonical_solution }
