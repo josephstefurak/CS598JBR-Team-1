@@ -39,14 +39,16 @@ def select_assertion(test_str: str) -> dict[str, str]:
         "assertion": assertion
     }
 
-def get_verdict(response_str: str, expected: str) -> bool:
+def get_verdict(response_str: str, expected: str):
     regex = r"\[Output\](.*)\[\/Output\]"
     matches = re.match(regex, response_str)
     if matches is None:
-        return False
+        return False, 'NO MATCH DETECTED'
     actual = matches[1].lower()
+    if actual is None:
+        return False, 'Matches returns but matches[1] does not'
     print(f"Expected: {expected}\tActual: {actual} ")
-    return expected == actual
+    return expected == actual, actual
 
 
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
@@ -152,9 +154,9 @@ The code:
             response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
             # TODO: process the response and save it to results
-            verdict = get_verdict(response, assertion)
+            verdict, parsed = get_verdict(response, assertion)
 
-            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_correct:\n{verdict}\nexpected:{assertion}")
+            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nexpected:\n{assertion}\nactual:\n{parsed}\nis_correct:\n{verdict}\n\n")
             results.append({
                 "task_id": entry["task_id"],
                 "prompt": prompt,
