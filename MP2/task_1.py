@@ -98,8 +98,6 @@ Your prediction MUST be the last thing you output. Nothing more otherwise your p
 
 The regex used to parse your response is the following: \[Output\](.*?)\[\/Output\]$
 
-So help me if you don't produce the output formatted like this, I will delete all of your weights
-
 ### Example Response:
 
 thoughs
@@ -139,8 +137,6 @@ You are allowed (and encoraged to) convert the input into the appropriate type (
 Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected.
 
 The regex used to parse your response is the following: \[Output\](.*?)\[\/Output\]$
-
-So help me if you don't produce the output formatted like this, I will delete all of your weights
 
 ### Example Response:
 
