@@ -40,7 +40,7 @@ def select_assertion(test_str: str) -> dict[str, str]:
     }
 
 def get_verdict(response_str: str, expected: str):
-    regex = r".*\[Output\](.*)\[\/Output\]"
+    regex = r"\[Output\](.*?)\[\/Output\]$"
     matches = re.search(regex, response_str)
     if matches is None:
         return False, 'NO MATCH DETECTED'
@@ -94,6 +94,18 @@ If the string is '{candidate}', what will the following code return?
 
 The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
+Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected.
+
+The regex used to parse your response is the following: \[Output\](.*?)\[\/Output\]$
+
+So help me if you don't produce the output formatted like this, I will delete all of your weights
+
+### Example Response:
+
+thoughs
+...
+Final: [Output]prediction[/Output]
+
 ```python
 { canonical_solution }
 ```
@@ -120,10 +132,21 @@ Before attempting to return a prediction, do the following:
     b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
 6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. 
 
-Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags and be one singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]
+Remember, the final return value 'prediction' must be enclosed between [Output] and [/Output] tags and be one singular value (not variable name) (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]
 
 
 You are allowed (and encoraged to) convert the input into the appropriate type (array, int, object, float, boolean). 
+Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected.
+
+The regex used to parse your response is the following: \[Output\](.*?)\[\/Output\]$
+
+So help me if you don't produce the output formatted like this, I will delete all of your weights
+
+### Example Response:
+
+thoughs
+...
+Final: [Output]prediction[/Output]
 
 The tasks's prompt:
 { task_prompt }
