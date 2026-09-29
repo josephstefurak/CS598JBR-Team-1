@@ -16,7 +16,7 @@ def save_file(content, file_path):
 def select_assertion(test_str: str) -> dict[str, str]:
     lines = test_str.split('\n')
     filtered: list[str] = []
-    regex = r'assert candidate\((.*)\)(?:==| == | ==|== )([a-zA-Z0-9]+)'
+    regex = r'assert candidate\((.*)\)(?:==| == | ==|== )([a-zA-Z0-9\[\]]+)'
     for line in lines:
         if len(line) == 0:
             continue
@@ -98,7 +98,7 @@ The return value 'prediction' must be enclosed between [Output] and [/Output] ta
 { canonical_solution }
 ```
 ### Response:
-            """
+"""
             else:
                 prompt = f"""
 You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
@@ -137,7 +137,7 @@ The code:
 { canonical_solution }
 ```
 ### Response:
-            """
+"""
 
             input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
             
@@ -154,7 +154,7 @@ The code:
             # TODO: process the response and save it to results
             verdict = get_verdict(response, assertion)
 
-            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_correct:\n{verdict}")
+            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_correct:\n{verdict}\nexpected:{assertion}")
             results.append({
                 "task_id": entry["task_id"],
                 "prompt": prompt,
