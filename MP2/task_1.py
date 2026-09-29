@@ -41,13 +41,11 @@ def select_assertion(test_str: str) -> dict[str, str]:
 
 def get_verdict(response_str: str, expected: str):
     regex = r"\[Output\](.*)\[\/Output\]"
-    matches = re.match(regex, response_str)
+    matches = re.search(regex, response_str)
     if matches is None:
         return False, 'NO MATCH DETECTED'
-    actual = matches[1].lower()
-    if actual is None:
-        return False, 'Matches returns but matches[1] does not'
-    print(f"Expected: {expected}\tActual: {actual} ")
+    actual = matches.group(1).lower()
+    print(f"Expected: {expected}\tActual: {actual}")
     return expected == actual, actual
 
 
