@@ -96,8 +96,6 @@ The return value 'prediction' must be enclosed between [Output] and [/Output] ta
 
 Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected.
 
-The regex used to parse your response is the following: \[Output\](.*?)\[\/Output\]$
-
 ### Example Response:
 
 thoughs
@@ -134,9 +132,7 @@ Remember, the final return value 'prediction' must be enclosed between [Output] 
 
 
 You are allowed (and encoraged to) convert the input into the appropriate type (array, int, object, float, boolean). 
-Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected.
-
-The regex used to parse your response is the following: \[Output\](.*?)\[\/Output\]$
+Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected
 
 ### Example Response:
 
