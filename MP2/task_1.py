@@ -16,7 +16,7 @@ def save_file(content, file_path):
 def select_assertion(test_str: str) -> dict[str, str]:
     lines = test_str.split('\n')
     filtered: list[str] = []
-    regex = r'assert candidate\((.*)\)(?:==| == | ==|== )([a-zA-Z0-9]+|\[(?:[a-zA-Z0-9], )*[a-zA-Z0-9]\])'
+    regex = r'assert\s+candidate\((.*?)\)\s*==\s*(\[[^\]]*\]|\([^)]*\)|"[^"]*"|\'\[^\'\]*\'|\-?\d+|None)'
     for line in lines:
         if len(line) == 0:
             continue
@@ -40,13 +40,13 @@ def select_assertion(test_str: str) -> dict[str, str]:
     }
 
 def get_verdict(response_str: str, expected: str):
-    regex = r"\[Output\](.*?)\[\/Output\]$"
+    regex = r"\[Output\](.*?)(?:\[\/Output\]|\[Output\])$"
     matches = re.search(regex, response_str)
     if matches is None:
         return False, 'NO MATCH DETECTED'
     actual = matches.group(1).lower().strip()
-    print(f"Expected: {expected}\tActual: {actual}")
-    return expected == actual, actual
+    print(f"Expected: {expected.lower()}\tActual: {actual}")
+    return expected.lower() == actual.lower(), actual
 
 
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
