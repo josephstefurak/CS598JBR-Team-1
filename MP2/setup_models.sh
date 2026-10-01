@@ -1,3 +1,5 @@
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+
 pip3 install bitsandbytes==0.47.0
 pip3 install transformers==4.55.4
 pip3 install peft==0.4.0
