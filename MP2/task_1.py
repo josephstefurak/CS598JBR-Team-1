@@ -126,14 +126,7 @@ If the input is '{candidate}', what will the following code return?
 The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
 
 Before attempting to return a prediction, do the following:
-1. Evaluate the given function by going line by line. Come up with a hypothesis about what the function is trying to acompish and give concrete, line-numbered answers to back up the hypothesis
-2. Go step by step to solve the problem
-3. Give an inital prediction
-4. For the given initial prediction, explain clearly why the initial prediction is made
-5. Again go through the problem step by step seeing if the initial prediction holds
-    a. if it does, return the initial prediction as the final prediction and end
-    b. if it doesn't, modify the inital prediction to reflect current understanding and explain the reasoning of why the initial preditiction was off. Form a new prediction
-6. If in step 5 the initial prediction was modified, repeat step 5. Repeat until ready to give your final prediction. 
+1. Go step by step (or line by line) through the given function and reason about every line as it relates to the given input to return a prediction
 
 You may provide reasoning, but NEVER use [Output] or [/Output] anywhere in your reasoning.
 
@@ -149,21 +142,26 @@ Do not put the function name, function call, variable name, explanation, or code
 
 ### Example Response:
 
-thoughs
-...
+thoughs...
 Final: [Output]prediction[/Output]
 
-The tasks's prompt:
+### Function Specificiation:
 { task_prompt }
 
-Function entry point:
+### Function Entry Point:
 { entry_point }
 
-Example expected inputs and outputs:
+### Function Input and Output Examples:
+Use the following input and output examples as guides of:
+* What to return
+* The format / return type (ie, int, tuple, string, boolean, array, etc.,)
+
+DO NOT ASSUME THE TARGET INPUT IS AMONG THESE EXAMPLES
+
 { example_inputs_and_outputs }
 
 
-The code:
+### The Code:
 ```python
 { canonical_solution }
 ```
