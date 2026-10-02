@@ -170,12 +170,19 @@ The code:
 ### Response:
 """
 
-            input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(model.device)
+            inputs = tokenizer(
+                prompt,
+                return_tensors="pt"
+            )
+
+            input_ids = inputs["input_ids"].to(model.device)
+            attention_mask = inputs["attention_mask"].to(model.device)
             
             # TODO: prompt the model and get the response
             outputs = model.generate(
-                input_ids,
-                max_length=5000,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=5000,
                 do_sample=False,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.eos_token_id
