@@ -28,6 +28,9 @@ def select_assertion(test_str: str) -> dict[str, str]:
     if len(filtered) == 0:
         raise RuntimeError(f"test string: {test_str} did not produce any assertions")
     random_choice = random.choice(filtered)
+
+    filtered.remove(random_choice)
+    all_other_tests = '\n'.join(filtered)
     matches = re.match(regex, random_choice)
     if matches is None:
         return {}
@@ -36,7 +39,8 @@ def select_assertion(test_str: str) -> dict[str, str]:
 
     return {
         "candidate": candidate,
-        "assertion": assertion
+        "assertion": assertion,
+        "reduced_test_string": all_other_tests
     }
 
 def get_verdict(response_str: str, expected: str):
@@ -54,26 +58,26 @@ def get_verdict(response_str: str, expected: str):
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
     print(f"Working with {model_name} prompt type {vanilla}...")
     
-    # TODO: download the model
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    # TODO: load the model with quantization
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16
-    )
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        quantization_config=bnb_config,
-        device_map="auto",
-        torch_dtype=torch.bfloat16,
-        trust_remote_code=True
-    )
     
     results = []
     for entry in dataset:
         try:
+             # TODO: download the model
+            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+            # TODO: load the model with quantization
+            bnb_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.bfloat16
+            )
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                quantization_config=bnb_config,
+                device_map="auto",
+                torch_dtype=torch.bfloat16,
+                trust_remote_code=True
+            )
             # TODO: create prompt for the model
             # Tip : Use can use any data from the dataset to create 
             #       the prompt including prompt, canonical_solution, test, etc.
@@ -84,6 +88,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
             candidate = selection['candidate']
             assertion = selection['assertion']
             canonical_solution = entry['canonical_solution']
+            example_inputs_and_outputs = entry['reduced_test_string']
 
             if vanilla:
                 prompt = f"""
@@ -153,6 +158,9 @@ The tasks's prompt:
 
 Function entry point:
 { entry_point }
+
+Example expected inputs and outputs:
+{ example_inputs_and_outputs }
 
 
 The code:
