@@ -116,58 +116,53 @@ Final: [Output]prediction[/Output]
 """
             else:
                 prompt = f"""
-You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
-For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+You are an AI programming assistant using DeepSeek Coder.
 
-### Instruction
+Determine the exact return value of the Python function below for the given input.
 
-Execute the Python function for the given input by manually simulating its computation.
+Do the computation yourself. Do not merely describe what the function does.
+Do not create additional test cases.
+Do not repeat the examples.
+Do not provide Python code.
+Do not provide multiple answers.
 
-Do not merely describe what the function does.
+### Function Specification
+{task_prompt}
 
-You must determine the exact literal return value.
+### Function Entry Point
+{entry_point}
 
-If the function iterates over a large range, perform whatever arithmetic/counting is necessary to obtain the exact result. Do not stop at an algorithmic description.
+### Examples
+{example_inputs_and_outputs}
 
-Input:
-{ candidate }
+These examples are only behavioral examples. The target input is NOT necessarily among them.
 
-### Output requirements
+### Target Input
+{candidate}
 
-Your final response must contain exactly one:
-
-[Output]EXACT_VALUE[/Output]
-
-EXACT_VALUE must be the literal Python return value.
-
-For example:
-
-[Output]123[/Output]
-
-Do not put an explanation inside the output tags.
-The output tags must be the final text in your response.
-
-### Function Specificiation:
-{ task_prompt }
-
-### Function Entry Point:
-{ entry_point }
-
-### Function Input and Output Examples:
-Use the following input and output examples as guides of:
-* What to return
-* The format / return type (ie, int, tuple, string, boolean, array, etc.,)
-
-DO NOT ASSUME THE TARGET INPUT IS AMONG THESE EXAMPLES
-
-{ example_inputs_and_outputs }
-
-
-### The Code:
+### Code
 ```python
-{ canonical_solution }
+{canonical_solution}
 ```
-### Response:
+
+### Required Output
+Return the exact literal Python value produced by the function.
+
+Your response MUST end with exactly one:
+[Output]VALUE[/Output]
+
+Replace VALUE with ONLY the literal return value.
+
+Examples:
+
+[Output]42[/Output]
+[Output][1, 2, 3][/Output]
+[Output][][/Output]
+[Output]"hello"[/Output]
+
+Do not put anything inside [Output] tags except the return value.
+
+The [Output]...[/Output] pair must be the final thing in your response.
 """
 
             inputs = tokenizer(
