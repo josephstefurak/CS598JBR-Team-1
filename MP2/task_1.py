@@ -33,7 +33,7 @@ def select_assertion(test_str: str) -> dict[str, str]:
     all_other_tests = '\n'.join(filtered)
     matches = re.match(regex, random_choice)
     if matches is None:
-        return {}
+        raise RuntimeError(f"Could not parse selected assertion: {random_choice}")
     candidate = matches[1]
     assertion = matches[2]
 
@@ -88,7 +88,7 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
             candidate = selection['candidate']
             assertion = selection['assertion']
             canonical_solution = entry['canonical_solution']
-            example_inputs_and_outputs = entry['reduced_test_string']
+            example_inputs_and_outputs = selection['reduced_test_string']
 
             if vanilla:
                 prompt = f"""
