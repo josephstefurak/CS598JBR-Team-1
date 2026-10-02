@@ -16,7 +16,7 @@ def save_file(content, file_path):
 def select_assertion(test_str: str) -> dict[str, str]:
     lines = test_str.split('\n')
     filtered: list[str] = []
-    regex = r'assert\s+candidate\((.*?)\)\s*==\s*(\[[^\]]*\]|\([^)]*\)|"[^"]*"|\'\[^\'\]*\'|\-?\d+|None)'
+    regex = r'assert\s+candidate\((.*?)\)\s*==\s*(\[[^\]]*\]|\([^)]*\)|"[^"]*"|\'\[^\'\]*\'|\-?\d+|None|True|False|\w+)'
     for line in lines:
         if len(line) == 0:
             continue
@@ -119,31 +119,33 @@ Final: [Output]prediction[/Output]
 You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
 For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
 
-### Instruction:
+### Instruction
 
-If the input is '{candidate}', what will the following code return?
+Execute the Python function for the given input by manually simulating its computation.
 
-The return value 'prediction' must be enclosed between [Output] and [/Output] tags and must be a singular value (either an int, string, boolean, or other primative type). For example : [Output]prediction[/Output]. You may (and should) give reasoning as given below to justify the prediction
+Do not merely describe what the function does.
 
-Before attempting to return a prediction, do the following:
-1. Go step by step (or line by line) through the given function and reason about every line as it relates to the given input to return a prediction
+You must determine the exact literal return value.
 
-You may provide reasoning, but NEVER use [Output] or [/Output] anywhere in your reasoning.
+If the function iterates over a large range, perform whatever arithmetic/counting is necessary to obtain the exact result. Do not stop at an algorithmic description.
 
-You may reason about intermediate predictions internally, but do not write intermediate predictions using the output tags.
+Input:
+{ candidate }
 
-Exactly ONE [Output]...[/Output] pair must appear in your entire response.
+### Output requirements
 
-The [Output]...[/Output] pair must contain only the final literal return value.
+Your final response must contain exactly one:
 
-The [Output]...[/Output] pair must be the final text in your response.
+[Output]EXACT_VALUE[/Output]
 
-Do not put the function name, function call, variable name, explanation, or code inside the output tags.
+EXACT_VALUE must be the literal Python return value.
 
-### Example Response:
+For example:
 
-thoughs...
-Final: [Output]prediction[/Output]
+[Output]123[/Output]
+
+Do not put an explanation inside the output tags.
+The output tags must be the final text in your response.
 
 ### Function Specificiation:
 { task_prompt }
