@@ -48,11 +48,13 @@ def get_verdict(response_str: str, expected: str):
     matches = re.findall(regex, response_str, re.DOTALL)
 
     if len(matches) != 1:
-        raise Exception('NO MATCHES')
+        return False, expected, 'Prediction error: NO MATCHES'
 
     prediction = matches[-1]
-    print(f"Expected: {expected.lower()}\tPrediction: {prediction.strip().lower()}")
-    return expected.lower() == prediction.lower().strip(), prediction.lower().strip()
+    prediction = prediction.strip().lower().replace(r'\s', '')
+    expected = expected.strip().lower().replace(r'\s', '')
+    print(f"Expected: {expected}\tPrediction: {prediction}")
+    return expected == prediction, expected, prediction
 
 
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
@@ -177,7 +179,7 @@ The [Output]...[/Output] pair must be the final thing in your response.
             outputs = model.generate(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
-                max_new_tokens=5000,
+                max_new_tokens=1000,
                 do_sample=False,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.eos_token_id
@@ -185,9 +187,9 @@ The [Output]...[/Output] pair must be the final thing in your response.
             response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
 
             # TODO: process the response and save it to results
-            verdict, parsed = get_verdict(response, assertion)
+            verdict, expected, prediction = get_verdict(response, assertion)
 
-            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nexpected:\n{assertion}\nactual:\n{parsed}\nis_correct:\n{verdict}\n\n")
+            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nexpected:\n{expected}\nactual:\n{prediction}\nis_correct:\n{verdict}\n\n")
             results.append({
                 "task_id": entry["task_id"],
                 "prompt": prompt,
@@ -196,6 +198,12 @@ The [Output]...[/Output] pair must be the final thing in your response.
             })
         except Exception as e:
             print(f"Exception rasied: {e}")
+            results.append({
+                "task_id": entry["task_id"],
+                "prompt": "Error",
+                "response": e,
+                "is_correct": False
+            })
         
     return results
 
