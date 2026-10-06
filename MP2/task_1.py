@@ -41,7 +41,7 @@ def select_assertion(test_str: str) -> dict[str, str]:
         "candidate": candidate,
         "assertion": assertion,
         "reduced_test_string": all_other_tests
-    }
+    }``
 
 def get_verdict(response_str: str, expected: str):
     regex = r"\[Output\]\s*(.*?)\s*\[/Output\]"
