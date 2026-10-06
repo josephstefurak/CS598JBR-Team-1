@@ -27,13 +27,13 @@ def select_assertion(test_str: str) -> dict[str, str]:
         filtered.append(line)
     if len(filtered) == 0:
         raise RuntimeError(f"test string: {test_str} did not produce any assertions")
-    random_choice = random.choice(filtered)
+    choice = filtered[0]
 
-    filtered.remove(random_choice)
+    filtered.remove(choice)
     all_other_tests = '\n'.join(filtered)
-    matches = re.match(regex, random_choice)
+    matches = re.match(regex, choice)
     if matches is None:
-        raise RuntimeError(f"Could not parse selected assertion: {random_choice}")
+        raise RuntimeError(f"Could not parse selected assertion: {choice}")
     candidate = matches[1]
     assertion = matches[2]
 
@@ -116,11 +116,14 @@ Final: [Output]prediction[/Output]
 ```
 ### Response:
 """
-            else:
+            else: # Crafted prompt
                 prompt = f"""
 You are an AI programming assistant using DeepSeek Coder.
 
 Determine the exact return value of the Python function below for the given input.
+
+### Target Input
+{candidate}
 
 ### Function Specification
 {task_prompt}
@@ -128,43 +131,47 @@ Determine the exact return value of the Python function below for the given inpu
 ### Function Entry Point
 {entry_point}
 
-### Examples
-{example_inputs_and_outputs}
-
-These examples are only behavioral examples. The target input is NOT necessarily among them.
-
-### Target Input
-{candidate}
 
 ### Code
-```python
 {canonical_solution}
-```
 
 ### Required Output
-Return the exact literal Python value produced by the function.
+Return the exact literal Python value produced by the function AFTER showing the actual execution.
+
+For example, parse the code into an Abstract Syntax Tree (for example):
+
+"
+if has_while:
+    "For the while loop, make a state sequence showing the variable values AFTER each update. Continue until the condition becomes false."
+"
 
 Your response MUST end with exactly one:
-[Output]VALUE[/Output]
+[Output]exact_python_value[/Output]
 
-Replace VALUE with ONLY the literal return value.
+Replace exact_python_value with ONLY the literal return value.
 
 Do the computation yourself. Do not merely describe what the function does.
 Do not create additional test cases.
 Do not repeat the examples.
+Do not attempt to output multiple outputs.
 Do not provide Python code.
 Do not provide multiple answers.
 
-Examples:
+The value inside the tags must use valid Python representation.
+Examples of valid forms are:
+[Output]75[/Output]
+[Output]True[/Output]
+[Output]'o'[/Output]
+[Output][1, 3, 5][/Output]
+[Output](-3, 1)[/Output]
 
-[Output]42[/Output]
-[Output][1, 2, 3][/Output]
-[Output][][/Output]
-[Output]"hello"[/Output]
+Do not write anything after [/Output]
 
 Do not put anything inside [Output] tags except the return value.
 
 The [Output]...[/Output] pair must be the final thing in your response.
+
+If you output multiple blocks of text that repeat, your response will not be accepted
 """
 
             inputs = tokenizer(
