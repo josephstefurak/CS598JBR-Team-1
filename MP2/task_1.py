@@ -41,7 +41,7 @@ def select_assertion(test_str: str) -> dict[str, str]:
         "candidate": candidate,
         "assertion": assertion,
         "reduced_test_string": all_other_tests
-    }``
+    }
 
 def get_verdict(response_str: str, expected: str):
     regex = r"\[Output\]\s*(.*?)\s*\[/Output\]"
@@ -122,12 +122,6 @@ You are an AI programming assistant using DeepSeek Coder.
 
 Determine the exact return value of the Python function below for the given input.
 
-Do the computation yourself. Do not merely describe what the function does.
-Do not create additional test cases.
-Do not repeat the examples.
-Do not provide Python code.
-Do not provide multiple answers.
-
 ### Function Specification
 {task_prompt}
 
@@ -154,6 +148,12 @@ Your response MUST end with exactly one:
 [Output]VALUE[/Output]
 
 Replace VALUE with ONLY the literal return value.
+
+Do the computation yourself. Do not merely describe what the function does.
+Do not create additional test cases.
+Do not repeat the examples.
+Do not provide Python code.
+Do not provide multiple answers.
 
 Examples:
 
