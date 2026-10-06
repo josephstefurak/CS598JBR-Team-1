@@ -117,62 +117,49 @@ Final: [Output]prediction[/Output]
 ### Response:
 """
             else: # Crafted prompt
-                prompt = f"""
-You are an AI programming assistant using DeepSeek Coder.
+                prompt = f"""You are solving a Python program execution problem.
 
-Determine the exact return value of the Python function below for the given input.
+Your task is to determine the exact value returned by the given Python
+function for the specified input.
 
-### Target Input
+### Input
 {candidate}
 
-### Function Specification
+### Function specification
 {task_prompt}
 
-### Function Entry Point
-{entry_point}
-
-
-### Code
+### Function
 {canonical_solution}
 
-### Required Output
-Return the exact literal Python value produced by the function AFTER showing the actual execution.
+### How to solve
+Trace the program as it actually executes.
 
-For example, parse the code into an Abstract Syntax Tree (for example):
+For loops:
+- Track the loop variable on each iteration.
+- Track changes to relevant variables.
 
-"
-if has_while:
-    "For the while loop, make a state sequence showing the variable values AFTER each update. Continue until the condition becomes false."
-"
+Conditionals:
+- Evaluate the condition using Python semantics.
+- Follow only the branch that executes.
 
-Your response MUST end with exactly one:
-[Output]exact_python_value[/Output]
+Lists and mutable objects:
+- Account for mutations as they occur.
+- Use the state of the object at each point in execution.
 
-Replace exact_python_value with ONLY the literal return value.
+Built-in functions and operators:
+- Apply their actual Python behavior rather than relying only on the
+  natural-language description.
 
-Do the computation yourself. Do not merely describe what the function does.
-Do not create additional test cases.
-Do not repeat the examples.
-Do not attempt to output multiple outputs.
-Do not provide Python code.
-Do not provide multiple answers.
+Do not invent behavior that isn't present in the code.
 
-The value inside the tags must use valid Python representation.
-Examples of valid forms are:
-[Output]75[/Output]
-[Output]True[/Output]
-[Output]'o'[/Output]
-[Output][1, 3, 5][/Output]
-[Output](-3, 1)[/Output]
+### Output format
 
-Do not write anything after [/Output]
+After completing the execution, output the final return value using
+exactly this format:
 
-Do not put anything inside [Output] tags except the return value.
+[Output]value[/Output]
 
-The [Output]...[/Output] pair must be the final thing in your response.
-
-If you output multiple blocks of text that repeat, your response will not be accepted
-"""
+The [Output]...[/Output] block must be the final thing in your response."""
 
             inputs = tokenizer(
                 prompt,
