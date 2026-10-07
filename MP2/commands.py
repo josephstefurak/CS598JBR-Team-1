@@ -28,6 +28,8 @@ task_1_crafted_json = "task_1_" + seed + "_crafted.jsonl"
 task_2_vanilla_json = "task_2_" + seed + "_vanilla.jsonl"
 task_2_crafted_json = "task_2_" + seed + "_crafted.jsonl"
 
+! pip install -q pytest-timeout
+
 # ---------------- Cell 2: Task 1 (code execution reasoning) ----------------
 # Prompt the models, you can modify `MP2/task_1.py, MP2/task_2.py`
 # The {input_dataset} is the JSON file consisting of 20 unique programs for your group that you generated in MP1 (selected_humaneval_[seed].jsonl)
