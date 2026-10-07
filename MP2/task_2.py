@@ -1,10 +1,10 @@
 import ast
+import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 
 import jsonlines
 
@@ -24,7 +24,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COVERAGE_DIR = os.path.join(SCRIPT_DIR, "Coverage")
 GENERATED_DIR = os.path.join(SCRIPT_DIR, "generated_tests")
 
-PYTEST_TIMEOUT_SECONDS = 120
+PYTEST_TIMEOUT_SECONDS = 120   # whole pytest run
+PER_TEST_TIMEOUT_SECONDS = 10  # each individual test (needs pytest-timeout)
 
 
 def save_file(content, file_path):
@@ -162,6 +163,14 @@ def prepare_test_file(test_code, entry):
     return header + "\n" + test_code + "\n"
 
 
+def summary_line(pytest_output):
+    """Return pytest's final 'N passed, M failed in X.XXs' line (or '' if there is none)."""
+    for line in reversed(pytest_output.splitlines()):
+        if re.search(r"\bin [\d.]+s\b", line) and re.search(r"\d+ (passed|failed|errors?|skipped)", line):
+            return line
+    return ""
+
+
 def run_tests_with_coverage(entry, test_code, mode):
     """Write {ID}.py and {ID}_test.py, run pytest with coverage, and return the results."""
     module = module_name_for(entry["task_id"])
@@ -174,16 +183,19 @@ def run_tests_with_coverage(entry, test_code, mode):
     save_file(test_code, os.path.join(work_dir, test_file))
 
     coverage_report = os.path.join(COVERAGE_DIR, f"{module}_test_{mode}.json")
-    junit_report = os.path.join(work_dir, f"{module}_junit.xml")
-    for stale in (coverage_report, junit_report, os.path.join(work_dir, ".coverage")):
+    for stale in (coverage_report, os.path.join(work_dir, ".coverage")):
         if os.path.exists(stale):
             os.remove(stale)
 
     cmd = [
         sys.executable, "-m", "pytest", test_file,
         f"--cov={module}", f"--cov-report=json:{coverage_report}",
-        f"--junitxml={junit_report}", "-q", "-p", "no:cacheprovider",
+        "-q", "--tb=short", "-p", "no:cacheprovider",
     ]
+    # Fail any single test that runs too long (e.g. naive recursive fib(50)) instead of
+    # letting it hang the whole run, so the other tests and the coverage report still count
+    if importlib.util.find_spec("pytest_timeout") is not None:
+        cmd.append(f"--timeout={PER_TEST_TIMEOUT_SECONDS}")
     try:
         proc = subprocess.run(cmd, cwd=work_dir, capture_output=True, text=True, timeout=PYTEST_TIMEOUT_SECONDS)
         pytest_output = proc.stdout + proc.stderr
@@ -199,23 +211,17 @@ def run_tests_with_coverage(entry, test_code, mode):
         # Still produce the required report file so all 40 reports exist
         save_file(json.dumps({"totals": {"percent_covered": 0.0}, "note": "tests could not run"}), coverage_report)
 
-    # Test counts from the JUnit report
-    counts = {"tests_total": 0, "tests_passed": 0, "tests_failed": 0, "tests_errored": 0, "tests_skipped": 0}
-    if os.path.exists(junit_report):
-        root = ET.parse(junit_report).getroot()
-        suite = root if root.tag == "testsuite" else root.find("testsuite")
-        if suite is not None:
-            total = int(suite.get("tests", 0))
-            failed = int(suite.get("failures", 0))
-            errored = int(suite.get("errors", 0))
-            skipped = int(suite.get("skipped", 0))
-            counts = {
-                "tests_total": total,
-                "tests_passed": total - failed - errored - skipped,
-                "tests_failed": failed,
-                "tests_errored": errored,
-                "tests_skipped": skipped,
-            }
+    # Test counts from pytest's final summary line, e.g. "3 failed, 4 passed, 1 error in 5.2s"
+    found = {}
+    for number, outcome in re.findall(r"(\d+) (passed|failed|errors?|skipped)\b", summary_line(pytest_output)):
+        found[outcome.rstrip("s") if outcome.startswith("error") else outcome] = int(number)
+    counts = {
+        "tests_total": sum(found.values()),
+        "tests_passed": found.get("passed", 0),
+        "tests_failed": found.get("failed", 0),
+        "tests_errored": found.get("error", 0),
+        "tests_skipped": found.get("skipped", 0),
+    }
 
     return coverage, counts, pytest_output
 
