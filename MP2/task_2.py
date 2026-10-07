@@ -122,6 +122,8 @@ def prepare_test_file(test_code, entry):
     """Post-process the test code so it tests the real module:
     - drop any copy of the program's functions the model pasted in (otherwise the tests
       exercise the copy, and the module's coverage stays at 0%)
+    - drop imports of the program's functions from a placeholder module the model made up
+      (e.g. `from your_module import fizz_buzz`), which would fail with ModuleNotFoundError
     - make sure the module under test is imported
     """
     module = module_name_for(entry["task_id"])
@@ -130,12 +132,23 @@ def prepare_test_file(test_code, entry):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
 
+    def is_wrong_import(node):
+        # `from your_module import f` where f is one of the program's functions
+        if isinstance(node, ast.ImportFrom) and node.module != module:
+            return any(alias.name in program_functions or alias.name == "*" and node.module
+                       and "module" in node.module for alias in node.names)
+        # `import your_module`
+        if isinstance(node, ast.Import):
+            return any("your_module" in alias.name for alias in node.names)
+        return False
+
     test_code = make_parsable(test_code)
     try:
         tree = ast.parse(test_code)
         tree.body = [
             node for node in tree.body
             if not (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in program_functions)
+            and not is_wrong_import(node)
         ]
         test_code = ast.unparse(tree)
     except SyntaxError:
