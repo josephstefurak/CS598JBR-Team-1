@@ -2,8 +2,10 @@ import jsonlines
 import sys
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-import random
 import re
+import ast
+import copy
+import random
 
 #####################################################
 # Please finish all TODOs in this file for MP2;
@@ -13,49 +15,30 @@ def save_file(content, file_path):
     with open(file_path, 'w') as file:
         file.write(content)
 
-def select_assertion(test_str: str) -> dict[str, str]:
-    lines = test_str.split('\n')
-    filtered: list[str] = []
-    regex = r'assert\s+candidate\((.*?)\)\s*==\s*(\[[^\]]*\]|\([^)]*\)|"[^"]*"|\'\[^\'\]*\'|\-?\d+|None|True|False|\w+)'
-    for line in lines:
-        if len(line) == 0:
-            continue
-        line = line.strip()
-        is_found = re.match(regex, line)
-        if is_found is None:
-            continue
-        filtered.append(line)
-    if len(filtered) == 0:
-        raise RuntimeError(f"test string: {test_str} did not produce any assertions")
-    choice = filtered[0]
+def select_test(entry):
+    ns, calls = {}, []
+    exec(entry["prompt"] + entry["canonical_solution"], ns)
+    fn = ns[entry["entry_point"]]
+    def recorder(*args):
+        calls.append(copy.deepcopy(args))
+        return fn(*args)
+    exec(entry["test"], ns)
+    random.seed(0)
+    ns["check"](recorder)
+    inputs = sorted(set(repr(c)[1:-1].rstrip(",") for c in calls), key=lambda s: (len(s), s))[:3]
+    args_str = random.Random(entry["task_id"]).choice(inputs)
+    expected = eval(f"{entry['entry_point']}({args_str})", ns)
+    return args_str, expected
 
-    filtered.remove(choice)
-    all_other_tests = '\n'.join(filtered)
-    matches = re.match(regex, choice)
-    if matches is None:
-        raise RuntimeError(f"Could not parse selected assertion: {choice}")
-    candidate = matches[1]
-    assertion = matches[2]
-
-    return {
-        "candidate": candidate,
-        "assertion": assertion,
-        "reduced_test_string": all_other_tests
-    }
-
-def get_verdict(response_str: str, expected: str):
-    regex = r"\[Output\]\s*(.*?)\s*\[/Output\]"
-    matches = re.findall(regex, response_str, re.DOTALL)
-
-    if len(matches) != 1:
-        return False, expected, 'Prediction error: NO MATCHES'
-
-    prediction = matches[-1]
-    prediction = prediction.strip().lower().replace(r'\s', '')
-    expected = expected.strip().lower().replace(r'\s', '')
-    print(f"Expected: {expected}\tPrediction: {prediction}")
-    return expected == prediction, expected, prediction
-
+def get_verdict(response, expected):
+    preds = re.findall(r"\[Output\](.*?)\[[/\\]Output\]", response, re.DOTALL)
+    if not preds:
+        return None, False
+    pred = preds[-1].strip()
+    try:
+        return pred, ast.literal_eval(pred) == expected
+    except Exception:
+        return pred, pred == expected
 
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
     print(f"Working with {model_name} prompt type {vanilla}...")
@@ -63,141 +46,89 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
     # TODO: download the model
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     # TODO: load the model with quantization
-    bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16
-    )
     model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    quantization_config=bnb_config,
-    device_map="auto",
-    torch_dtype=torch.bfloat16,
-    trust_remote_code=True
+        model_name,
+        quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16),
+        device_map="auto",
+        trust_remote_code=True,
     )
     
     results = []
     for entry in dataset:
-        try:
-            # TODO: create prompt for the model
-            # Tip : Use can use any data from the dataset to create 
-            #       the prompt including prompt, canonical_solution, test, etc.
-            test_string = entry['test']
-            task_prompt = entry['prompt']
-            entry_point = entry['entry_point']
-            selection = select_assertion(test_string)
-            candidate = selection['candidate']
-            assertion = selection['assertion']
-            canonical_solution = entry['canonical_solution']
-            example_inputs_and_outputs = selection['reduced_test_string']
-
-            if vanilla:
-                prompt = f"""
-You are an AI programming assistant. You are an AI programming assistant, utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
-For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
-
+        # TODO: create prompt for the model
+        # Tip : Use can use any data from the dataset to create 
+        #       the prompt including prompt, canonical_solution, test, etc.
+        prompt = ""
+        args_str, expected = select_test(entry)
+        program = entry["prompt"] + entry["canonical_solution"]
+        system = ("You are an AI programming assistant. You are an AI programming assistant, utilizing the "
+                  "DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related "
+                  "to computer science. For politically sensitive questions, security and privacy issues, and "
+                  "other non-computer science questions, you will refuse to answer.")
+        if vanilla:
+            code = re.sub(r'("""|\'\'\')[\s\S]*?\1', "", program)
+            prompt = f"""{system}
 ### Instruction:
+If the input is {args_str}, what will the following code return?
+The return value prediction must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
 
-If the string is '{candidate}', what will the following code return?
-
-The return value 'prediction' must be enclosed between [Output] and [/Output] tags. For example : [Output]prediction[/Output]
-
-Your prediction MUST be the last thing you output. Nothing more otherwise your prediction WILL be rejected.
-
-### Example Response:
-
-thoughs
-...
-Final: [Output]prediction[/Output]
-
-```python
-{ canonical_solution }
-```
+{code}
 ### Response:
 """
-            else: # Crafted prompt
-                prompt = f"""You are solving a Python program execution problem.
+        else:
+            prompt = f"""{system}
+### Instruction:
+Predict the exact return value of a Python function call by tracing its execution step by step like the Python interpreter.
 
-Your task is to determine the exact value returned by the given Python
-function for the specified input.
+Example:
+```python
+def sum_even_squares(nums):
+    total = 0
+    for n in nums:
+        if n % 2 == 0:
+            total += n * n
+    return total
+```
+Call: sum_even_squares([1, 2, 3, 4])
+Execution trace:
+1. Arguments: nums = [1, 2, 3, 4]
+2. total = 0
+3. n = 1: 1 % 2 == 0 -> False. total = 0
+   n = 2: 2 % 2 == 0 -> True. total = 0 + 4 = 4
+   n = 3: 3 % 2 == 0 -> False. total = 4
+   n = 4: 4 % 2 == 0 -> True. total = 4 + 16 = 20
+4. return 20
+[Output]20[/Output]
 
-### Input
-{candidate}
+Now trace this one the same way.
+```python
+{program.strip()}
+```
+Call: {entry['entry_point']}({args_str})
 
-### Function specification
-{task_prompt}
+Rules: arguments are Python literals. Trace every loop iteration and write each variable change. For each condition write the compared values and True/False. Use the docstring examples to sanity check, but the code decides. End with the return value as a Python literal inside [Output] and [/Output].
+### Response:
+Execution trace:
+1. Arguments:"""
+        
+        # TODO: prompt the model and get the response
+        response = ""
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        outputs = model.generate(**inputs, max_new_tokens=1536, do_sample=False,
+                                 pad_token_id=tokenizer.eos_token_id,
+                                 stop_strings=["[/Output]"], tokenizer=tokenizer)
+        response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 
-### Function
-{canonical_solution}
+        # TODO: process the response and save it to results
+        prediction, verdict = get_verdict(response, expected)
 
-### How to solve
-Trace the program as it actually executes.
-
-For loops:
-- Track the loop variable on each iteration.
-- Track changes to relevant variables.
-
-Conditionals:
-- Evaluate the condition using Python semantics.
-- Follow only the branch that executes.
-
-Lists and mutable objects:
-- Account for mutations as they occur.
-- Use the state of the object at each point in execution.
-
-Built-in functions and operators:
-- Apply their actual Python behavior rather than relying only on the
-  natural-language description.
-
-Do not invent behavior that isn't present in the code.
-
-### Output format
-
-After completing the execution, output the final return value using
-exactly this format:
-
-[Output]value[/Output]
-
-The [Output]...[/Output] block must be the final thing in your response."""
-
-            inputs = tokenizer(
-                prompt,
-                return_tensors="pt"
-            )
-
-            input_ids = inputs["input_ids"].to(model.device)
-            attention_mask = inputs["attention_mask"].to(model.device)
-            
-            # TODO: prompt the model and get the response
-            outputs = model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=1000,
-                do_sample=False,
-                eos_token_id=tokenizer.eos_token_id,
-                pad_token_id=tokenizer.eos_token_id
-            )
-            response = tokenizer.decode(outputs[0][input_ids.shape[1]:], skip_special_tokens=True)
-
-            # TODO: process the response and save it to results
-            verdict, expected, prediction = get_verdict(response, assertion)
-
-            print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nexpected:\n{expected}\nactual:\n{prediction}\nis_correct:\n{verdict}\n\n")
-            results.append({
-                "task_id": entry["task_id"],
-                "prompt": prompt,
-                "response": response,
-                "is_correct": verdict
-            })
-        except Exception as e:
-            print(f"Exception rasied: {e}")
-            results.append({
-                "task_id": entry["task_id"],
-                "prompt": "Error",
-                "response": e,
-                "is_correct": False
-            })
+        print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\n" f"expected:\n{expected!r}\nprediction:\n{prediction}\nis_correct:\n{verdict}")
+        results.append({
+            "task_id": entry["task_id"],
+            "prompt": prompt,
+            "response": response,
+            "is_correct": verdict
+        })
         
     return results
 
