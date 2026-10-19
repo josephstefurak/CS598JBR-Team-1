@@ -2,6 +2,16 @@ import jsonlines
 import sys
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+import re
+import subprocess
+
+from pathlib import Path
+
+current_directory = Path.cwd()
+
+solution_file = current_directory / "Solution.java"
+test_file = current_directory / "Test.java"
+junit_jar = current_directory / "junit-platform-console-standalone.jar"
 
 #####################################################
 # Please finish all TODOs in this file for MP3/task_1;
@@ -11,11 +21,69 @@ def save_file(content, file_path):
     with open(file_path, 'w') as file:
         file.write(content)
 
+def get_verdict(response: str, test_content: str):
+    generated_test_match = re.findall(r"\[Java Start\](.*?)\[Java End\]", response, re.DOTALL)
+    if not generated_test_match:
+        return None, False
+    generated_test = generated_test_match[-1].strip()
+    solution: str = ''.join(['class Solution {\n', generated_test, '\n}'])
+
+    save_file(solution, solution_file)
+    save_file(test_content, test_file)
+
+
+    try:
+        compile_test_command = [
+            "javac",
+            "-cp", str(junit_jar),
+            str(solution_file),
+            str(test_file)
+        ]
+
+        compile_result = subprocess.run(
+            compile_test_command,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=current_directory
+        )
+
+        if compile_result.returncode != 0:
+            print("Compliation failed:")
+            print(compile_result.stderr)
+            return solution, False
+
+        command = [
+            "java",
+            "-jar",  str(junit_jar),
+            "--class-path", str(current_directory),
+            "--scan_class-path"
+        ]
+
+        test_result = subprocess.run(command, capture_output=True, text=True, check=False, cwd=current_directory)
+        if test_result.returncode != 0:
+            print("Tests failed:")
+            print(test_result.stdout)
+            print(test_result.stderr)
+            return solution, False
+        return solution, True
+    except FileNotFoundError as error:
+        print(f"Required executable or file not found: {error}")
+        return solution, False
+
+
 def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
     print(f"Working with {model_name} prompt type {vanilla}...")
     
     # TODO: download the model
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     # TODO: load the model with quantization
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        quantization_config=BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16),
+        device_map="auto",
+        trust_remote_code=True
+    )
     
     results = []
     for entry in dataset:
@@ -23,14 +91,54 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
         prompt = ""
+
+        declaration: str = entry["declaration"]
+        test: str = entry["test"]
+        test_content = ''.join([declaration, test])
+
+        python_prompt = entry["prompt"]
+        python_canonical_solution = entry["canonical_solution"]
+        python_code = ''.join([python_prompt, python_canonical_solution])
+
+
+        system_prompt = """
+You are an AI programming assistant utilizing the DeepSeek Coder model, developed by DeepSeek Company, and you only answer questions related to computer science. 
+For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
+        """
+
+        if vanilla:
+            prompt = f"""
+{system_prompt}
+
+### Instruction:
+Can you translate the following Python code into Java?
+The new Java code must be enclosed between [Java Start] and [Java End]
+
+{python_code}
+
+### Response:
+"""
+        else:
+            prompt = f"""
+{system_prompt}
+"""
         
         # TODO: prompt the model and get the response
-        response = ""
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        outputs = model.generate(
+            **inputs, 
+            max_new_tokens=1536, 
+            do_sample=False, 
+            pad_token_id=tokenizer.eos_token_id,
+            stop_strings=["[Java End]"],
+            tokenizer=tokenizer
+        )
 
-        # TODO: process the response and save it to results
-        verdict = False
+        response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 
-        print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nis_expected:\n{verdict}")
+        prediction, verdict = get_verdict(response, test_content)
+
+        print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nprediction:\n{prediction}\nis_expected:\n{verdict}")
         results.append({
             "task_id": entry["task_id"],
             "prompt": prompt,
