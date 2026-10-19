@@ -106,6 +106,20 @@ You are an AI programming assistant utilizing the DeepSeek Coder model, develope
 For politically sensitive questions, security and privacy issues, and other non-computer science questions, you will refuse to answer.
         """
 
+        example_output = """
+public static int sum_even_numbers(int[] nums) {
+    int total = 0;
+    for (int i = 0; i < nums.length; i++) {
+        int n = nums[i];
+        if (n % 2 == 0) {
+            total += n * n;
+        }
+    }
+    return total
+}
+
+"""
+
         if vanilla:
             prompt = f"""
 {system_prompt}
@@ -126,9 +140,24 @@ The new Java code must be enclosed between [Java Start] and [Java End]
 Can you translate the following Python code into Java?
 The new Java code must be enclosed between [Java Start] and [Java End]
 
-DO NOT wrap the Java code in a class of any kind. Only output the singular function without a class that is the translation.
-
 {python_code}
+
+Example:
+
+input: 
+
+```python
+def sum_even_squares(nums):
+    total = 0
+    for n in nums:
+        if n % 2 == 0:
+            total += n * n
+    return total
+```
+
+output:
+
+[Java Start]{example_output}[Java End]
 """
         
         # TODO: prompt the model and get the response
