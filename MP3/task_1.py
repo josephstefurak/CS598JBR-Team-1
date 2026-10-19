@@ -121,6 +121,14 @@ The new Java code must be enclosed between [Java Start] and [Java End]
         else:
             prompt = f"""
 {system_prompt}
+
+### Instruction:
+Can you translate the following Python code into Java?
+The new Java code must be enclosed between [Java Start] and [Java End]
+
+DO NOT wrap the Java code in a class of any kind. Only output the singular function without a class that is the translation.
+
+{python_code}
 """
         
         # TODO: prompt the model and get the response
