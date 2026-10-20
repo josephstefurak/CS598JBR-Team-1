@@ -72,7 +72,7 @@ def get_verdict(response: str, test_content: str):
         return solution, False
 
 
-def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
+def prompt_model(dataset_python, dataset_java, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
     print(f"Working with {model_name} prompt type {vanilla}...")
     
     # TODO: download the model
@@ -86,17 +86,18 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
     )
     
     results = []
-    for entry in dataset:
+    for entry_python, entry_java in zip(dataset_python.items(), dataset_java.items()):
         # TODO: create prompt for the model
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
         prompt = ""
 
-        test: str = entry["test"]
-        test_content = ''.join([test])
+        test: str = entry_java["test"]
+        declaration = "import java.util.*;\nimport java.lang.*;\n\n"
+        test_content = ''.join([declaration, test])
 
-        python_prompt = entry["prompt"]
-        python_canonical_solution = entry["canonical_solution"]
+        python_prompt = entry_python["prompt"]
+        python_canonical_solution = entry_python["canonical_solution"]
         python_code = ''.join([python_prompt, python_canonical_solution])
 
 
@@ -178,9 +179,9 @@ Now translate this one the same way.
         print(f"Test Content: {test_content}")
         prediction, verdict = get_verdict(response, test_content)
 
-        print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nprediction:\n{prediction}\nis_expected:\n{verdict}")
+        print(f"Task_ID {entry_python['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nprediction:\n{prediction}\nis_expected:\n{verdict}")
         results.append({
-            "task_id": entry["task_id"],
+            "task_id": entry_python["task_id"],
             "prompt": prompt,
             "response": response,
             "is_correct": verdict
@@ -204,10 +205,11 @@ if __name__ == "__main__":
     """
     This Python script is to run prompt LLMs for code translation.
     Usage:
-    `python3 task_1.py <input_dataset> <model> <output_file> <if_vanilla>`|& tee prompt.log
+    `python3 task_1.py <input_dataset_python> <input_dataset_java> <model> <output_file> <if_vanilla>`|& tee prompt.log
 
     Inputs:
-    - <input_dataset>: A `.jsonl` file, which should be your team's dataset containing 20 HumanEval problems.
+    - <input_dataset_python>: A `.jsonl` file, which should be your team's dataset containing 20 HumanEval problems.
+    - <input_dataset_java>: A `.jsonl` file, which should be your team's dataset for all things java
     - <model>: Specify the model to use. Options are "deepseek-ai/deepseek-coder-6.7b-base" or "deepseek-ai/deepseek-coder-6.7b-instruct".
     - <output_file>: A `.jsonl` file where the results will be saved.
     - <if_vanilla>: Set to 'True' or 'False' to enable vanilla prompt
@@ -216,19 +218,24 @@ if __name__ == "__main__":
     - You can check <output_file> for detailed information.
     """
     args = sys.argv[1:]
-    input_dataset = args[0]
-    model = args[1]
-    output_file = args[2]
-    if_vanilla = args[3] # True or False
+    input_dataset_python = args[0]
+    input_dataset_java = args[1]
+    model = args[2]
+    output_file = args[3]
+    if_vanilla = args[4] # True or False
     
-    if not input_dataset.endswith(".jsonl"):
-        raise ValueError(f"{input_dataset} should be a `.jsonl` file!")
+    if not input_dataset_python.endswith(".jsonl"):
+        raise ValueError(f"{input_dataset_python} should be a `.jsonl` file!")
+    
+    if not input_dataset_java.endswith(".jsonl"):
+        raise ValueError(f"{input_dataset_java} should be a `.jsonl` file!")
     
     if not output_file.endswith(".jsonl"):
         raise ValueError(f"{output_file} should be a `.jsonl` file!")
     
     vanilla = True if if_vanilla == "True" else False
     
-    dataset = read_jsonl(input_dataset)
-    results = prompt_model(dataset, model, vanilla)
+    dataset_python = read_jsonl(input_dataset_python)
+    dataset_java = read_jsonl(input_dataset_java)
+    results = prompt_model(dataset_python, dataset_java, model, vanilla)
     write_jsonl(results, output_file)
