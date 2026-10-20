@@ -10,7 +10,7 @@ from pathlib import Path
 current_directory = Path.cwd()
 
 solution_file = current_directory / "Solution.java"
-test_file = current_directory / "Test.java"
+test_file = current_directory / "Main.java"
 junit_jar = current_directory / "junit-platform-console-standalone.jar"
 
 #####################################################
@@ -26,7 +26,7 @@ def get_verdict(response: str, test_content: str):
     if not generated_test_match:
         return None, False
     generated_test = generated_test_match[-1].strip()
-    solution: str = ''.join(['class Solution {\n', generated_test, '}'])
+    solution: str = ''.join(['import java.util.*;\n' ,'class Solution {\n', generated_test, '\n}'])
 
     save_file(solution, solution_file)
     save_file(test_content, test_file)
@@ -139,7 +139,7 @@ The new Java code must be enclosed between [Java Start] and [Java End]
 ### Instruction:
 Translate the following Python function into Java.
 Return only the translated Java method, enclosed between [Java Start] and [Java End].
-Do not include a class, main method, explanation, or any unrelated code.
+Do not include a class, main method, explanation, or any unrelated code, but preserve Java Method naming conventions (i.e., use camelCase in the translated methods and not snake_case).
 
 ### Example Input:
 ```python
