@@ -92,9 +92,8 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
         #       the prompt including prompt, canonical_solution, test, etc.
         prompt = ""
 
-        declaration: str = entry["declaration"]
         test: str = entry["test"]
-        test_content = ''.join([declaration, test])
+        test_content = ''.join([test])
 
         python_prompt = entry["prompt"]
         python_canonical_solution = entry["canonical_solution"]
