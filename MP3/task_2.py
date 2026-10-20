@@ -124,7 +124,7 @@ def build_prompt(entry, vanilla):
         )
         return wrap(instruction)
 
-    # Crafted prompt:
+    # Crafted prompt, iteration 1 ('steps' variant; scored below vanilla, kept for the report):
     #  - include the specification (docstring) with the code, since bugs are only defined
     #    relative to the specification;
     #  - include concrete expected input/output pairs (`example_test`);
@@ -157,6 +157,111 @@ End with exactly one verdict tag, either <start>Buggy<end> or <start>Correct<end
 {examples_block}
 
 Now write the analysis for this function, starting with Step 1 and ending with the verdict tag."""
+    return wrap(instruction)
+
+
+
+# ---------------------------------------------------------------------------
+# Crafted prompt, iteration 2 (default): two-stage prompt chain
+#   Stage 1 - the model writes its own reference implementation from the docstring
+#             only (it never sees the code under review), which is the task it is best at.
+#   Stage 2 - the model compares the code under review with that reference, lists
+#             behavioral differences, evaluates each difference on a concrete input,
+#             and judges the outputs against the specification.
+# ---------------------------------------------------------------------------
+
+def build_reference_prompt(entry):
+    instruction = (
+        "Complete the following Python function so that it satisfies its docstring. "
+        "Return the complete function (including any helper functions shown) in a single "
+        "```python code block, with no explanation.\n"
+        f"```python\n{entry['prompt'].strip()}\n```"
+    )
+    return wrap(instruction)
+
+
+def extract_code(response):
+    blocks = re.findall(r"```(?:python|py)?[ \t]*\n(.*?)```", response, re.DOTALL)
+    if not blocks:
+        m = re.search(r"```(?:python|py)?[ \t]*\n(.*)", response, re.DOTALL)
+        blocks = [m.group(1)] if m else [response]
+    return max(blocks, key=len).strip()
+
+
+def build_compare_prompt(entry, reference_code):
+    candidate = (entry["declaration"] + entry["buggy_solution"]).strip()
+    asserts = example_asserts(entry)
+    examples_block = ("Examples of expected behavior:\n" + "\n".join(asserts) + "\n\n") if asserts else ""
+    instruction = f"""You are reviewing a candidate implementation of a Python function. Below are the specification (the docstring), a reference implementation that was written independently from the specification, and the candidate implementation. Decide whether the candidate is Buggy or Correct.
+
+Specification:
+```python
+{entry["prompt"].strip()}
+```
+{examples_block}Reference implementation (written from the specification; it may itself contain mistakes):
+```python
+{reference_code}
+```
+
+Candidate implementation:
+```python
+{candidate}
+```
+
+Follow these steps and write each one out:
+Step 1 - Differences: compare the candidate with the reference line by line. List every difference in operators (+, *, **, and/or, ==/!=, </<=), constants and initial values, loop ranges and slice bounds, which variable is used, conditions, return values, and statements that are missing or extra. Ignore differences that are only naming, formatting or style.
+Step 2 - Effect: for each difference, choose a concrete valid input (prefer the examples above) and compute, step by step, what the candidate returns and what the reference returns.
+Step 3 - Specification: for each input where the two results differ, state which result the specification requires. Trust the specification over the reference.
+Step 4 - Decide: if the candidate returns a result that contradicts the specification for any valid input, the candidate is Buggy. If every difference is only stylistic, or the candidate agrees with the specification for all valid inputs, it is Correct.
+
+End with exactly one verdict tag, <start>Buggy<end> or <start>Correct<end>, and nothing after it."""
+    return wrap(instruction)
+
+
+# ---------------------------------------------------------------------------
+# Crafted prompt, iteration 3 (alternative): single prompt with a bug-pattern checklist
+# and one worked demonstration; the model must compute (not copy) each actual output.
+# ---------------------------------------------------------------------------
+
+CHECKLIST_DEMO = """Example review:
+```python
+def has_close_elements(numbers, threshold):
+    \"\"\" Check if in given list of numbers, are any two numbers closer to each other than
+    given threshold.
+    >>> has_close_elements([1.0, 2.0, 3.0], 0.5)
+    False
+    \"\"\"
+    for idx, elem in enumerate(numbers):
+        for idx2, elem2 in enumerate(numbers):
+            if idx != idx2:
+                distance = elem - elem2
+                if distance < threshold:
+                    return True
+    return False
+```
+Requirement: True if two different elements satisfy |a - b| < threshold.
+Checklist: operators - `elem - elem2` has no abs(), so the distance can be negative. Other items look fine.
+Trace has_close_elements([1.0, 2.0, 3.0], 0.5): idx=0, idx2=1: distance = 1.0 - 2.0 = -1.0; -1.0 < 0.5 so the code returns True. The docstring expects False. MISMATCH.
+<start>Buggy<end>
+"""
+
+
+def build_checklist_prompt(entry):
+    code = (entry["prompt"] + entry["buggy_solution"]).strip()
+    asserts = example_asserts(entry)
+    examples_block = ("Examples of expected behavior:\n" + "\n".join(asserts) + "\n\n") if asserts else ""
+    instruction = f"""Review the Python function below against its docstring and decide whether it is Buggy or Correct. Human-written bugs are usually small: a single wrong operator, constant, comparison, loop bound, variable, or a missing or extra line.
+
+{CHECKLIST_DEMO}
+Now review this function:
+```python
+{code}
+```
+{examples_block}Write out:
+Requirement: one sentence stating exactly what the docstring requires.
+Checklist: examine each of these in the code and say whether it matches the requirement - arithmetic operators and exponents; and/or and comparison operators; constants and initial values; range() bounds and slices (off-by-one); which variable is used in each expression; conditions that are missing or extra; the final return value (is anything missing, such as sorting or filtering?).
+Trace: for each example above, execute the code by hand one statement at a time and write the value the CODE returns (do not copy the expected value), then compare it with the expected value and write MATCH or MISMATCH.
+Verdict: Buggy if any checklist item is wrong or any trace is a MISMATCH; otherwise Correct. End with exactly one tag, <start>Buggy<end> or <start>Correct<end>."""
     return wrap(instruction)
 
 
@@ -221,21 +326,34 @@ def extract_prediction(response):
     return None
 
 
-def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True):
-    print(f"Working with {model_name} prompt type {vanilla}...")
+def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct", vanilla = True, variant = "chain"):
+    if vanilla:
+        variant = "vanilla"
+    print(f"Working with {model_name} prompt type {vanilla} (variant: {variant})...")
 
     tokenizer, model = load_model(model_name)
 
     results = []
     num_correct = 0
     for entry in dataset:
-        # TODO: create prompt for the model
-        prompt = build_prompt(entry, vanilla)
-
-        # TODO: prompt the model and get the response
+        extra = {}
         try:
+            # TODO: create prompt for the model
+            if variant == "chain":
+                ref_prompt = build_reference_prompt(entry)
+                ref_response = generate(tokenizer, model, ref_prompt, max_new_tokens=512)
+                reference = extract_code(ref_response)
+                prompt = build_compare_prompt(entry, reference)
+                extra = {"stage_1_prompt": ref_prompt, "stage_1_response": ref_response}
+            elif variant == "checklist":
+                prompt = build_checklist_prompt(entry)
+            else:  # "vanilla" or "steps"
+                prompt = build_prompt(entry, vanilla)
+
+            # TODO: prompt the model and get the response
             response = generate(tokenizer, model, prompt)
         except Exception as e:
+            prompt = locals().get("prompt", "")
             response = ""
             print(f"Generation failed for {entry['task_id']}: {e}")
 
@@ -244,6 +362,9 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
         verdict = prediction == EXPECTED_VERDICT
         num_correct += verdict
 
+        if extra:
+            print(f"Task_ID {entry['task_id']} stage 1 (reference implementation):\n"
+                  f"{extra['stage_1_prompt']}\n{extra['stage_1_response']}\n")
         print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\n"
               f"prediction:\n{prediction}\nis_expected:\n{verdict}")
         results.append({
@@ -251,10 +372,11 @@ def prompt_model(dataset, model_name = "deepseek-ai/deepseek-coder-6.7b-instruct
             "prompt": prompt,
             "response": response,
             "prediction": prediction,
-            "is_correct": verdict
+            "is_correct": verdict,
+            **extra,
         })
 
-    print(f"\nSummary ({'vanilla' if vanilla else 'crafted'}): "
+    print(f"\nSummary ({variant}): "
           f"{num_correct}/{len(dataset)} correctly predicted as Buggy "
           f"({100 * num_correct / max(len(dataset), 1):.0f}%)")
     for r in results:
@@ -293,6 +415,7 @@ if __name__ == "__main__":
     model = args[1]
     output_file = args[2]
     if_vanilla = args[3] # True or False
+    variant = args[4] if len(args) > 4 else "chain"
 
     if not input_dataset.endswith(".jsonl"):
         raise ValueError(f"{input_dataset} should be a `.jsonl` file!")
@@ -303,5 +426,5 @@ if __name__ == "__main__":
     vanilla = True if if_vanilla == "True" else False
 
     dataset = read_jsonl(input_dataset)
-    results = prompt_model(dataset, model, vanilla)
+    results = prompt_model(dataset, model, vanilla, variant)
     write_jsonl(results, output_file)
