@@ -26,7 +26,7 @@ def get_verdict(response: str, test_content: str):
     if not generated_test_match:
         return None, False
     generated_test = generated_test_match[-1].strip()
-    solution: str = ''.join(['class Solution {\n', generated_test, '\n}'])
+    solution: str = ''.join(['class Solution {\n', generated_test, '}'])
 
     save_file(solution, solution_file)
     save_file(test_content, test_file)
@@ -176,6 +176,7 @@ Now translate this one the same way.
 
         response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 
+        print(f"Test Content: {test_content}")
         prediction, verdict = get_verdict(response, test_content)
 
         print(f"Task_ID {entry['task_id']}:\nprompt:\n{prompt}\nresponse:\n{response}\nprediction:\n{prediction}\nis_expected:\n{verdict}")
