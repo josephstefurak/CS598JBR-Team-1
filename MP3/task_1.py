@@ -137,10 +137,11 @@ The new Java code must be enclosed between [Java Start] and [Java End]
 {system_prompt}
 
 ### Instruction:
-Can you translate the following Python code into Java?
-The new Java code must be enclosed between [Java Start] and [Java End]
+Translate the following Python function into Java.
+Return only the translated Java method, enclosed between [Java Start] and [Java End].
+Do not include a class, main method, explanation, or any unrelated code.
 
-Example:
+### Example Input:
 ```python
 def sum_even_squares(nums):
     total = 0
@@ -149,11 +150,12 @@ def sum_even_squares(nums):
             total += n * n
     return total
 ```
-Translate: 
+
+### Example Output:
 
 [Java Start]{example_output}[Java End]
 
-No translate this one the same way.
+Now translate this one the same way.
 ```python
 {python_code}
 ```
