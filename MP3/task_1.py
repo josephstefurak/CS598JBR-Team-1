@@ -140,12 +140,7 @@ The new Java code must be enclosed between [Java Start] and [Java End]
 Can you translate the following Python code into Java?
 The new Java code must be enclosed between [Java Start] and [Java End]
 
-{python_code}
-
 Example:
-
-input: 
-
 ```python
 def sum_even_squares(nums):
     total = 0
@@ -154,10 +149,16 @@ def sum_even_squares(nums):
             total += n * n
     return total
 ```
-
-output:
+Translate: 
 
 [Java Start]{example_output}[Java End]
+
+No translate this one the same way.
+```python
+{python_code}
+```
+
+### Response
 """
         
         # TODO: prompt the model and get the response
