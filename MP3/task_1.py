@@ -107,7 +107,7 @@ For politically sensitive questions, security and privacy issues, and other non-
         """
 
         example_output = """
-public static int sum_even_numbers(int[] nums) {
+public static int sumEvenNumbers(int[] nums) {
     int total = 0;
     for (int i = 0; i < nums.length; i++) {
         int n = nums[i];
