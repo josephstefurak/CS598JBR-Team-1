@@ -86,7 +86,7 @@ def prompt_model(dataset_python, dataset_java, model_name = "deepseek-ai/deepsee
     )
     
     results = []
-    for entry_python, entry_java in zip(dataset_python.items(), dataset_java.items()):
+    for entry_python, entry_java in zip(dataset_python, dataset_java):
         # TODO: create prompt for the model
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
