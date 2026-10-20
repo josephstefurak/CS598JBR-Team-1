@@ -55,9 +55,9 @@ def get_verdict(response: str, test_content: str):
 
         command = [
             "java",
-            "-jar",  str(junit_jar),
-            "--class-path", str(current_directory),
-            "--scan_class-path"
+            "-ea",
+            "-cp", str(current_directory),
+            "Main"
         ]
 
         test_result = subprocess.run(command, capture_output=True, text=True, check=False, cwd=current_directory)
@@ -86,11 +86,17 @@ def prompt_model(dataset_python, dataset_java, model_name = "deepseek-ai/deepsee
     )
     
     results = []
-    for entry_python, entry_java in zip(dataset_python, dataset_java):
+    java_by_id = {
+        entry['task_id']: entry
+        for entry in dataset_java
+    }
+    for entry_python in dataset_python:
         # TODO: create prompt for the model
         # Tip : Use can use any data from the dataset to create 
         #       the prompt including prompt, canonical_solution, test, etc.
         prompt = ""
+        task_id = entry_python['task_id']
+        entry_java = java_by_id[task_id]
 
         test: str = entry_java["test"]
         declaration = "import java.util.*;\nimport java.lang.*;\n\n"
@@ -143,7 +149,10 @@ Translate the following Python function into Java.
 Return only the translated Java method, enclosed between [Java Start] and [Java End].
 Do not include a class, main method, explanation, or any unrelated code, but preserve Java Method naming conventions (i.e., use camelCase in the translated methods and not snake_case).
 
-The expected Java method should match exactly the method name and method signature as provided in this Java test declaration:
+The translated method MUST use the exact method name, parameter types, parameter order, and return type from the Java declaration below.
+
+Do not replace List with an array or change any parameter types.
+The method must compile with the provided test code.
 
 ```java
 {java_declaration}
