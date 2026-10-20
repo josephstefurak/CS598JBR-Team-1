@@ -96,6 +96,8 @@ def prompt_model(dataset_python, dataset_java, model_name = "deepseek-ai/deepsee
         declaration = "import java.util.*;\nimport java.lang.*;\n\n"
         test_content = ''.join([declaration, test])
 
+        java_declaration = entry_java['declaration']
+
         python_prompt = entry_python["prompt"]
         python_canonical_solution = entry_python["canonical_solution"]
         python_code = ''.join([python_prompt, python_canonical_solution])
@@ -140,6 +142,12 @@ The new Java code must be enclosed between [Java Start] and [Java End]
 Translate the following Python function into Java.
 Return only the translated Java method, enclosed between [Java Start] and [Java End].
 Do not include a class, main method, explanation, or any unrelated code, but preserve Java Method naming conventions (i.e., use camelCase in the translated methods and not snake_case).
+
+The expected Java method should match exactly the method name and method signature as provided in this Java test declaration:
+
+```java
+{java_declaration}
+```
 
 ### Example Input:
 ```python
