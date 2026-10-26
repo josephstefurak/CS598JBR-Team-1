@@ -308,21 +308,41 @@ def generate(tokenizer, model, prompt, max_new_tokens=1024):
 # Response processing
 # ---------------------------------------------------------------------------
 
+VERDICT_WORDS = r"(buggy|correct|incorrect|wrong)"
+# An explicit verdict sentence, e.g. "The code is buggy", "the candidate is Buggy",
+# "it is not Buggy", "The provided code is correct".
+VERDICT_STATEMENT = re.compile(
+    r"\b(?:code|candidate|implementation|function|program|it)\s+(?:is|seems to be|appears to be)\s+"
+    r"(not\s+)?(?:\w+\s+)?" + VERDICT_WORDS + r"\b",
+    re.IGNORECASE)
+
+
+def normalize_verdict(word, negated=False):
+    buggy = word.lower() in ("buggy", "incorrect", "wrong")
+    if negated:
+        buggy = not buggy
+    return "buggy" if buggy else "correct"
+
+
 def extract_prediction(response):
     """Return 'buggy', 'correct', or None.
 
-    Uses the last <start>...<end> tag (the model sometimes repeats the format example
-    first). Falls back to the last standalone Buggy/Correct word if the tag is missing
-    or malformed (e.g. <start>Buggy</end> or a response cut off by the token limit)."""
+    1. The last <start>...<end> tag (tolerating </end>), since the model sometimes
+       repeats the format example before giving its own answer.
+    2. If there is no usable tag, the last explicit verdict sentence such as
+       "The code is buggy" / "the candidate is not Buggy".
+    Bare occurrences of the words are deliberately NOT used: "To correct this" or a
+    sample input like "Buggy" are not verdicts, and an earlier version of this
+    fallback mis-scored such responses."""
     tags = re.findall(r"<start>\s*(.*?)\s*<\s*/?\s*end\s*>", response, re.IGNORECASE | re.DOTALL)
     for tag in reversed(tags):
-        word = re.search(r"\b(buggy|correct|incorrect)\b", tag, re.IGNORECASE)
+        word = re.search(r"\b(not\s+)?" + VERDICT_WORDS + r"\b", tag, re.IGNORECASE)
         if word:
-            w = word.group(1).lower()
-            return "buggy" if w in ("buggy", "incorrect") else "correct"
-    words = re.findall(r"\b(buggy|correct)\b", response, re.IGNORECASE)
-    if words:
-        return words[-1].lower()
+            return normalize_verdict(word.group(2), bool(word.group(1)))
+    statements = VERDICT_STATEMENT.findall(response)
+    if statements:
+        negated, word = statements[-1]
+        return normalize_verdict(word, bool(negated))
     return None
 
 

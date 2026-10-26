@@ -801,3 +801,28 @@ Summary (vanilla): 3/20 correctly predicted as Buggy (15%)
   HumanEval/38: prediction=correct is_correct=False
   HumanEval/18: prediction=correct is_correct=False
   HumanEval/150: prediction=correct is_correct=False
+
+===== Re-scored task_2_207031459373254362480952325552707923931_vanilla.jsonl with the fixed verdict parser (responses unchanged) =====
+  HumanEval/133: prediction correct -> buggy, is_correct False -> True
+  HumanEval/118: prediction buggy -> correct, is_correct True -> False
+Summary after re-scoring: 3/20 correctly predicted as Buggy (15%)
+  HumanEval/133: prediction=buggy is_correct=True
+  HumanEval/36: prediction=correct is_correct=False
+  HumanEval/70: prediction=correct is_correct=False
+  HumanEval/88: prediction=correct is_correct=False
+  HumanEval/136: prediction=correct is_correct=False
+  HumanEval/149: prediction=correct is_correct=False
+  HumanEval/122: prediction=correct is_correct=False
+  HumanEval/9: prediction=buggy is_correct=True
+  HumanEval/123: prediction=correct is_correct=False
+  HumanEval/151: prediction=correct is_correct=False
+  HumanEval/57: prediction=correct is_correct=False
+  HumanEval/55: prediction=buggy is_correct=True
+  HumanEval/118: prediction=correct is_correct=False
+  HumanEval/109: prediction=correct is_correct=False
+  HumanEval/76: prediction=correct is_correct=False
+  HumanEval/140: prediction=correct is_correct=False
+  HumanEval/100: prediction=correct is_correct=False
+  HumanEval/38: prediction=correct is_correct=False
+  HumanEval/18: prediction=correct is_correct=False
+  HumanEval/150: prediction=correct is_correct=False
