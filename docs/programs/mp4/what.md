@@ -94,8 +94,8 @@ R-T1-README (environment facts), R-T2-REPRO (install steps).
 **Tooling**: none beyond shell.
 
 **Spec**:
-1. Create `MP4/README.md` (stub: the eleven required section headings from
-   why.md R-T1-README + tool list + layout, each body `TODO`), `MP4/src/`,
+1. Create `MP4/README.md` (stub: the eleven required section headings — the
+   nine items of why.md R-T1-README + tool list + layout, each body `TODO`), `MP4/src/`,
    `MP4/configs/`, `MP4/trajectories/project_1/`, `MP4/trajectories/project_2/`,
    `MP4/translations/project_1/`, `MP4/translations/project_2/`,
    `MP4/subjects/project_1/`, `MP4/subjects/project_2/` (`.gitkeep` where
@@ -143,7 +143,8 @@ nightly-2025-05-13 now? Exact commands: <shown>. Network download, roughly
 
 **Verification**: `ls` of the nine required paths; `shasum -a 256 -c
 MP4/subjects/project_N/CHECKSUMS.sha256` passes for both; `cargo
-+nightly-2025-05-13 --version` prints a 1.88.0-nightly dated 2025-05-12/13;
++nightly-2025-05-13 --version` prints a 1.89.0-nightly dated 2025-05-09/12/13
+(corrected M1: the pinned nightly is rustc/cargo 1.89.0-nightly, clippy 0.1.88);
 Baseline A failure text recorded for both; `baseline/clippy.json` exists for
 both with per-category and per-file counts pasted in the phase log and
 written to `program.yaml` baselines; H-L10 answer recorded verbatim; `git grep

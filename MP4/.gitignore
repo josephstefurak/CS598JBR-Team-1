@@ -1,0 +1,3 @@
+translations/*/target/
+**/__pycache__/
+results/*.tmp

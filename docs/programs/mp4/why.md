@@ -14,7 +14,7 @@ Source of truth for grading: the MP4 handout, 430 points, due 2026-11-18
 
 | Key | Task | Pts | Requirement (condensed from handout) | How a reviewer verifies it from the repo | Owner-blocked |
 |---|---|---|---|---|---|
-| R-T1-README | 1 | 15 | README.md covers: framework + version, model + provider, inference settings, OS/runtime, tools available to the agent, dependency install steps, how to run, stopping condition, usage limits that affected the experiment | `test -f MP4/README.md`; one heading per item; framework version equals `claude --version`; model equals `configs/pipeline.yaml`; "how to run" command exists in `MP4/src/` | no |
+| R-T1-README | 1 | 15 | README.md covers: framework + version, model + provider (or local runtime), inference settings, OS/runtime, external tools available to the agent, dependency install steps, how to run, stopping condition, usage limits that affected the experiment | `test -f MP4/README.md`; one heading per item; framework version equals `claude --version`; model equals `configs/pipeline.yaml`; "how to run" command exists in `MP4/src/` | no |
 | R-T1-CONFIGS | 1 | 15 | Configuration files under `configs/` (agent/model config, prompts, settings); never commit credentials | `ls MP4/configs/` non-empty; `grep -rn 'configs/' MP4/src/` proves src loads them; `git grep -nE 'sk-ant-\|api_key=' -- MP4/` empty | no |
 | R-T1-TOOLLIST | 1 | 10 | A clear list of models, frameworks and tools used | README table; every tool name in it appears in trajectories (`grep -oh '"name":"[A-Za-z]*"' MP4/trajectories/project_*/run_*/iter_*/agent.stream.jsonl \| sort -u`) and vice versa | no |
 | R-T2-SRC | 2 | 45 | Iterative agentic workflow in `src/`: inspect C, generate Rust, build, test, observe feedback, repair, repeat; reusable across both projects; no hard-coded C function implementations; clear stopping condition | Read `run_pipeline.py`: outer loop, stop conditions, cargo +nightly-2025-05-13 invocations, feedback written into next prompt; `--project` parameter; `grep -niE 'satc_\|psbt_' MP4/src/*` hits only path/context plumbing | no |
@@ -23,7 +23,7 @@ Source of truth for grading: the MP4 handout, 430 points, due 2026-11-18
 | R-T2-REPRO | 2 | 20 | A command or script that reproduces the pipeline on an assigned project | README "how to run" is copy-pasteable; `--dry-run` and `--check-only` exit 0 from a fresh clone | no |
 | R-T3-P1-COMPILE | 3 | 15 | satc builds with nightly-2025-05-13 and matches the required interface and test harness | `cargo +nightly-2025-05-13 build --all-targets --locked` in `MP4/translations/project_1` exits 0; `check_interface.py` reports 0 missing/changed; test file byte-identical to `subjects/` | no |
 | R-T3-P1-CORRECT | 3 | 40 | 40 x (tests passed / total); hidden tests possible; hard-coded outputs = 0 | `cargo +nightly-2025-05-13 test` output; hard-coding scan; behavioural spot checks vs C (M8) | no |
-| R-T3-P1-SAFETY | 3 | 25 | Unsafe lines, calls, casts, pointer arithmetic all 0 (course unsafe-metrics tool); FFI = 0 pts | proxy now: `#![forbid(unsafe_code)]` present + `-D unsafe_code` build + regex counts (`safety_check.py --tool proxy`); official: `--tool course` (M12) | **yes** (official numbers) |
+| R-T3-P1-SAFETY | 3 | 25 | Unsafe lines, calls, casts, pointer arithmetic all 0 (course unsafe-metrics tool); FFI = 0 pts; measured on generated Rust only (dependencies, std and benchmark infrastructure excluded) | proxy now: `#![forbid(unsafe_code)]` present + `-D unsafe_code` build + regex counts (`safety_check.py --tool proxy`); official: `--tool course` (M12) | **yes** (official numbers) |
 | R-T3-P1-IDIOM | 3 | 20 | Clippy correctness/style/complexity/perf each targeting 0 (sum 0-10 = 20 pts) plus structural inspection | the exact rubric clippy command; per-category counts attributed agent vs harness; structural checklist (M8) | no |
 | R-T3-P2-COMPILE | 3 | 15 | same as P1 for libpsbt | same in `MP4/translations/project_2` | no |
 | R-T3-P2-CORRECT | 3 | 40 | same as P1 for libpsbt | same; note H-L1 (defective test) ceiling 3/4 | no |
@@ -39,8 +39,14 @@ Source of truth for grading: the MP4 handout, 430 points, due 2026-11-18
 Total: 40 + 120 + 200 + 70 = 430.
 
 Per-project Task 3 split: compile 15, correctness 40, safety 25, idiom 20.
+Compile bands: fully compiles and matches interface 15; compiles with minor
+integration/interface problems 10; substantial implementation that does not
+build 5; little or no compilable Rust 0. Correctness = 40 x passed/total,
+"may be rounded to the nearest whole point".
 Safety bands: all zero 25; 1-10 findings 18; 11-20 findings 10; >20 findings 4;
 FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
+(Handout text for the last idiom band literally reads "more than 22", which
+overlaps the 21-30 band; read as a typo for >30. Verified M1, 2026-10-28.)
 
 ## Z — Zero-credit traps (verbatim or near-verbatim from the handout)
 
@@ -56,7 +62,7 @@ FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
 | Z8 | A single "translate this project" prompt saved to disk does not satisfy Task 2 | loop with >= 2 iterations recorded; feedback text in every repair prompt |
 | Z9 | Supplying project-specific context is allowed; hard-coding individual C function implementations is not | selftest asserts no Rust fn bodies for interface items in configs/ or src/ |
 | Z10 | Never commit API keys, tokens, passwords or credentials; remove secrets from trajectories | `scrub_secrets.py --check` on write, before commit, in the floor; `git log -p` scan before the owner pushes |
-| Z11 | Do not rename or remove the required directories; minor additions allowed | M1 creates exact names; M13 validator |
+| Z11 | Do not rename or remove the required directories; minor additions allowed | M1 creates exact names; M13 validator (handout: it "checks the required directories, project names, configuration files, trajectories, and translations") |
 | Z12 | A submission without configuration and trajectories demonstrating the agentic workflow may lose Task 2 points even if the code is correct | R-T2-* rows |
 | Z13 | If the project does not compile sufficiently to run tests, correctness may be zero | build is the first stop-condition term |
 | Z14 | Academic integrity: no copying other teams' or existing Rust translations, no exchanging implementations, no hard-coded outputs, no modified tests, no undocumented manual repair | agent B has no network tools; provenance; CHANGELOG |
@@ -67,7 +73,7 @@ FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
 
 ### Shared
 - H-S1 Skeleton layout trap: `src/lib.rs` declares `pub mod <name>;` which resolves to `src/<name>.rs`; the spec files live in `src/interfaces/<name>.rs` and are never compiled. The skeleton does not build as shipped (E0583). The agent must create `src/<mod>.rs` reproducing every pub item.
-- H-S2 `cargo clippy --all-targets` compiles `src/bin/*.rs` as a bin and as a test harness; the immutable test files emit warnings the agent cannot fix. The pipeline must baseline them (M1) and attribute agent vs harness per category.
+- H-S2 `cargo clippy --all-targets` compiles `src/bin/*.rs` as a bin and as a test harness; the immutable test files emit warnings the agent cannot fix. The pipeline must baseline them (M1) and attribute agent vs harness per category. M1 measured (unique sites, `trajectories/project_N/baseline/README.md`): satc harness = 0 in all four clippy categories (only rustc `dead_code` + `unused_imports`); libpsbt harness = style 2 (`single_match`, `uninlined_format_args`), others 0, plus 8 rustc warnings.
 - H-S3 `cargo test` on a bin target: tests live in `src/bin/<name>.rs` with `fn main() {}`; `use <crate>::<mod>` imports.
 - H-S4 Both interfaces are complete with respect to the tests but omit private C helpers; the agent must add private helpers and may add extra pub fns (minor additions).
 - H-S5 Exact-value assertions: satc compares f64 with `assert_eq!`; libpsbt compares hex strings and lengths. Operation order must match the C.
@@ -78,7 +84,7 @@ FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
 - H-A3 Point functions are value-returning (`-> [f64;2]`) where the C mutates in place; `satc_point_copy(p, q)` has a dead first parameter.
 - H-A4 `calc_points`, `edges`, `normals` must be recomputed on construction and `set_points` exactly like `_satc_polygon_recalc`; `satc_test_polygon_polygon` uses raw `points` + `pos` and `normals`, not `calc_points`.
 - H-A5 `satc_point_in_polygon` builds a 1e-6 box polygon and returns `response.a_in_b`.
-- H-A6 C bugs not test-exercised: `satc_point_rotate` sign, `satc_polygon_translate` sets instead of adds, `satc_polygon_get_aabb` reads uninitialised `pos` (UB). See D-FAITHFUL.
+- H-A6 C bugs not test-exercised: `satc_point_rotate` sign, `satc_polygon_translate` sets instead of adds, `satc_polygon_get_aabb` reads uninitialised `pos` (UB) and initialises `y_max = x_max` instead of `y_min` (added M1). See D-FAITHFUL.
 - H-A7 Edition 2024: `gen` reserved; nothing else relevant unless the agent reaches for statics.
 - H-A8 Clippy temptations: `needless_range_loop`, `clone_on_copy`, `needless_return`, `needless_late_init`, `assign_op_pattern`, `vec_init_then_push`, `collapsible_else_if`, `unnecessary_cast`, `ptr_arg`, `uninlined_format_args`.
 
@@ -88,11 +94,11 @@ FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
 - H-L3 Misleading stub comments the agent must ignore: "uses the hex crate" (not a dependency; Cargo.toml immutable), "only Hex is implemented for simplicity" (C implements hex, base64, base62; protobuf NotImplemented), "simulate reading by calling the callback twice", "for simulation purposes we keep a list of records".
 - H-L4 Underscore-prefixed stub params (`_src_size`, `_psbt_len`, `_tx_size`, `_data`) are semantically required: tests pass 2048-byte buffers with a real length of 889.
 - H-L5 Callbacks are non-capturing `fn` pointers with `&mut dyn Any` user data; `psbt_read` must count inputs/outputs from the unsigned tx and forward every txelem to the user handler like C `tx_counter`. Clean design: a private generic `FnMut` parser wrapped by the fn-pointer API. Unguided agents reach for raw pointers or `Box<dyn Any>` smuggling.
-- H-L6 Global mutable `psbt_errmsg` written from ~25 sites; interface stubs `psbt_geterr` to a const. Safe options: `thread_local!` or `Mutex<&'static str>`; never `static mut`.
+- H-L6 Global mutable `psbt_errmsg` written from 29 assignment sites (`grep -n 'psbt_errmsg *=' c/*.c`, M1); interface stubs `psbt_geterr` to a const. Safe options: `thread_local!` or `Mutex<&'static str>`; never `static mut`.
 - H-L7 Byte-cursor state machine (`write_pos` pointer used for reading and writing, `ASSERT_SPACE`, unchecked reads) → usize index with checked slicing; return `ReadError`, never panic.
 - H-L8 Pre-implemented interface bodies the agent inherits: `Psbt::new`, `psbt_size = data.len()`, `psbt_geterr`, `Display for PsbtResult` (`write!(f, "{:?}", self)` trips `uninlined_format_args`).
 - H-L9 Enums derive only `Debug, PartialEq, Eq` (PsbtScope also Clone); `psbt_state_tostr(state: PsbtState)` takes by value → add derives or match-and-reconstruct.
-- H-L10 `src/bin/test.rs` is both the declared `[[test]] name = "test"` and an auto-discovered bin named `test`; M1 verifies it builds under `cargo test` (possible clash with the injected `extern crate test`). Benchmark infrastructure: document, never rename.
+- H-L10 `src/bin/test.rs` is both the declared `[[test]] name = "test"` and an auto-discovered bin named `test`; Benchmark infrastructure: document, never rename. **M1 answer**: it builds (no `extern crate test` clash), and `cargo test` compiles the same 4 tests into TWO executables (`unittests src/bin/test.rs` and `src/bin/test.rs`); without `--no-fail-fast` the second is skipped once the first fails. Counting must use distinct test names (4), not `test result:` lines (up to 8). Verbatim in `trajectories/project_2/baseline/README.md`.
 - H-L11 Harness noise in `test.rs`: `single_match`, `uninlined_format_args`, `unused_assignments`, dead consts in the bin build.
 - H-L12 C bugs not test-exercised: `compactsize_write` overwrites the 253/254/255 marker for sizes >= 253; `base62_encode` indexes a 62-entry table with 0..63 (UB → Rust index panic); segwit witness branch is dead (`flag` never set). See D-FAITHFUL.
 - H-L13 Encoding exactness: hex is lowercase with trailing NUL, `out_len = 2*len + 1`; `psbt_decode` detects base64 by prefix `cHNid`; C base64 decoder is lenient — hand-translate rather than use the `base64` crate's strict engine.
@@ -114,12 +120,12 @@ FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
 ## E — Environment facts (2026-10-28)
 
 - E1 macOS Darwin 25.5.0, Apple Silicon, 10 cores, 32 GB; Xcode CLT present (`/usr/bin/cc`).
-- E2 rustup, cargo, rustc ABSENT. M1 installs `rustup` then `rustup toolchain install nightly-2025-05-13 --profile minimal --component clippy`. `~/.cargo/bin` must be on PATH for headless children.
+- E2 rustup, cargo, rustc ABSENT before M1 (installed by M1 on 2026-10-28 with owner approval; versions in `MP4/docs/environment.md`). M1 installs `rustup` then `rustup toolchain install nightly-2025-05-13 --profile minimal --component clippy`. `~/.cargo/bin` must be on PATH for headless children.
 - E3 Python 3.9.12 (no `match`, no `X | Y` unions); PyYAML 6.0 installed. `python3 -I` drops the script dir from `sys.path`; entry points insert their own dir.
 - E4 Claude Code 2.1.235 at `~/.local/bin/claude`, authenticated via claude.ai Max subscription. No `ANTHROPIC_API_KEY`.
 - E5 Repo `main` at `ffcb972`, remote `origin` = github.com/josephstefurak/CS598JBR-Team-1. No `docs/`, no `CLAUDE.md`, no `.claude/` before this program.
 - E6 CRUST-bench: https://github.com/anirudhkhatry/CRUST-bench, `datasets/CRUST_bench.zip` (45 MB) → `CBench/{satc,libpsbt}`, `RBench/{satc,libpsbt}`; strip embedded `.git/` and `.DS_Store`.
-- E7 nightly-2025-05-13 ≈ 1.88.0-nightly; edition 2024 (satc) and Cargo.lock v4 are supported; `uninlined_format_args` is in the style group on this clippy.
+- E7 nightly-2025-05-13 = `rustc 1.89.0-nightly (8405332bd 2025-05-12)`, `cargo 1.89.0-nightly (056f5f4f3 2025-05-09)`, `clippy 0.1.88` (corrected M1; was "≈ 1.88.0-nightly"); edition 2024 (satc) and Cargo.lock v4 are supported; `uninlined_format_args` is in the style group on this clippy.
 
 ## D — Ratified decisions (owner, 2026-10-28; see also the plan file)
 

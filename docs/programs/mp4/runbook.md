@@ -19,19 +19,26 @@ One phase per session. Answer the gates it asks. Never push.
 
 ## Stage 1 — before or during M1
 
-**O2 — toolchain install.** The M1 session will show these exact commands and
-ask for a yes. You may also run them yourself beforehand:
+**O2 — toolchain install. DONE 2026-10-28 (M1 session, owner yes in
+session).** Installed to `~/.rustup` / `~/.cargo`; versions in
+`MP4/docs/environment.md`. Commands as run (installer saved to a file, not
+piped):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --profile minimal
-```
-
-```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
+sh rustup-init.sh -y --no-modify-path --profile minimal --default-toolchain none
 ~/.cargo/bin/rustup toolchain install nightly-2025-05-13 --profile minimal --component clippy
 ```
 
-Make sure `~/.cargo/bin` is on PATH in the shell that launches Claude Code
-(headless agent B children inherit it).
+**Still yours:** `--no-modify-path` means no shell profile was changed. Put
+`~/.cargo/bin` on PATH in the shell that launches Claude Code (headless agent B
+children inherit it), e.g. add to `~/.zshrc`:
+
+```bash
+export PATH="$HOME/.cargo/bin:$PATH"
+```
+
+To remove the toolchain entirely later: `~/.cargo/bin/rustup self uninstall`.
 
 **O1 — course forum post (DEFERRED, owner's call).** As of 2026-10-28 MP3 has
 not reached its due date and MP4 is not formally open, so Joseph is holding
