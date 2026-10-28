@@ -52,7 +52,7 @@ the specific conflict rather than picking an alternative.*
 
 | ID | Phase | Status | Session / commit | Notes |
 |---|---|---|---|---|
-| M1 | MP4 layout, subjects, toolchain, baselines | **not-started** | — | — |
+| M1 | MP4 layout, subjects, toolchain, baselines | **done** | 2026-10-28 — 0122f84 | 9/9 paths; checksums 13/13 + 28/28 OK; nightly = rustc 1.89.0-nightly 2025-05-12; Baseline A E0583 x1 (satc) / x5 (libpsbt); Baseline B 0/4 + 0/4 tests; harness clippy satc 0/0/0/0, libpsbt style 2; H-L10 answered; 10 why.md corrections |
 | M2 | Checks library, integrity guards, self-test | **not-started** | — | — |
 | M3 | Configs, prompts, agent runner, smoke run | **not-started** | — | — |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **not-started** | — | — |
@@ -77,6 +77,150 @@ the specific conflict rather than picking an alternative.*
 
 *One entry per completed phase, appended in the phase's final commit.*
 
+### M1 — MP4 layout, subjects, toolchain, baselines (2026-10-28, 0122f84)
+
+**Shipped** (product terms): The graded `MP4/` tree now exists with the
+required directory names. Both assigned C projects and their CRUST-bench Rust
+skeletons are committed under `MP4/subjects/`, pinned to a recorded archive
+hash and checked file by file. The grading toolchain is installed on the
+pipeline machine and its exact versions are recorded. Before any pipeline
+code exists, we have a measured record of what the untouched skeletons do:
+they don't build, the stubs fail all tests, and these are the clippy warnings
+that come from immutable test files and that no translation can remove.
+
+**Deviations from spec**:
+- Toolchain step 2 used `--default-toolchain none`, which the spec does not
+  mention, so that no unrequested stable toolchain was downloaded. rustup
+  still made `nightly-2025-05-13` the default because it was the only one
+  installed. Harmless, because every call is `+nightly-2025-05-13`. Recorded
+  in `MP4/docs/environment.md`.
+- The installer was saved to a file and then run, not piped to `sh` as the
+  runbook had it. Runbook updated to the commands actually run.
+- The archive was fetched from a commit-pinned URL
+  (`.../raw/4b4702544b80.../datasets/CRUST_bench.zip`), not `main`, so it
+  can be reproduced. Recorded in `SOURCE.md`.
+- Added `baseline/baseline_A_build.log` and, for libpsbt,
+  `baseline/test_no_fail_fast.log`. Neither is in the spec's file list, but
+  both are the verbatim evidence for the Baseline A and H-L10 answers.
+- `MP4/trajectories/project_N/` holds `baseline/`, so no `.gitkeep` there.
+  `.gitkeep` is used in `src/`, `configs/` and `translations/project_N/`.
+- Ledger hash: this row records the deliverables commit `0122f84`. The
+  ledger/log update is the commit right after it, because a commit cannot
+  contain its own hash.
+- Spec wording "eleven required section headings from R-T1-README + tool
+  list + layout" was read as the nine R-T1-README items plus tool list plus
+  layout, which makes eleven. what.md was reworded to say so.
+
+**Owner gates**: Asked: "M1 owner gate (O2): may this session install
+rustup and nightly-2025-05-13 now? … [three exact commands shown] …
+roughly 500 MB." Answer: "Yes, install now". After the install, the owner
+asked "is the download safe?". The session answered with the installer
+sha256 (`9502b514…ccafc0`), its download root (`static.rust-lang.org`), and
+confirmation that no shell profile was modified. The owner replied "okay
+sounds good continue with M1".
+
+**Verification** (real output):
+- `ls -d` of the 9 required paths: all 9 printed.
+- `shasum -a 256 -c CHECKSUMS.sha256`: project_1 13 `OK`, project_2 28
+  `OK`. `diff -rq` of the extracted archive dirs against `subjects/`: no
+  differences.
+- `cargo +nightly-2025-05-13 --version` → `cargo 1.89.0-nightly (056f5f4f3
+  2025-05-09)`. `rustc` → `1.89.0-nightly (8405332bd 2025-05-12)`. `clippy`
+  → `0.1.88 (8405332bdf 2025-05-12)`.
+- Baseline A: satc `error[E0583]: file not found for module satc`, exit
+  101. libpsbt: 5 × E0583 (`base64`, `cli`, `compactsize`, `psbt`, `tx`),
+  exit 101. `cargo fetch --locked` (libpsbt): exit 0.
+- Baseline B: build exit 0 for both. `cargo test`: satc `0 passed; 4
+  failed`, libpsbt `0 passed; 4 failed`, all `not implemented`. Rubric
+  clippy exit 0 for both. `clippy.json` exists for both.
+- Clippy, unique sites (harness / interface-induced):
+
+  | | correctness | style | complexity | perf | rustc |
+  |---|---|---|---|---|---|
+  | satc | 0 / 0 | 0 / 2 | 0 / 1 | 0 / 0 | 2 / 40 |
+  | libpsbt | 0 / 0 | 2 / 1 | 0 / 0 | 0 / 0 | 8 / 32 |
+
+  Per file: satc `src/satc.rs` 150 raw diagnostics, `src/bin/satc_test.rs`
+  2. libpsbt `src/psbt.rs` 76, `src/bin/test.rs` 16, `src/cli.rs` 2. Raw
+  counts include cross-target duplicates. Written to `program.yaml`
+  baselines.
+- H-L10, verbatim: `found to be present in multiple build targets: * bin
+  target test * integration-test target test`. The bin builds. `cargo test
+  --no-run` lists `unittests src/bin/test.rs` and `src/bin/test.rs` as two
+  executables, and with `--no-fail-fast` each reports `0 passed; 4 failed`.
+- `git grep --cached -nE 'sk-ant-|Bearer |api_key=' -- MP4/`: no output.
+  The same grep over `docs/` matches only lines that quote the pattern
+  itself (see discoveries). `git grep -nE 'claude-501|/Users/josephstefurak'
+  -- MP4/`: no output.
+- Floor items for M2+ (`py_compile`, selftest, scrub, `run_pipeline`,
+  provenance) do not exist yet. Not run.
+- Harness counts: no harness exists yet (M2). Delta n/a.
+- Docs-claims check: grepped `1\.88|~25|eleven|E0583|extern crate test`
+  over `docs/ CLAUDE.md MP4 .claude`. Fixed 2 stale lines in what.md (M1
+  version line, "eleven" wording) and the runbook O2 block. why.md had
+  already been corrected in step 6.
+- why.md corrections against the handout and the subjects (10): R-T1-README
+  now says "external tools" and "or local runtime". R-T3-SAFETY records
+  that it measures generated code only. Added the compile bands and the
+  correctness rounding note. Idiom last band: the handout literally says
+  "more than 22", recorded as a typo for >30. Z11 now quotes what the
+  validator checks. H-S2 has the measured harness numbers. H-A6 gains
+  `get_aabb` `y_max = x_max`. H-L6 corrected from "~25" to 29 assignment
+  sites. H-L10 answered. E2 and E7 updated (E7 was "≈ 1.88.0-nightly").
+  Checked against the handout with nothing to fix: the deliverable point
+  values (430 = 40 + 120 + 200 + 70), the safety bands, Z1–Z16 wording, the
+  Group 1 assignment, the deadline, and the Task 4 table columns. Spot-checked
+  in the subjects and confirmed: H-S1, H-A2, H-A3 (`satc_point_copy`), H-A5
+  (0.000001 box), H-A6, H-L1 (`let mut step = 0;` inside `checker`), H-L2,
+  H-L3 (all four comments), H-L4 (2048 buffers; PSBT_HEX = 1778 chars = 889
+  bytes), H-L8, H-L9, H-L13 (`cHNid`), H-L14.
+
+**NOT demonstrated**:
+- H-L1's claim that the test vector contains record types 1, 2, 4, 5 and 6
+  was not checked by decoding the PSBT. Only the defective `step` variable
+  was confirmed.
+- H-A4, H-A7, H-A8, H-L5, H-L7, H-L11's "dead consts" wording, H-L12 and
+  H-L15 were not re-read against the C.
+- The lint-to-category mapping comes from this clippy's group flags
+  (`-A clippy::all -W clippy::<group>`). Whether the course counts
+  categories the same way is unknown.
+- Whether the PATH requirement holds for headless `claude -p` children is
+  untested until M3.
+- The ~500 MB size estimate was not measured.
+- Nothing here shows the subjects are what the course grader uses beyond
+  matching the public CRUST-bench archive.
+
+**Discoveries logged for later rows**:
+- (M2 checks library) libpsbt test counting must dedupe by test name: the 4
+  tests run in up to 2 executables, and fail-fast hides the second. Count
+  totals from distinct names, and run with `--no-fail-fast` so per-test
+  results are complete.
+- (M2/M5) The floor item `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/
+  docs/` can never print nothing, because what.md, why.md and program.yaml
+  quote the pattern. Candidate fix: scope it to `MP4/`, or exclude
+  `docs/programs/`. Not changed here because the manifest's floor is static
+  config outside this row.
+- (M3 prompts / D-FAITHFUL) A fourth satc C bug, not exercised by tests:
+  `satc_polygon_get_aabb` sets `y_max = x_max`. Added to H-A6. It needs a
+  ruling with the others.
+- (M2 attribution) The interface's own `use std::f64::MAX;` and `use
+  std::f64::consts::PI;` produce `unused_imports` and
+  `legacy_numeric_constants` in `src/satc.rs`. The file is agent-written, so
+  these count as agent-attributable, not harness.
+- `MP4/docs/` already held a `CS598JBR_Report_Team_1.pdf` (gitignored)
+  before this session. O5 expects that file to be produced after M10.
+  Left untouched. The owner may want to confirm whether it is a template
+  or a stale export.
+
+**Queued for owner**:
+- O2 cleared (installed). Remaining owner step: add `export
+  PATH="$HOME/.cargo/bin:$PATH"` to the shell that launches Claude Code
+  (runbook Stage 1) before M3.
+- **O1 still deferred.** The course-forum post on `read_test_vector`
+  (H-L1) and the tool/validator release dates has not been made. D8 remains
+  the working assumption. It must be resolved or consciously accepted before
+  submission.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -86,7 +230,7 @@ the specific conflict rather than picking an alternative.*
 | # | Item | Why it exists | Blocks | Status |
 |---|---|---|---|---|
 | O1 | Post the `read_test_vector` defect (why.md H-L1) on the course forum, together with the question of when/where the unsafe-metrics tool and validation script will be released. Draft ready at `docs/programs/mp4/forum-post-draft.md` | D8; a staff ruling may lift the 3/4 ceiling; O3/O4 depend on the release | nothing in M1-M11 (ruling is injected whenever it arrives) | **deferred by owner 2026-10-28**: MP3 has not reached its due date, so MP4 is not formally open; Joseph will check for news and post once MP4 opens. Every session must treat D8 as the working assumption and must flag this item in its report until it is resolved. **Must be resolved or consciously accepted before submission.** |
-| O2 | Approve the rustup + nightly-2025-05-13 install in the M1 session (commands shown first) | E2; invariant 4 | M1 | open |
+| O2 | Approve the rustup + nightly-2025-05-13 install in the M1 session (commands shown first) | E2; invariant 4 | M1 | **done 2026-10-28** (approved in the M1 session; installed). Follow-on: owner puts `~/.cargo/bin` on PATH for the shell that launches Claude Code before M3 (runbook Stage 1) |
 | O3 | Supply the course unsafe-metrics tool at the path the runbook names, then flip M12 to not-started | R-T3-*-SAFETY official numbers, R-T4-SAFETY-ANALYSIS | M12 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
 | O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | open |
