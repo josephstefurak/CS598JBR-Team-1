@@ -45,15 +45,15 @@ verification_floor:               # run every phase, in addition to the phase's 
   - git status --short                                     # must be clean after the phase commit
 
 baselines:                        # recorded by the phase that creates each harness
-  selftest_pass_count: null       # M2 records
+  selftest_pass_count: 54         # M2 2026-10-28: `python3 -I MP4/src/selftest.py` -> 54 PASS, 0 FAIL
   selftest_drills: null           # M4 records (A-H)
   # M1 Baseline B, 2026-10-28: unique (lint, file, line) sites with primary span
   # under src/bin/, from the rubric clippy run. rustc = non-clippy warnings.
   # Evidence: MP4/trajectories/project_N/baseline/README.md + clippy.json.
   satc_skeleton_clippy_harness_warnings: {correctness: 0, style: 0, complexity: 0, perf: 0, rustc: 2}
   libpsbt_skeleton_clippy_harness_warnings: {correctness: 0, style: 2, complexity: 0, perf: 0, rustc: 8}   # style: single_match, uninlined_format_args
-  satc_interface_pub_items: null                  # M2 records (expected ~45)
-  libpsbt_interface_pub_items: null               # M2 records (expected ~50)
+  satc_interface_pub_items: 45                    # M2 check_interface.py (pub fn + impl pub fn + struct/enum/const/static/type/trait impl)
+  libpsbt_interface_pub_items: 52                 # M2: base64 3, cli 0, compactsize 4, psbt 38, tx 7
 
 standing_priorities:
   - The generated Rust under MP4/translations/ is never edited by a human or by an agent-A session. Only prompts and orchestration change, every change logged in MP4/configs/CHANGELOG.md, then the pipeline reruns.
