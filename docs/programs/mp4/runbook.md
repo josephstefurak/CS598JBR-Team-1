@@ -33,16 +33,17 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-mod
 Make sure `~/.cargo/bin` is on PATH in the shell that launches Claude Code
 (headless agent B children inherit it).
 
-**O1 — course forum post.** Post the `read_test_vector` defect (see
-`why.md` H-L1) and ask how libpsbt correctness will be graded. Suggested text:
-
-> In the CRUST-bench `libpsbt` Rust tests, `read_test_vector`'s checker
-> declares `let mut step = 0;` inside the callback, so it resets on every call
-> and asserts `record_type == 0` for every record. The PSBT vector contains
-> record types 1, 2, 4, 5 and 6, so a faithful parser fails this test. Since
-> tests may not be modified, how will this test be graded?
-
-Relay any ruling to a session; it goes into `MP4/configs/projects/project_2.yaml`.
+**O1 — course forum post (DEFERRED, owner's call).** As of 2026-10-28 MP3 has
+not reached its due date and MP4 is not formally open, so Joseph is holding
+this post to be fair to the TAs. The full draft is ready at
+`docs/programs/mp4/forum-post-draft.md`; it covers the `read_test_vector`
+defect (`why.md` H-L1) and asks when and where the unsafe-metrics tool and
+validation script will be released. When MP4 opens, check the course page for
+news first; if nothing has been posted, paste the draft. Relay any ruling to a
+session; it goes into `MP4/configs/projects/project_2.yaml`. Until then every
+session works under D8 (known-failing, 3/4 ceiling) and flags O1 as
+unresolved in its report. **This must be resolved or consciously accepted
+before submission.**
 
 ## Stage 2 — during M3, M6, M7, M9 (runs that spend quota)
 

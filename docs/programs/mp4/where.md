@@ -85,10 +85,10 @@ the specific conflict rather than picking an alternative.*
 
 | # | Item | Why it exists | Blocks | Status |
 |---|---|---|---|---|
-| O1 | Post the `read_test_vector` defect (why.md H-L1) on the course forum and ask how libpsbt correctness will be graded | D8; a staff ruling may lift the 3/4 ceiling | nothing (ruling is injected whenever it arrives) | open |
+| O1 | Post the `read_test_vector` defect (why.md H-L1) on the course forum, together with the question of when/where the unsafe-metrics tool and validation script will be released. Draft ready at `docs/programs/mp4/forum-post-draft.md` | D8; a staff ruling may lift the 3/4 ceiling; O3/O4 depend on the release | nothing in M1-M11 (ruling is injected whenever it arrives) | **deferred by owner 2026-10-28**: MP3 has not reached its due date, so MP4 is not formally open; Joseph will check for news and post once MP4 opens. Every session must treat D8 as the working assumption and must flag this item in its report until it is resolved. **Must be resolved or consciously accepted before submission.** |
 | O2 | Approve the rustup + nightly-2025-05-13 install in the M1 session (commands shown first) | E2; invariant 4 | M1 | open |
-| O3 | Supply the course unsafe-metrics tool at the path the runbook names, then flip M12 to not-started | R-T3-*-SAFETY official numbers, R-T4-SAFETY-ANALYSIS | M12 | open (cut-off 2026-11-15) |
-| O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off 2026-11-15) |
+| O3 | Supply the course unsafe-metrics tool at the path the runbook names, then flip M12 to not-started | R-T3-*-SAFETY official numbers, R-T4-SAFETY-ANALYSIS | M12 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
+| O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | open |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
 | O7 | After the program reports ready-to-merge: merge `mp4-program` into `main` with a merge commit and push `main` before 2026-11-18 23:59 | invariant 6/7 | submission | open |
