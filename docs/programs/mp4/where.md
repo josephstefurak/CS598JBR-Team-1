@@ -53,7 +53,7 @@ the specific conflict rather than picking an alternative.*
 | ID | Phase | Status | Session / commit | Notes |
 |---|---|---|---|---|
 | M1 | MP4 layout, subjects, toolchain, baselines | **done** | 2026-10-28 — 0122f84 | 9/9 paths; checksums 13/13 + 28/28 OK; nightly = rustc 1.89.0-nightly 2025-05-12; Baseline A E0583 x1 (satc) / x5 (libpsbt); Baseline B 0/4 + 0/4 tests; harness clippy satc 0/0/0/0, libpsbt style 2; H-L10 answered; 10 why.md corrections |
-| M2 | Checks library, integrity guards, self-test | **not-started** | — | — |
+| M2 | Checks library, integrity guards, self-test | **done** | 2026-10-28 — a8994d9 | selftest 54 PASS / 0 FAIL (baseline null → 54); interface items satc 45, libpsbt 52; check-only on pristine satc: build.ok false, E0583, missing 45; course tool exit 2; check-only on M1 Baseline B copies reproduces M1 clippy split (libpsbt harness style 2) and 4 tests after dedupe |
 | M3 | Configs, prompts, agent runner, smoke run | **not-started** | — | — |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **not-started** | — | — |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **not-started** | — | — |
@@ -220,6 +220,142 @@ sounds good continue with M1".
   (H-L1) and the tool/validator release dates has not been made. D8 remains
   the working assumption. It must be resolved or consciously accepted before
   submission.
+
+### M2 — Checks library, integrity guards, self-test (2026-10-28, a8994d9)
+
+**Shipped** (product terms): The pipeline can now judge a translation
+without calling a model. For any crate it reports whether it builds, which
+tests pass and why the others fail, the rubric clippy log, and per-category
+clippy counts that separate the agent's warnings from the test file's. It
+also reports proxy unsafe metrics, whether the required interface is
+intact, and whether anyone touched the tests or interfaces (and puts them
+back). It catches test strings copied into library code and finds secrets
+before commit. `run_pipeline.py --check-only` packages all of this into one
+`check.json`. A self-test proves every check against a fixture crate with
+known planted problems.
+
+**Deviations from spec**:
+- Added `mp4common.py` (paths, defaults marked
+  `TODO-move-to-pipeline.yaml`, cargo runner) and `rustlex.py` (strips
+  comments and literal contents for the regex scans). Both are shared by
+  the specified modules. No other new entry points.
+- `run_pipeline.py --check-only` also takes `--crate-dir` and `--out`. The
+  spec's verification runs check-only "on the pristine skeleton", but
+  `MP4/translations/project_1/` is empty and cargo must not run inside
+  `subjects/`. So check-only always measures a temp copy (it never touches
+  the crate or its mtimes), and the verification run wrote to the
+  scratchpad, not `MP4/results/`. With no crate, the default exits 2 with
+  "no crate at MP4/translations/project_1 (no translation yet? pass
+  --crate-dir)".
+- `integrity.py` gained `--scan` (hard-coding + FFI from the CLI) beside
+  the four specified modes.
+- `src/lib.rs` is not in the immutable set. Integrity requires it to equal
+  `#![forbid(unsafe_code)]` + the skeleton's lib.rs, per D-FORBID, and
+  restores it otherwise.
+- `cargo test` runs with `--no-fail-fast` so libpsbt's second test
+  executable is not skipped (M1 discovery). Totals count distinct test
+  names.
+- The fixture's perf lint is `clippy::boxed_local`, because clippy reports
+  `Box<Vec<i32>>` as a parameter that way, not as `box_collection`.
+- The interface checker drops parameter names, reduces paths to their last
+  segment, and resolves `Self`. Renaming `_src_size` to `src_size` (H-L4)
+  or writing `Write` for `std::io::Write` is therefore not a "change".
+- The self-test goes beyond the spec's assertion list. Extra assertions
+  cover harness attribution, test-name dedupe, comment/string immunity,
+  added-file detection, lib.rs header, workspace drift, provenance, a
+  changed-signature check, and home-path scrubbing.
+- Owner chose "Do it here" for M2 in the same session that ran M1. The
+  program's one-phase-per-session invariant was waived by the owner for
+  this session only.
+
+**Owner gates**: none for this row. Before the phase, the owner was offered
+a new session and answered "Do it here".
+
+**Verification** (real output):
+- `python3 -I -m py_compile MP4/src/*.py` → exit 0.
+- `python3 -I MP4/src/selftest.py` → `selftest: 54 PASS, 0 FAIL`. Spec
+  counts all PASS: unsafe_lines 1 (>= 1), unsafe_casts 1,
+  pointer_arithmetic 1, clippy agent correctness/style/complexity/perf
+  1/1/1/1, tests 1/2, hard-coding hits 1, interface missing 1, integrity
+  violations detected 1 restored 1, scrub hits 1. Harness count:
+  selftest_pass_count null → 54 (+54).
+- `check_interface.py --project project_1` (pristine) → `interface items:
+  45  missing: 45  changed: 0  extra: 0`, exit 1. project_2 → `52 missing:
+  52`. On M1's Baseline B copies (interfaces copied in): 45/0/0 and 52/0/0,
+  exit 0.
+- `run_pipeline.py --help` → exit 0.
+- `run_pipeline.py --project project_1 --check-only --crate-dir
+  MP4/subjects/project_1/rust_skeleton --out <scratch>` → `"compiles":
+  false`, `"build_error_codes": ["E0583"]`, and `first_error` begins
+  `error[E0583]: file not found for module `satc``. `interface_missing`
+  45; `integrity_violations` 1 (lib_rs: no forbid header, reported, not
+  restored). `git status` shows nothing written under `MP4/subjects/`.
+- Cross-check against M1 baselines: check-only on Baseline B copies gives
+  libpsbt clippy agent style 1 / harness style 2, tests 0/4 (8 executions
+  deduped to 4 names). satc gives agent style 2 / complexity 1, harness 0.
+  Both match the M1 hand classification.
+- `safety_check.py --tool course --project project_1` → stderr `course
+  safety tool not configured (set safety.course_cmd in
+  MP4/configs/pipeline.yaml)`, exit 2.
+- `integrity.py --provenance project_1` → `no final run recorded
+  (MP4/trajectories/project_1/run_summary.json missing)`, exit 1. This is
+  expected before M6. Provenance logic is covered by the self-test.
+- `scrub_secrets.py --check MP4/` → `scrub_secrets: 0 hit(s)`, exit 0. The
+  first run found 1 hit (a home-path literal in selftest.py), fixed by
+  assembling the string.
+- `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/` → no output. Over
+  `docs/` it gives 8 self-referential lines (M1 discovery, unchanged).
+- Lint (no mypy installed): `pyflakes` exit 0. `flake8
+  --max-line-length 120` exit 0 after fixing 3 findings. `pylint
+  --disable=C,R` leaves 2× subprocess-run-check, which is intentional
+  because return codes are read, and the TODO marker.
+- Docs-claims check: grepped `~45|~50|box_collection|selftest_pass_count|
+  interface_pub_items` over `docs CLAUDE.md MP4`. Updated the 3
+  program.yaml baselines; no other stale lines.
+- Security: subprocesses are argv lists, never a shell. `--project` is
+  restricted to choices and `run_id` to a safe-name regex before it is
+  used in a path. `course_cmd` comes only from repo config and is split
+  with shlex, not passed to a shell. The scrubber never prints the
+  matched text. Secret patterns in code are assembled from pieces so the
+  repo grep stays empty. Rate limiting and CSRF do not apply (local CLI,
+  no network service).
+
+**NOT demonstrated**:
+- No check has run on a real translation. The regex safety counts, the
+  pointer-receiver heuristic and the interface normaliser have only seen
+  the fixture and the stub skeletons. They may over- or under-count on
+  agent code (generics, macros, `where` clauses, nested impls).
+- `unsafe_calls` is a proxy (call expressions inside unsafe regions) and
+  will differ from the course tool's definition.
+- The `-D unsafe_code` build was shown to fail on the fixture. A passing
+  case was not shown, because no forbid-clean crate exists yet.
+- The hard-coding scan catches literal reuse only, not numeric or
+  structural hard-coding (Z2's `if input == KNOWN` shape). The spec's
+  heuristic for that shape is not in M2.
+- `--all-snapshots` and `--check-workspace` from the CLI were not run on
+  real trajectories (none exist). The workspace and provenance logic is
+  only self-tested.
+- Timing: the self-test takes about 1–2 minutes and runs cargo several
+  times. Check-only on libpsbt rebuilds dependencies in a temp target
+  dir every call. Fine for now, but not measured under the pipeline's
+  45-minute wall clock.
+
+**Discoveries logged for later rows**:
+- (M3) `configs/pipeline.yaml` must carry the `TODO-move-to-pipeline.yaml`
+  defaults in `mp4common.py`: toolchain, clippy groups, rubric args,
+  forbid line, hard-coding minimum, cargo timeout, plus
+  `safety.course_cmd`.
+- (M4) The checks currently `touch src/lib.rs` in the crate they run on.
+  In the loop that crate is the workspace under `MP4/translations/`,
+  where that is allowed. check-only uses a copy.
+- (M5 review) The Z2 `if <expr> == <literal> { return` heuristic named in
+  why.md is not implemented. Only literal reuse is.
+- (M1 carry-over, still open) The floor's `git grep … -- MP4/ docs/` item
+  can never be empty.
+
+**Queued for owner**: nothing new. **O1 still deferred.** D8 remains the
+working assumption, and O1 must be resolved or consciously accepted before
+submission.
 
 ## Owner-action queue (only the owner can clear these)
 
