@@ -8,8 +8,9 @@ permissionMode as configured, model as configured. A mismatch kills the
 process and the iteration is aborted. The wall clock is enforced on the whole
 process group (SIGTERM, then SIGKILL).
 
-Outcomes: ok | max_turns | budget | usage_limit | overloaded | auth_error | error
-| timeout | isolation_violation.
+Outcomes: ok | max_turns | budget | usage_limit | overloaded | connection_error
+| auth_error | error | timeout | isolation_violation. The loop pauses on
+usage_limit, overloaded, connection_error and auth_error (owner gates G2, G7).
 """
 import json
 import os
@@ -34,6 +35,10 @@ STRUCTURED_OUTPUT_TOOL = "StructuredOutput"
 _LIMIT_RE = re.compile(r"limit|resets|rate_limit|429", re.I)
 _OVERLOAD_RE = re.compile(r"overloaded|529", re.I)
 _AUTH_RE = re.compile(r"Failed to authenticate|OAuth|not logged in|/login", re.I)
+# A dropped or refused connection to the API (G7). Matched on the result text, or on stderr when the CLI died
+# before writing a result line.
+_CONNECTION_RE = re.compile(r"Connection error|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|"
+                            r"socket hang up|fetch failed|network error|API Error: 5\d\d", re.I)
 
 
 def _subst(items, values):
@@ -118,13 +123,15 @@ def _rate_limit_info(ev):
     return info.get("status"), info.get("resetsAt") or info.get("resets_at"), info.get("rateLimitType")
 
 
-def classify(result, rate_rejected, resets_at, killed_for_timeout, violation):
+def classify(result, rate_rejected, resets_at, killed_for_timeout, violation, stderr=""):
     if violation:
         return "isolation_violation"
     if killed_for_timeout:
         return "timeout"
     if result is None:
-        return "usage_limit" if rate_rejected else "error"
+        if rate_rejected:
+            return "usage_limit"
+        return "connection_error" if _CONNECTION_RE.search(stderr or "") else "error"
     sub = result.get("subtype", "")
     text = json.dumps(result.get("result", "")) + json.dumps(result.get("errors", ""))
     if sub == "error_max_turns":
@@ -137,6 +144,8 @@ def classify(result, rate_rejected, resets_at, killed_for_timeout, violation):
         return "usage_limit"
     if result.get("is_error") and _OVERLOAD_RE.search(text):
         return "overloaded"
+    if result.get("is_error") and _CONNECTION_RE.search(text):
+        return "connection_error"
     if sub == "success" and not result.get("is_error"):
         return "ok"
     return "error"
@@ -239,7 +248,7 @@ def run(cfg, argv, cwd, prompt, stream_path, wall_clock_s=None, env=None):
         # every recorded real call starts with system/init (smoke, probe, auth failure); without it isolation
         # cannot be asserted, so the call fails closed (e.g. a CLI update that rejects a flag at startup)
         violation = ["no system/init event: isolation could not be checked"]
-    outcome = classify(result, rate_rejected, resets_at, killed_for_timeout, violation)
+    outcome = classify(result, rate_rejected, resets_at, killed_for_timeout, violation, "".join(stderr_text))
     return {
         "outcome": outcome,
         "exit_code": proc.returncode,

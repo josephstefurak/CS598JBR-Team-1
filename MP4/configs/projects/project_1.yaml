@@ -27,6 +27,7 @@ notes:
   - SatcResponse::new() takes no arguments; also implement Default.
   - satc_point_copy has a first parameter the C overwrites; keep the signature.
   - "Edition 2024: gen is a reserved word."
+  - Keep every public item of a module defined directly in src/<module>.rs, not in submodules or behind pub use re-exports; the interface check reads only that file.
 rulings:                               # owner rulings, M3 gate 2026-10-29 (why.md D)
   D-ALLOW: "One allow, that fn only"
   D-CLIMAIN: "Make it pub fn main"

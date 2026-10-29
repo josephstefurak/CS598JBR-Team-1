@@ -123,6 +123,11 @@ def digest(check, caps):
     if v:
         out += ["", "### Integrity violations (restored by the wrapper; this iteration cannot succeed)"]
         out += ["- %s %s" % (x["kind"], x["path"]) for x in v]
+    la = check.get("lint_attributes") or []
+    if la:
+        out += ["", "### Lint attributes in your code (not permitted; fix the code instead)"]
+        out += ["- `%s:%d` `%s`%s" % (x["file"], x["line"], x["attribute"],
+                                      " on `%s`" % x["item"] if x.get("item") else "") for x in la[:20]]
     h = check.get("hardcode_hits") or []
     if h:
         out += ["", "### Hard-coding: test literals found in library code"]

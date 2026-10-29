@@ -11,6 +11,11 @@ Actions:
   noop            change nothing
   edit_test       append a line to the first test file under src/bin/ (an integrity violation)
   rate_limit      emit a rejected rate_limit_event (resets in 5 s) and a usage-limit error result
+  auth_error      emit the CLI's lost-login error result (owner gate G2)
+  overloaded      emit an API overloaded error result (owner gate G7)
+  connection_error  emit a connection error result (owner gate G7)
+  write:<path>    write a small file at <path>, relative to the workspace (owner gate G1)
+  say:<text>      emit an assistant text event (leak-marker scan, owner gate G4)
   sleep:<s>       sleep (for wall-clock and SIGTERM drills)
 Missing iterations or attempts mean noop. It refuses to run inside MP4/translations/.
 """
@@ -70,6 +75,21 @@ def main():
             emit({"type": "result", "subtype": "success", "is_error": True, "num_turns": 0,
                   "result": "Claude usage limit reached; your limit resets soon.", "permission_denials": []})
             return 1
+        elif kind in ("auth_error", "overloaded", "connection_error"):
+            text = {"auth_error": "Failed to authenticate. API Error: 401 OAuth token has expired. Please run /login",
+                    "overloaded": "API Error: 529 Overloaded",
+                    "connection_error": "API Error: Connection error."}[kind]
+            emit({"type": "result", "subtype": "success", "is_error": True, "num_turns": 0, "result": text,
+                  "permission_denials": []})
+            return 1
+        elif kind == "write":
+            path = os.path.join(cwd, arg)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("written by the fake agent\n")
+        elif kind == "say":
+            emit({"type": "assistant", "message": {"model": "claude-%s-fake" % a.model, "content": [
+                {"type": "text", "text": arg}]}})
         elif kind == "sleep":
             time.sleep(float(arg))
         elif kind != "noop":

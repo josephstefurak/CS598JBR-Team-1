@@ -21,7 +21,7 @@ or `docs/`.
 | R-T1-README | `README.md` | `test -f MP4/README.md`; one heading per required item; framework version vs `claude --version`; model vs `configs/pipeline.yaml`; the run command exists in `src/` | 12/12 required headings (lines 9-181); `claude --version` = `2.1.235 (Claude Code)` = README; `model: opus` = README; generated sections up to date; `src/run_pipeline.py` exists. The usage-limit section is filled from the runs (M10) | verified | M5; M10 |
 | R-T1-CONFIGS | `configs/` | `ls MP4/configs/`; `grep -rn 'configs/' MP4/src/`; `git grep -nE 'sk-ant-\|api_key=' -- MP4/` | 7 entries (pipeline, settings, system prompt, cheatsheet, CHANGELOG, `prompts/`, `projects/`); `src/` loads them (`config.py`, `agent_runner.py`); secret grep prints nothing (exit 1) | verified | M5 |
 | R-T1-TOOLLIST | `README.md` (Models, frameworks and tools used; External tools) | README table vs the tool names seen in `trajectories/project_*/run_*/iter_*/agent.stream.jsonl` | README lists Claude Code 2.1.235, Opus, the toolchain, clippy, Python/PyYAML, the safety proxy, CRUST-bench. No run trajectories yet; the permission probe saw exactly the configured tools (`Bash, Edit, Glob, Grep, Read, StructuredOutput, Write`) | pending-run | M6, M7, M11 |
-| R-T2-SRC | `src/run_pipeline.py`, `src/agent_runner.py`, `src/prompt_builder.py`, `src/checks.py` | read the loop; stop conditions; `cargo +nightly-2025-05-13` calls; feedback into the next prompt; `--project`; `grep -niE 'satc_\|psbt_\|compactsize'` | `run_loop`/`_drive`/`do_checks`/`evaluate`/`decide_stop`/`build_prompt`; six stop constants; every cargo call is `cargo +nightly-2025-05-13`; repair prompts carry the digest; `--project` is the only project switch; project names appear only in the selftest's expected values. selftest 162 PASS, including drill A (SUCCESS at iteration 2, the iteration-2 prompt carries iteration-1 feedback) and the 7 guard traps | verified | M5 |
+| R-T2-SRC | `src/run_pipeline.py`, `src/agent_runner.py`, `src/prompt_builder.py`, `src/checks.py` | read the loop; stop conditions; `cargo +nightly-2025-05-13` calls; feedback into the next prompt; `--project`; `grep -niE 'satc_\|psbt_\|compactsize'` | `run_loop`/`_drive`/`do_checks`/`evaluate`/`decide_stop`/`build_prompt`; five stop constants (AUTH_ERROR became a resumable pause at M6 step 1, gate G2); every cargo call is `cargo +nightly-2025-05-13`; repair prompts carry the digest; `--project` is the only project switch; project names appear only in the selftest's expected values. selftest 192 PASS (M6 step 1; 162 at M5), including drill A (SUCCESS at iteration 2, the iteration-2 prompt carries iteration-1 feedback) and the 7 guard traps | verified | M5 |
 | R-T2-CONFIGS-PROMPTS | `configs/prompts/`, `configs/agent_system_prompt.md`, `configs/projects/*.yaml` | prompts present; guardrail phrases greppable; no function bodies | `initial.md`, `repair.md`, `status_schema.json`; "Do not modify ... test" in both templates; FFI, unsafe and hard-coding rules in all three texts; selftest: every guardrail phrase present for both projects and both templates, no `satc_`/`psbt_` identifiers and no Rust fn bodies | verified | M5 |
 | R-T2-TRAJECTORIES | `trajectories/project_1/`, `trajectories/project_2/` | both non-empty; per-iteration stream, check logs and summary; iterations >= 2; secret scan empty | Only `baseline/` exists (no run yet). On the fixture every iteration directory holds all 17 design-reference files (selftest drill A); `scrub_secrets.py --check MP4/` = 0 hits | pending-run | M6, M7, M8 |
 | R-T2-REPRO | `README.md` (How to run), `src/run_pipeline.py` | README commands copy-pasteable; `--dry-run` and `--check-only` exit 0 from a fresh clone | Fresh clone (M5): `--help` 0, `--dry-run` 0 for both projects, `--check-only` on the fixture 0; selftest in the clone 120/120 before the M5 fixes | verified | M5; M11 |
@@ -176,18 +176,17 @@ $ python3 -c "import json;d=json.load(open('docs/programs/mp4/evidence/smoke/pro
 
 ## R-T2-SRC
 $ grep -nE 'def (run_loop|_drive|do_checks|decide_stop|evaluate|build_prompt)|STOP_[A-Z_]+ = ' MP4/src/run_pipeline.py
-385:STOP_SUCCESS = "SUCCESS"
-386:STOP_MAX_ITERATIONS = "MAX_ITERATIONS"
-387:STOP_NO_PROGRESS = "NO_PROGRESS"
-388:STOP_ABORT = "ABORT"
-389:STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
-390:STOP_AUTH_ERROR = "AUTH_ERROR"
-421:def evaluate(check, proj):
-700:def build_prompt(run, k):
-720:def do_checks(run, k, n, agent_outcome):
-769:def decide_stop(run, summary):
-845:def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None):
-955:def _drive(run, between_iterations):
+398:STOP_SUCCESS = "SUCCESS"
+399:STOP_MAX_ITERATIONS = "MAX_ITERATIONS"
+400:STOP_NO_PROGRESS = "NO_PROGRESS"
+401:STOP_ABORT = "ABORT"
+402:STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
+436:def evaluate(check, proj):
+717:def build_prompt(run, k):
+737:def do_checks(run, k, n, agent_outcome):
+787:def decide_stop(run, summary):
+902:def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None):
+1012:def _drive(run, between_iterations):
 [exit 0]
 
 $ grep -nE '"\+" \+ TOOLCHAIN|TOOLCHAIN = ' MP4/src/mp4common.py

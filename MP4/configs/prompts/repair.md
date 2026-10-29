@@ -38,3 +38,10 @@ clippy.
 Read the files the feedback points at, fix the causes rather than the
 symptoms, and rerun build, test and the rubric clippy command until they are
 clean. Finish with the structured status.
+
+If the feedback above shows a clean build, every test passing (apart from any
+known-defective test), no clippy warnings, no safety findings, no interface
+gaps, no integrity violations and no hard-coding or lint-attribute findings,
+the crate already meets every check. Then review it against the C for
+behaviour the tests do not cover, fix only real divergences, keep every check
+clean, and do not rewrite code that is already correct.

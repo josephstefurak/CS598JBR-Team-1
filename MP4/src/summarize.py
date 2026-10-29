@@ -35,7 +35,7 @@ def _load(path):
 
 
 def compare(run_summary, check):
-    """Fields where the final run's last iteration and the --check-only result disagree."""
+    """Fields where the final run's shipped iteration and the --check-only result disagree."""
     final = run_summary.get("final") or {}
     s = check["summary"]
     pairs = [("compiles", final.get("compiles"), s["compiles"]),
@@ -147,18 +147,26 @@ def generated_sections(pipeline):
         "must pass too); clippy runs without errors and agent-attributable clippy warnings are 0 in all four "
         "rubric groups; the safety metrics are all 0, `#![forbid(unsafe_code)]` is in place and there is no FFI; "
         "every interface item is present and unchanged; no integrity violation; no test literal copied into "
-        "library code." % pipeline["toolchain"]["name"],
+        "library code; no lint-level attribute (`allow`, `expect`, `warn`, `deny`, `forbid`, or one inside "
+        "`cfg_attr`) in library code except the project's permitted `#[allow]`. SUCCESS ends the run from "
+        "iteration %d on; a clean crate before that gets a review iteration." % (
+            pipeline["toolchain"]["name"], lp["min_iterations"]),
         "2. **ABORT**: integrity violations (tests, interfaces, `Cargo.toml`/`Cargo.lock` or `src/lib.rs` "
-        "changed) in two consecutive iterations.",
+        "changed, files created outside `src/`, symlinks) in two consecutive iterations.",
         "3. **NO_PROGRESS**: the score (tests passed, then fewer build errors, clippy warnings, unsafe findings, "
         "missing interface items) has not strictly improved for %d consecutive iterations." % lp[
             "no_progress_rounds"],
         "4. **MAX_ITERATIONS**: %d iterations." % lp["max_iterations"], "",
+        "At NO_PROGRESS and MAX_ITERATIONS the best-scoring iteration (a successful one first, then the score "
+        "above; the later one on a tie) is restored into `translations/` and named in "
+        "`run_summary.json` `final_iteration_dir`, not the last.", "",
         "Each iteration is one fresh agent session capped at %d turns and a %d-minute wall clock. The run also "
         "stops if the agent's startup line is missing, shows any capability beyond the configured tools, or "
-        "shows an API key instead of the subscription login (ABORT_ISOLATION), or if the CLI is not logged in "
-        "(AUTH_ERROR). A usage-limit rejection is not a stop: the run %s." % (
-            a["max_turns"], a["wall_clock_minutes"], pause),
+        "shows an API key instead of the subscription login (ABORT_ISOLATION). A usage-limit rejection is not "
+        "a stop: the run %s. An API outage (overloaded, connection error) is handled the same way with a "
+        "%d-minute wait. A lost CLI login also pauses: the run exits with code 75 and continues with "
+        "`--resume-run` after `claude auth login`." % (
+            a["max_turns"], a["wall_clock_minutes"], pause, rl["fallback_minutes"]),
     ])
     inference = "\n".join([
         "| Setting | Value | Where |", "|---|---|---|",

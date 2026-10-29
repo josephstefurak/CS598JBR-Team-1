@@ -44,6 +44,9 @@ agent:                                  # agent B: Claude Code headless (D1)
     - Bash(cargo +{toolchain} add *)
     - Bash(cargo +{toolchain} remove *)
     - Bash(cargo +{toolchain} update *)
+    # owner gate G4: no cargo flag that loads other configuration or another crate
+    - Bash(cargo *--config*)
+    - Bash(cargo *--manifest-path*)
     - WebFetch
     - WebSearch
     - Edit(/{subjects}/**)
@@ -94,6 +97,7 @@ agent:                                  # agent B: Claude Code headless (D1)
 
 loop:
   max_iterations: 8                     # D7 envelope
+  min_iterations: 2                     # owner gate G3: SUCCESS stops the run from this iteration on
   no_progress_rounds: 3
 
 toolchain:

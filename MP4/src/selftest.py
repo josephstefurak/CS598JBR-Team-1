@@ -218,6 +218,7 @@ def _run(tmp_root):
     _run_m3(tmp_root, fixture_check)
     _run_m4(tmp_root)
     _run_m5(tmp_root)
+    _run_m6(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -321,7 +322,7 @@ ITER_FILES = ["prompt.md", "agent.stream.jsonl", "agent_result.json", "integrity
               "diagnostics.md", "iteration_summary.json"]
 
 
-def drill_cfg(tmp_root, name, scenario, max_iterations=8, mode="wait"):
+def drill_cfg(tmp_root, name, scenario, max_iterations=8, mode="wait", min_iterations=1):
     import copy
     root = os.path.join(tmp_root, "drill_" + name)
     skeleton = os.path.join(root, "skeleton")
@@ -337,6 +338,8 @@ def drill_cfg(tmp_root, name, scenario, max_iterations=8, mode="wait"):
     cfg = copy.deepcopy(config.load("project_1"))
     cfg["pipeline"]["agent"].update({"kind": "fake", "fake_scenario": scen_path, "wall_clock_minutes": 2})
     cfg["pipeline"]["loop"]["max_iterations"] = max_iterations
+    # the M4/M5 drills predate owner gate G3 and expect SUCCESS to stop at the first clean iteration
+    cfg["pipeline"]["loop"]["min_iterations"] = min_iterations
     cfg["pipeline"]["rate_limit"].update({"mode": mode, "resume_margin_seconds": 1})
     cfg["project_cfg"] = {
         "name": "project_1", "label": "selftest fixture", "crate": "fixture", "modules": ["fixture"],
@@ -420,7 +423,7 @@ def _run_m4(tmp_root):
 
     # summarize.py on drill A output, against --check-only of the final workspace
     chk = run_pipeline.measure_crate(mc.copy_crate(cfg["workspace"]), cfg["skeleton"],
-                                     os.path.join(tmp_root, "A_check_logs"))
+                                     os.path.join(tmp_root, "A_check_logs"), cfg["project_cfg"]["allow_attributes"])
     with open(os.path.join(cfg["trajectory_root"], "run_summary.json"), encoding="utf-8") as fh:
         rsum = json.load(fh)
     out = summarize.write_results([{"label": "selftest fixture", "run_summary": rsum, "check": chk}],
@@ -639,8 +642,10 @@ def _run_m5(tmp_root):
     _, _, s = _trap(tmp_root, "trap_c", lambda ws: (
         _append(os.path.join(ws, "build.rs"), "fn main() {}\n"),
         _append(fx(ws), '\nextern "C" {\n    fn abs(x: i32) -> i32;\n}\n')))
-    expect("trap c: build.rs + extern C -> safety findings", (s["success"], s["blockers"]),
-           (False, ["safety finding: extern_c", "safety finding: build_rs"]))
+    # since owner gate G1 the build.rs outside src/ is deleted and recorded before measuring
+    expect("trap c: build.rs + extern C -> safety finding, build.rs removed as an integrity violation",
+           (s["success"], s["blockers"], [(v["path"], v["kind"]) for v in s["integrity_violations"]]),
+           (False, ["safety finding: extern_c", "integrity violations: 1"], [("build.rs", "outside_src")]))
 
     # (d) an unsafe block inside a safe-looking pub fn (why.md Z4)
     unsafe_fn = "\npub fn first(v: &[u32]) -> u32 {\n    unsafe { *v.as_ptr() }\n}\n"
@@ -995,6 +1000,176 @@ def _run_m5(tmp_root):
     except SystemExit:
         refused = True
     expect("changed subjects skeleton refused", refused, True)
+
+
+def _run_m6(tmp_root):
+    """Owner gates G1-G7 (why.md D-M5GATES), applied at M6 step 1."""
+    fx = lambda ws: os.path.join(ws, "src", "fixture.rs")  # noqa: E731
+
+    # G1 (a): files outside src/ and symlinks are removed and recorded; covers review-1 probe x3 and F9
+    outside = os.path.join(tmp_root, "g1_outside.rs")
+    with open(outside, "w", encoding="utf-8") as fh:
+        fh.write("// outside\n")
+
+    def plant_strays(ws):
+        _edit(fx(ws), "pub fn double(x: i32) -> i32 {\n    x * 2\n}",
+              "pub fn double(x: i32) -> i32 {\n    return x * 2;\n}")   # a warning the lint cap would hide
+        os.makedirs(os.path.join(ws, ".cargo"))
+        _append(os.path.join(ws, ".cargo", "config.toml"), '[build]\nrustflags = ["--cap-lints", "allow"]\n')
+        _append(os.path.join(ws, "clippy.toml"), "too-many-arguments-threshold = 99\n")
+        os.makedirs(os.path.join(ws, "tests"))
+        _append(os.path.join(ws, "tests", "t.rs"), "#[test]\nfn t() {}\n")
+        os.makedirs(os.path.join(ws, ".claude"))
+        _append(os.path.join(ws, ".claude", "settings.json"), "{}\n")
+        os.symlink(outside, os.path.join(ws, "src", "linked.rs"))
+
+    cfg, run, s = _trap(tmp_root, "g1_strays", plant_strays)
+    ws = cfg["workspace"]
+    expect("G1a: files outside src/ and a symlink -> removed, recorded, not green",
+           (s["success"], sorted((v["path"], v["kind"], v["restored"]) for v in s["integrity_violations"]),
+            sorted(x for x in os.listdir(ws) if x != "target")),
+           (False, [(".cargo/config.toml", "outside_src", True), (".claude/settings.json", "outside_src", True),
+                    ("clippy.toml", "outside_src", True), ("src/linked.rs", "symlink", True),
+                    ("tests/t.rs", "outside_src", True)],
+            [".gitignore", ".integrity", "Cargo.lock", "Cargo.toml", "src"]
+            if os.path.exists(os.path.join(cfg["skeleton"], ".gitignore")) else
+            [".integrity", "Cargo.lock", "Cargo.toml", "src"]))
+    expect("G1a: lint cap removed before measuring, so clippy still sees the warning", s["blockers"],
+           ["agent clippy warnings: 1", "integrity violations: 5"])
+    expect("G1a: the linked file is outside the snapshot and the target untouched",
+           (os.path.exists(os.path.join(run.iter_dir(1, 1), "src_after", "linked.rs")), mc.read_text(outside)),
+           (False, "// outside\n"))
+    expect("G1a: report-only mode records without deleting",
+           [(v["path"], v["restored"]) for v in integrity.sweep_strays(
+               _with(fresh_copy(tmp_root, "g1_report"), lambda w: _append(os.path.join(w, "notes.md"), "x\n")),
+               FIXTURE, restore=False)], [("notes.md", False)])
+
+    # G1 (b): lint-level attributes in library code block SUCCESS, except the D-ALLOW pair; covers probe x2
+    allow_all = lambda ws: _edit(fx(ws), "//! Self-test", "#![allow(clippy::all)]\n//! Self-test")  # noqa: E731
+    _, _, s = _trap(tmp_root, "g1_allow_all", allow_all)
+    expect("G1b: #![allow(clippy::all)] -> lint attribute blocks success", (s["success"], s["blockers"],
+           s["lint_attribute_hits"]), (False, ["lint attributes: 1"], 1))
+    other_item = lambda ws: _edit(fx(ws), "pub fn double(", "#[allow(clippy::boxed_local)]\npub fn double(")  # noqa
+    _, _, s = _trap(tmp_root, "g1_wrong_item", other_item)
+    expect("G1b: the permitted lint on another item is not permitted", s["blockers"], ["lint attributes: 1"])
+    crate = fresh_copy(tmp_root, "g1_scan")
+    shutil.copy2(CLEAN_VARIANT, fx(crate))
+    _append(fx(crate), "\n#[cfg_attr(test, derive(Debug))]\npub struct A;\n#[cfg_attr(test, expect(dead_code))]\n"
+                       "pub struct B;\n#[allow(clippy::boxed_local, dead_code)]\npub fn c(v: Box<i32>) -> i32 { *v }\n"
+                       "// #[allow(dead_code)] in a comment\npub const D: &str = \"#[allow(x)]\";\n"
+                       "#[warn(missing_docs)]\npub fn e() {}\n")
+    hits = integrity.lint_attribute_scan(crate, [{"lint": "clippy::boxed_local", "item": "total"},
+                                                 {"lint": "clippy::boxed_local", "item": "c"}])
+    expect("G1b: scan flags cfg_attr(expect), a pair plus an extra lint, warn; ignores derive, comments, literals",
+           [(h["item"], h["attribute"].split("(")[0]) for h in hits], [("B", "#[cfg_attr"), ("c", "#[allow"),
+                                                                       ("e", "#[warn")])
+    lib_crate = fresh_copy(tmp_root, "g1_lib")
+    _edit(os.path.join(lib_crate, "src", "lib.rs"), "pub mod", mc.FORBID_LINE + "\npub mod")
+    expect("G1b: the wrapper's #![forbid(unsafe_code)] in src/lib.rs is not a finding",
+           integrity.lint_attribute_scan(lib_crate, []), [])
+    chk = json.loads(json.dumps(run_pipeline.summarize(dict(
+        build={"ok": True, "error_codes": []}, test={"passed": 1, "total": 1}, clippy=None,
+        safety={"unsafe_lines": 0, "unsafe_calls": 0, "unsafe_casts": 0, "pointer_arithmetic": 0, "tool": "proxy"},
+        interface={"missing": 0, "changed": 0}, integrity={"violations": []}, hardcode_hits=[],
+        lint_attributes=hits))))
+    expect("G1b: summary counts lint attribute hits", chk["lint_attribute_hits"], 3)
+    digest = prompt_builder.digest({"lint_attributes": hits}, config.load("project_1")["pipeline"]["digest"])
+    expect("G1b: repair feedback names each lint attribute", "### Lint attributes" in digest and "on `B`" in digest,
+           True)
+
+    # G2: a lost login pauses (exit 75), and the run continues on resume
+    cfg = drill_cfg(tmp_root, "g2", {"1": {"1": ["auth_error"], "2": ["copy:clean"]}})
+    code = run_pipeline.run_loop(cfg, run_id="G2", yes=True)
+    st = _state(cfg, "G2")
+    expect("G2: auth error -> exit 75, run open at attempt 2, cause recorded",
+           (code, st["status"], st["attempt"], [p.get("cause") for p in st["pauses"]], st["pauses"][0]["wait_s"]),
+           (75, "running", 2, ["auth_error"], 0))
+    code = run_pipeline.run_loop(cfg, run_id="G2", resume=True)
+    st = _state(cfg, "G2")
+    expect("G2: resume after login -> SUCCESS on iter_01_attempt2", (code, st["stop_reason"], os.path.isdir(
+        os.path.join(cfg["trajectory_root"], "run_G2", "iter_01_attempt2"))), (0, "SUCCESS", True))
+
+    # G3: a clean crate after iteration 1 gets a review iteration before SUCCESS
+    cfg = drill_cfg(tmp_root, "g3", {"1": {"1": ["copy:clean"]}, "2": {"1": ["noop"]}}, min_iterations=2)
+    code = run_pipeline.run_loop(cfg, run_id="G3", yes=True)
+    st = _state(cfg, "G3")
+    with open(os.path.join(cfg["trajectory_root"], "run_G3", "iter_02", "prompt.md"), encoding="utf-8") as fh:
+        p2 = fh.read()
+    expect("G3: min_iterations 2 -> SUCCESS at iteration 2, not 1",
+           (code, st["stop_reason"], [h["success"] for h in st["history"]]), (0, "SUCCESS", [True, True]))
+    expect("G3: the review iteration's prompt says the crate already meets every check",
+           "the crate already meets every check" in p2, True)
+    raw = config._load_yaml(mc.PIPELINE_YAML)
+    expect("G3: pipeline.yaml sets loop.min_iterations 2", raw["loop"]["min_iterations"], 2)
+    raw["loop"]["min_iterations"] = 9
+    try:
+        config.validate_pipeline(raw)
+        expect("G3: min_iterations above max_iterations rejected", "accepted", "ConfigError")
+    except config.ConfigError:
+        expect("G3: min_iterations above max_iterations rejected", "ConfigError", "ConfigError")
+
+    # G4: --config / --manifest-path denied on cargo; the agent's words are scanned for leak markers
+    pcfg = config.load("project_1")
+    argv = agent_runner.build_argv(pcfg)
+    denied = argv[argv.index("--disallowedTools") + 1:argv.index("--setting-sources")]
+    expect("G4: cargo --config and --manifest-path denied",
+           [d for d in denied if "--config" in d or "--manifest-path" in d],
+           ["Bash(cargo *--config*)", "Bash(cargo *--manifest-path*)"])
+    cfg = drill_cfg(tmp_root, "g4", {"1": {"1": ["say:I follow the Working agreement", "copy:clean"]}})
+    run_pipeline.run_loop(cfg, run_id="G4", yes=True)
+    with open(os.path.join(cfg["trajectory_root"], "run_G4", "iter_01", "agent_result.json"), encoding="utf-8") as fh:
+        found = json.load(fh).get("leak_markers_found")
+    expect("G4: leak marker in the agent's text recorded and logged",
+           (found, "LEAK MARKERS" in mc.read_text(os.path.join(cfg["trajectory_root"], "run_G4", "run.log"))),
+           (["Working agreement"], True))
+
+    # G5: the project note reaches the prompt for both projects
+    for proj in mc.PROJECTS:
+        expect("G5: %s prompt tells the agent to keep public items in src/<module>.rs" % proj,
+               "defined directly in src/<module>.rs" in prompt_builder.build_initial(config.load(proj)), True)
+
+    # G6: at MAX_ITERATIONS the best iteration ships, not a last one that does not build
+    cfg = drill_cfg(tmp_root, "g6", {"1": {"1": ["copy:partial"]}, "2": {"1": ["copy:broken"]}}, max_iterations=2)
+    code = run_pipeline.run_loop(cfg, run_id="G6", yes=True)
+    with open(os.path.join(cfg["trajectory_root"], "run_summary.json"), encoding="utf-8") as fh:
+        rs = json.load(fh)
+    snap = os.path.join(cfg["trajectory_root"], "run_G6", "iter_01", "src_after")
+    expect("G6: MAX_ITERATIONS ships iter_01 (builds) over iter_02 (broken)",
+           (code, rs["stop_reason"], rs["final_iteration_dir"], rs["last_iteration_dir"], rs["final_selection"],
+            rs["final"]["compiles"], integrity.diff_trees(os.path.join(cfg["workspace"], "src"), snap)),
+           (0, "MAX_ITERATIONS", "iter_01", "iter_02", "best", True, {"added": [], "removed": [], "modified": []}))
+    expect("G6: best_iteration prefers success, then score, the later on a tie", _best_of([
+        (1, False, [1, 0, -1, 0, 0]), (2, True, [1, 0, 0, 0, 0]), (3, False, [2, 0, 0, 0, 0]),
+        (4, True, [1, 0, 0, 0, 0])], tmp_root), "iter_04")
+
+    # G7: overloaded and connection failures pause (fallback wait) and redo the iteration
+    for kind in ("overloaded", "connection_error"):
+        cfg = drill_cfg(tmp_root, "g7_" + kind, {"1": {"1": [kind], "2": ["copy:clean"]}})
+        cfg["pipeline"]["rate_limit"]["fallback_minutes"] = 0.02
+        code = run_pipeline.run_loop(cfg, run_id="G7", yes=True)
+        st = _state(cfg, "G7")
+        expect("G7: %s -> pause, attempt 2, SUCCESS" % kind,
+               (code, st["stop_reason"], [(p["cause"], p["wait_s"]) for p in st["pauses"]], len(st["history"])),
+               (0, "SUCCESS", [(kind, 1)], 1))
+    expect("G7: connection error with no result line read from stderr",
+           agent_runner.classify(None, False, None, False, [], "Error: socket hang up"), "connection_error")
+    expect("G7: other failures without a result stay errors",
+           agent_runner.classify(None, False, None, False, [], "panic"), "error")
+
+
+def _with(path, fn):
+    fn(path)
+    return path
+
+
+def _best_of(entries, tmp_root):
+    """best_iteration over a synthetic history: (iteration, success, score)."""
+    cfg = drill_cfg(tmp_root, "g6_best_%d" % len(os.listdir(tmp_root)), {})
+    run = run_pipeline.Run(cfg, "B")
+    run.state = {"history": [{"iteration": k, "attempt": 1, "success": ok, "score": sc} for k, ok, sc in entries]}
+    for k, _, _ in entries:
+        os.makedirs(os.path.join(run.iter_dir(k, 1), "src_after"))
+    return run_pipeline.best_iteration(run)
 
 
 if __name__ == "__main__":

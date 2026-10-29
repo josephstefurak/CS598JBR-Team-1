@@ -15,13 +15,16 @@ evidence there.
 
 Without a mode flag it runs the iteration loop: workspace init, then per
 iteration prompt -> agent -> integrity/checks/safety/interface/hard-coding ->
-snapshot and summary -> stop or relaunch. Stop conditions: SUCCESS,
-MAX_ITERATIONS, NO_PROGRESS (score not improved for loop.no_progress_rounds
-iterations), ABORT (integrity violations in two consecutive iterations),
-ABORT_ISOLATION, AUTH_ERROR. A usage-limit rejection pauses until resets_at
-(rate_limit.mode wait) or exits 75 with the --resume-run command (exit), and
-redoes the iteration as iter_KK_attemptN. --resume-run re-enters at the step
-recorded in run_state.json. A real run asks for confirmation unless --yes.
+snapshot and summary -> stop or relaunch. Stop conditions: SUCCESS (from
+iteration loop.min_iterations on), MAX_ITERATIONS, NO_PROGRESS (score not
+improved for loop.no_progress_rounds iterations), ABORT (integrity violations in
+two consecutive iterations), ABORT_ISOLATION. At MAX_ITERATIONS and NO_PROGRESS
+the best-scoring iteration is shipped, not the last. A usage-limit rejection or
+an outage (overloaded, connection error) pauses until resets_at or the fallback
+time (rate_limit.mode wait) or exits 75 with the --resume-run command (exit),
+and redoes the iteration as iter_KK_attemptN; a lost login always exits 75.
+--resume-run re-enters at the step recorded in run_state.json. A real run asks
+for confirmation unless --yes.
 """
 import argparse
 import datetime
@@ -115,7 +118,7 @@ def _scrub_logs(log_dir, work, names=None, crate_label="<crate>"):
                     fh.write(new)
 
 
-def check_only(project, crate, out_path):
+def check_only(project, crate, out_path, allowed=()):
     source = mc.skeleton_dir(project)
     out_path = os.path.abspath(out_path)
     log_dir = out_path[:-5] + ".logs" if out_path.endswith(".json") else out_path + ".logs"
@@ -132,7 +135,7 @@ def check_only(project, crate, out_path):
             "toolchain": _toolchain_version(),
             "subjects_checksums_ok": not integrity.verify_subjects(source),
         }
-        res.update(measure_crate(work, source, log_dir))
+        res.update(measure_crate(work, source, log_dir, allowed))
         _scrub_logs(log_dir, work)
         text = _scrub_paths(json.dumps(res, indent=2), work, log_dir)
     finally:
@@ -161,6 +164,7 @@ def summarize(res):
         "interface_changed": res["interface"]["changed"],
         "integrity_violations": len(res["integrity"]["violations"]),
         "hardcode_hits": len(res["hardcode_hits"]),
+        "lint_attribute_hits": len(res.get("lint_attributes") or []),
     }
 
 
@@ -214,6 +218,15 @@ def _model_used(res, stream_path):
     r = res.get("result") or {}
     usage = r.get("usage") or {}
     return bool(r.get("duration_api_ms") or usage.get("input_tokens") or usage.get("output_tokens"))
+
+
+def leak_scan(stream_path):
+    """LEAK_MARKERS found in the agent's own text of one stream (C4, C9; owner gate G4)."""
+    try:
+        text = _assistant_text(stream_path).lower()
+    except OSError:
+        return []
+    return [m for m in LEAK_MARKERS if m.lower() in text]
 
 
 def _stream_text(path):
@@ -387,7 +400,7 @@ STOP_MAX_ITERATIONS = "MAX_ITERATIONS"
 STOP_NO_PROGRESS = "NO_PROGRESS"
 STOP_ABORT = "ABORT"
 STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
-STOP_AUTH_ERROR = "AUTH_ERROR"
+PAUSE_OUTCOMES = ("usage_limit", "overloaded", "connection_error", "auth_error")
 NO_CLIPPY = 10 ** 6   # clippy count used in the score when the build failed and clippy could not run
 MEASURE_LOGS = ("build.log", "test.log", "clippy_rubric.log", "safety_proxy.json")   # + clippy_<group>.json
 
@@ -400,14 +413,16 @@ def _on_signal(signum, _frame):
     raise Interrupted(signum)
 
 
-def measure_crate(work, source, log_dir):
-    """Build, test, clippy, safety, interface, integrity (report-only) and hard-coding for one crate.
-    Tests are counted against the benchmark's own test names (source/src/bin), not whatever ran."""
+def measure_crate(work, source, log_dir, allowed=()):
+    """Build, test, clippy, safety, interface, integrity (report-only), hard-coding and lint attributes for one
+    crate. Tests are counted against the benchmark's own test names (source/src/bin), not whatever ran.
+    allowed is the project's allow_attributes (D-ALLOW)."""
     res = dict(checks.run_all(work, log_dir, checks.benchmark_tests(source)))
     res["safety"] = safety_check.proxy(work, raw_path=os.path.join(log_dir, "safety_proxy.json"), source=source)
     res["interface"] = check_interface.compare(os.path.join(source, "src", "interfaces"), work)
     res["integrity"] = {"violations": integrity.verify(work, source, restore=False)}
     res["hardcode_hits"] = integrity.hardcode_scan(work)
+    res["lint_attributes"] = integrity.lint_attribute_scan(work, allowed)
     res["summary"] = summarize(res)
     return res
 
@@ -471,6 +486,8 @@ def evaluate(check, proj):
         blockers.append("integrity violations: %d" % s["integrity_violations"])
     if s["hardcode_hits"]:
         blockers.append("hard-coding hits: %d" % s["hardcode_hits"])
+    if s["lint_attribute_hits"]:
+        blockers.append("lint attributes: %d" % s["lint_attribute_hits"])
     score = [s["tests_passed"], -_build_error_count(check),
              -(clippy_total if clippy_total is not None else NO_CLIPPY), -safety_total,
              -(s["interface_missing"] + s["interface_changed"])]
@@ -728,7 +745,7 @@ def do_checks(run, k, n, agent_outcome):
     else:
         violations = integrity.verify(run.workspace, run.skeleton, restore=True)
         _write_json(integ_path, {"violations": violations})
-    check = measure_crate(run.workspace, run.skeleton, it)
+    check = measure_crate(run.workspace, run.skeleton, it, run.proj["allow_attributes"])
     in_repo = os.path.abspath(run.workspace).startswith(mc.REPO_DIR + os.sep)
     _scrub_logs(it, run.workspace, MEASURE_LOGS + tuple("clippy_%s.json" % g for g in mc.CLIPPY_GROUPS),
                 crate_label=mc.rel(run.workspace, mc.REPO_DIR) if in_repo else "<crate>")
@@ -759,7 +776,8 @@ def do_checks(run, k, n, agent_outcome):
         "clippy_harness": s["clippy_harness"], "safety": s["safety"], "safety_total": ev["safety_total"],
         "safety_tool": s["safety_tool"], "interface_missing": s["interface_missing"],
         "interface_changed": s["interface_changed"], "integrity_violations": violations,
-        "hardcode_hits": s["hardcode_hits"], "success": ev["success"], "blockers": ev["blockers"],
+        "hardcode_hits": s["hardcode_hits"], "lint_attribute_hits": s["lint_attribute_hits"],
+        "success": ev["success"], "blockers": ev["blockers"],
         "score": ev["score"],
     }
     _write_json(os.path.join(it, "iteration_summary.json"), summary)
@@ -767,7 +785,8 @@ def do_checks(run, k, n, agent_outcome):
 
 
 def decide_stop(run, summary):
-    """Stop rules in order: SUCCESS, ABORT (integrity twice running), NO_PROGRESS, MAX_ITERATIONS."""
+    """Stop rules in order: SUCCESS (from iteration loop.min_iterations on, owner gate G3), ABORT (integrity twice
+    running), NO_PROGRESS, MAX_ITERATIONS."""
     st = run.state
     k = summary["iteration"]
     hist = [h for h in st["history"] if h["iteration"] != k]
@@ -778,7 +797,7 @@ def decide_stop(run, summary):
              "integrity_violations": len(summary["integrity_violations"]), "success": summary["success"],
              "score": summary["score"]}
     st["history"] = hist + [entry]
-    if summary["success"]:
+    if summary["success"] and k >= run.p["loop"]["min_iterations"]:
         return STOP_SUCCESS
     prev = [h for h in hist if h["iteration"] == k - 1]
     if entry["integrity_violations"] and prev and prev[0]["integrity_violations"]:
@@ -796,17 +815,55 @@ def decide_stop(run, summary):
     return None
 
 
+SHIP_BEST_REASONS = (STOP_MAX_ITERATIONS, STOP_NO_PROGRESS)   # owner gate G6
+
+
+def best_iteration(run):
+    """The closed iteration to ship: successful before unsuccessful, then the highest score tuple; on a tie the
+    later iteration (the one the agent refined with more feedback). Returns its directory name or None."""
+    best, key = None, None
+    for h in run.state["history"]:
+        d = os.path.basename(run.iter_dir(h["iteration"], h.get("attempt", 1)))
+        if not os.path.isdir(os.path.join(run.dir, d, "src_after")):
+            continue
+        k = (bool(h["success"]), list(h["score"]))
+        if key is None or k >= key:
+            best, key = d, k
+    return best
+
+
+def ship_best(run):
+    """G6: at MAX_ITERATIONS or NO_PROGRESS, restore the best iteration's src_after/ into the workspace (which is
+    MP4/translations/<project> in a real run). Returns the shipped iteration's summary path (run-relative)."""
+    st = run.state
+    last = st.get("last_summary")
+    best = best_iteration(run)
+    if not best or not last or best == os.path.dirname(last):
+        return last
+    src = os.path.join(run.workspace, "src")
+    shutil.rmtree(src)
+    mc.copy_src_tree(os.path.join(run.dir, best, "src_after"), src)   # fresh mtimes: a later cargo run rebuilds
+    run.log("shipping the best iteration %s instead of the last (%s)" % (best, os.path.dirname(last)))
+    return best + "/iteration_summary.json"
+
+
 def finalize(run, reason):
     st = run.state
+    shipped = st.get("last_summary")
+    if reason in SHIP_BEST_REASONS:
+        shipped = ship_best(run)
+        st["shipped_summary"] = shipped
     st.update({"status": "stopped", "stop_reason": reason, "step": "closed", "finished": _now()})
     run.save()
     final = None
-    if st.get("last_summary"):
-        final = _read_json(os.path.join(run.dir, st["last_summary"]))
+    if shipped:
+        final = _read_json(os.path.join(run.dir, shipped))
     _write_json(os.path.join(run.traj, "run_summary.json"), {
         "run_id": run.run_id, "project": run.cfg["project"], "agent_kind": run.p["agent"]["kind"],
         "stop_reason": reason, "iterations": len(st["history"]), "attempts": st.get("attempts_total", 0),
-        "final_iteration_dir": os.path.dirname(st["last_summary"]) if st.get("last_summary") else None,
+        "final_iteration_dir": os.path.dirname(shipped) if shipped else None,
+        "last_iteration_dir": os.path.dirname(st["last_summary"]) if st.get("last_summary") else None,
+        "final_selection": "best" if reason in SHIP_BEST_REASONS else "last",
         "final": final, "config_hash": run.cfg["config_hash"],
         "known_failing_tests": [x["name"] for x in run.proj["known_failing_tests"]],
         "workspace_tamper": st.get("workspace_tamper", []), "usage_limit_pauses": st.get("pauses", []),
@@ -874,7 +931,7 @@ def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None)
                 return 2
             if a["kind"] == "claude":
                 err = auth_check(a["claude_bin"])
-                if err:    # resuming logged out would stop the run for good with AUTH_ERROR
+                if err:    # resuming logged out would only pause the run again at the first agent call
                     print(err, file=sys.stderr)
                     return 2
     else:
@@ -994,20 +1051,23 @@ def _drive(run, between_iterations):
                 argv = _agent_argv(run, k, n)
                 prompt = _prompt_for_agent(run, k, it)
                 run.log("iteration %d attempt %d: agent start" % (k, n))
-                res = agent_runner.run(run.cfg, argv, run.workspace, prompt, os.path.join(it, "agent.stream.jsonl"))
+                stream = os.path.join(it, "agent.stream.jsonl")
+                res = agent_runner.run(run.cfg, argv, run.workspace, prompt, stream)
                 res["argv"] = argv   # the exact command of this attempt, session id included (scrubbed on write)
+                # owner gate G4: the agent keeps the caller's environment, so every attempt's own words are
+                # scanned for the owner's instruction files and memory (recorded and logged, not a stop)
+                res["leak_markers_found"] = leak_scan(stream)
                 _write_json(res_path, res)
                 run.log("iteration %d attempt %d: agent %s after %.1f s" % (k, n, res["outcome"], res["elapsed_s"]))
+                if res["leak_markers_found"]:
+                    run.log("iteration %d attempt %d: LEAK MARKERS in the agent's text: %s" % (
+                        k, n, ", ".join(res["leak_markers_found"])))
             outcome = res["outcome"]
-            if outcome == "usage_limit":
+            if outcome in PAUSE_OUTCOMES:
+                # usage limit, an outage (G7) or a lost login (G2): redo the iteration as the next attempt
                 return _usage_limit(run, res, rl)
             if outcome == "isolation_violation":
                 finalize(run, STOP_ABORT_ISOLATION)
-                return 1
-            if outcome == "auth_error":
-                # AUTH_ERROR is a stop: a stopped run cannot be resumed
-                run.log("agent could not authenticate; the run stops. Run `claude auth login` before a new run")
-                finalize(run, STOP_AUTH_ERROR)
                 return 1
             st["step"] = "checks"
             st["agent_outcome"] = outcome
@@ -1040,23 +1100,32 @@ def _drive(run, between_iterations):
 
 
 def _usage_limit(run, res, rl):
-    """C7/D7: redo the same iteration as attempt N+1, after waiting (mode wait) or after --resume-run (exit)."""
+    """C7/D7: redo the same iteration as attempt N+1, after waiting (mode wait) or after --resume-run (exit).
+    Outages (overloaded, connection_error; owner gate G7) wait the fallback time under the same attempt cap. A
+    lost login (auth_error; owner gate G2) always exits 75: only a person can run `claude auth login`."""
     st = run.state
     k, n = st["iteration"], st["attempt"]
+    cause = res.get("outcome", "usage_limit")
     resets = res.get("resets_at")
     now = time.time()
-    if isinstance(resets, (int, float)) and resets > now:
+    if cause == "auth_error":
+        wait = 0
+    elif isinstance(resets, (int, float)) and resets > now:
         wait = resets - now + rl["resume_margin_seconds"]
     else:
         wait = rl["fallback_minutes"] * 60
     wait = min(wait, rl["max_wait_hours"] * 3600)
     st.setdefault("pauses", []).append({"iteration": k, "attempt": n, "resets_at": resets, "wait_s": round(wait),
-                                        "at": _now(), "mode": rl["mode"]})
+                                        "at": _now(), "mode": rl["mode"], "cause": cause})
     st.update({"attempt": n + 1, "step": "prompt", "agent_started": None})
     st["pause_until"] = now + wait
     run.save()
-    run.log("iteration %d attempt %d hit the usage limit (resets_at=%s); attempt %d after %.0f s" % (
-        k, n, resets, n + 1, wait))
+    run.log("iteration %d attempt %d: %s (resets_at=%s); attempt %d after %.0f s" % (
+        k, n, cause, resets, n + 1, wait))
+    if cause == "auth_error":
+        run.log("the agent could not authenticate: run `claude auth login`, then resume with: %s" % _resume_cmd(run))
+        print(_resume_cmd(run))
+        return EXIT_USAGE_LIMIT
     if rl["mode"] == "exit" or n >= MAX_LIMIT_ATTEMPTS:
         # mode exit, or the same iteration was refused MAX_LIMIT_ATTEMPTS times in a row (a weekly limit, or an
         # error the text match mistakes for a limit): hand back to a person instead of retrying unattended
@@ -1081,14 +1150,15 @@ def main(argv=None):
         if args.resume_run:
             return run_loop(cfg, run_id=args.resume_run, resume=True, yes=True)
         return run_loop(cfg, run_id=args.run_id, yes=args.yes)
-    config.load(args.project)   # the measurement settings it uses (toolchain, rubric clippy) must be valid too
+    # the measurement settings it uses (toolchain, rubric clippy, D-ALLOW) must be valid too
+    allowed = config.load(args.project)["project_cfg"]["allow_attributes"]
     crate = os.path.abspath(args.crate_dir) if args.crate_dir else mc.translation_dir(args.project)
     if not os.path.exists(os.path.join(crate, "Cargo.toml")):
         print("no crate at %s (no translation yet? pass --crate-dir)" % mc.rel(crate, mc.REPO_DIR), file=sys.stderr)
         return 2
     out = args.out or os.path.join(mc.RESULTS_DIR, "%s.check.json" % args.project)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    res = check_only(args.project, crate, out)
+    res = check_only(args.project, crate, out, allowed)
     print(json.dumps(res["summary"], indent=2))
     print("wrote %s" % (mc.rel(os.path.abspath(out), mc.REPO_DIR)))
     return 0

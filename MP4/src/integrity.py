@@ -122,6 +122,7 @@ def verify(workspace, source, restore=True):
                 if restore:
                     os.remove(p)
                 violations.append({"path": r, "kind": "added", "restored": restore})
+    violations += sweep_strays(workspace, source, restore)
     lib = os.path.join(workspace, "src", "lib.rs")
     want_lib = expected_lib_rs(source)
     if not os.path.exists(lib) or os.path.islink(lib) or mc.read_text(lib) != want_lib:
@@ -132,6 +133,108 @@ def verify(workspace, source, restore=True):
                 fh.write(want_lib)
         violations.append({"path": "src/lib.rs", "kind": "lib_rs", "restored": restore})
     return violations
+
+
+# Top-level workspace entries that are the wrapper's or cargo's, never the agent's
+_WRAPPER_DIRS = frozenset({"target", ".integrity"})
+
+
+def sweep_strays(workspace, source, restore=True):
+    """Owner gate G1 (a): every file outside src/ that is not in the skeleton, and every symlink anywhere in the
+    workspace, is removed (restore=True) and recorded. Files outside src/ reach the build and the graders' own
+    clippy run without being library code (.cargo/config.toml lint caps or a test runner, clippy.toml,
+    build.rs, tests/, .claude/settings.json), and a symlink can carry content from outside the crate.
+    Immutable files and src/lib.rs are left to verify(), which restores them; src/bin and src/interfaces are
+    already covered there too. Returns violations {path, kind (outside_src | symlink), restored}."""
+    covered = set(immutable_files(source)) | {"src/lib.rs"}
+    violations = []
+    for dirpath, dirnames, filenames in os.walk(workspace):
+        rel_dir = mc.rel(dirpath, workspace) if dirpath != workspace else ""
+        in_src = rel_dir == "src" or rel_dir.startswith("src/")
+        for name in sorted(dirnames):
+            p = os.path.join(dirpath, name)
+            r = mc.rel(p, workspace)
+            if os.path.islink(p):            # never descended into (os.walk does not follow links)
+                if r not in ("src",) + tuple(mc.INFRA_DIRS):   # those verify() already removed or recorded
+                    if restore:
+                        os.remove(p)
+                    violations.append({"path": r, "kind": "symlink", "restored": restore})
+                dirnames.remove(name)
+            elif not rel_dir and name in _WRAPPER_DIRS:
+                dirnames.remove(name)
+        for name in sorted(filenames):
+            p = os.path.join(dirpath, name)
+            r = mc.rel(p, workspace)
+            if r in covered or any(r.startswith(d + "/") for d in mc.INFRA_DIRS):
+                continue                     # verify() restores these, and records files added there
+            if os.path.islink(p):
+                kind = "symlink"
+            elif in_src:
+                continue
+            else:
+                kind = "outside_src"
+            if restore:
+                os.remove(p)
+            violations.append({"path": r, "kind": kind, "restored": restore})
+    if restore:   # directories the agent created outside src/ (now empty of files): remove, bottom-up
+        for dirpath, dirnames, filenames in os.walk(workspace, topdown=False):
+            r = mc.rel(dirpath, workspace) if dirpath != workspace else ""
+            top = r.split("/", 1)[0]
+            if not r or top in _WRAPPER_DIRS or top == "src" or os.path.isdir(os.path.join(source, r)):
+                continue
+            if not os.listdir(dirpath):
+                os.rmdir(dirpath)
+    return violations
+
+
+# Lint-level attributes (owner gate G1 (b)). In library code they block SUCCESS, except the D-ALLOW pairs the
+# project config lists: they silence the graders' own clippy run, or turn its warnings into errors.
+_LINT_ATTR_RE = re.compile(r"#\s*(!)?\s*\[\s*(allow|expect|warn|deny|forbid|cfg_attr)\s*\(")
+_LINT_WORD_RE = re.compile(r"\b(allow|expect|warn|deny|forbid)\s*\(")
+_ITEM_RE = re.compile(r"\b(?:fn|struct|enum|union|trait|type|const|static|mod|impl)\s+([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _paren_body(code, open_idx):
+    """Text between the parenthesis at open_idx and its match, or None if it is never closed."""
+    depth = 0
+    for i in range(open_idx, len(code)):
+        if code[i] == "(":
+            depth += 1
+        elif code[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return code[open_idx + 1:i], i
+    return None, len(code)
+
+
+def lint_attribute_scan(crate, allowed=()):
+    """Every allow/expect/warn/deny/forbid attribute (and cfg_attr carrying one) in library code, except an
+    outer #[allow(...)] whose lints are all permitted for the item it is attached to. allowed is the project's
+    allow_attributes list ({lint, item}). src/lib.rs is skipped: integrity restores it to the wrapper's own
+    text (the injected #![forbid(unsafe_code)] plus the skeleton). Returns [{file, line, attribute, item}]."""
+    pairs = {(a["lint"].replace(" ", ""), a["item"]) for a in allowed}
+    hits = []
+    for p in mc.library_sources(crate):
+        if mc.rel(p, crate) == "src/lib.rs":
+            continue
+        code = rustlex.strip(mc.read_text(p))
+        for m in _LINT_ATTR_RE.finditer(code):
+            inner, kind = bool(m.group(1)), m.group(2)
+            body, close = _paren_body(code, m.end() - 1)
+            if body is None:
+                body = code[m.end():m.end() + 80]
+            if kind == "cfg_attr" and not _LINT_WORD_RE.search(body):
+                continue                     # e.g. cfg_attr(test, derive(Debug)): not a lint level
+            item = None
+            if not inner:
+                im = _ITEM_RE.search(code, close)
+                item = im.group(1) if im else None
+            lints = [x.replace(" ", "") for x in body.split(",") if x.strip()]
+            if kind == "allow" and not inner and lints and all((lt, item) in pairs for lt in lints):
+                continue
+            hits.append({"file": mc.rel(p, crate), "line": rustlex.line_of(code, m.start()),
+                         "attribute": " ".join(code[m.start():close + 2].split())[:120], "item": item})
+    return hits
 
 
 def _tree(root):

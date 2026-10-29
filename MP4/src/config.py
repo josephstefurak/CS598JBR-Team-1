@@ -31,7 +31,7 @@ SCHEMA = {
         "disallowed_tools": list, "setting_sources": str, "settings_file": str, "system_prompt_file": str,
         "status_schema_file": str, "strict_mcp": bool, "disable_slash_commands": bool, "env": dict,
     },
-    "loop": {"max_iterations": int, "no_progress_rounds": int},
+    "loop": {"max_iterations": int, "min_iterations": int, "no_progress_rounds": int},
     "toolchain": {"name": str, "cargo_locked": bool, "cargo_timeout_seconds": int},
     "checks": {"clippy_rubric_args": list, "clippy_groups": list, "forbid_unsafe_in_lib": bool,
                "forbid_line": str, "hardcode_min_literal": int},
@@ -88,6 +88,8 @@ def validate_pipeline(cfg):
         raise ConfigError("agent.max_turns %d is outside the D7 envelope (1..%d)" % (a["max_turns"], D7_MAX_TURNS))
     if not 1 <= cfg["loop"]["max_iterations"] <= D7_MAX_ITERATIONS:
         raise ConfigError("loop.max_iterations is outside the D7 envelope (1..%d)" % D7_MAX_ITERATIONS)
+    if not 1 <= cfg["loop"]["min_iterations"] <= cfg["loop"]["max_iterations"]:
+        raise ConfigError("loop.min_iterations must be between 1 and loop.max_iterations")
     if a["kind"] not in ("claude", "fake"):
         raise ConfigError("agent.kind must be claude or fake")
     if a["resume_session"]:

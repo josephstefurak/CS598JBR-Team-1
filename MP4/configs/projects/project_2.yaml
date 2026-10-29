@@ -33,6 +33,7 @@ notes:
   - Dependencies are pinned in Cargo.lock (base64, thiserror). Always build with the locked versions.
   - The `test` bin is also declared as [[test]], so the tests run twice under cargo test. That is benchmark infrastructure; ignore the warning about multiple build targets.
   - cli::main must become `pub fn main() -> i32` (owner ruling D-CLIMAIN). Do not add a bin target.
+  - Keep every public item of a module defined directly in src/<module>.rs, not in submodules or behind pub use re-exports; the interface check reads only that file.
 rulings:                               # owner rulings, M3 gate 2026-10-29 (why.md D)
   D-ALLOW: "One allow, that fn only"
   D-CLIMAIN: "Make it pub fn main"

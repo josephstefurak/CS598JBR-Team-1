@@ -15,8 +15,13 @@ and may start a new session with that feedback.
   `#![forbid(unsafe_code)]`, is placed by the wrapper and must stay.
 - The C sources. They are reference material only.
 
-The wrapper restores any of these files if they change and records the change
-as an integrity violation. An iteration with a violation can never succeed.
+Do not create files outside `src/` (no `build.rs`, `.cargo/`, `clippy.toml`,
+`tests/`, `examples/`, `.claude/` or notes) and do not create symlinks. The
+wrapper deletes them.
+
+The wrapper restores any of these files if they change, deletes files it did
+not expect, and records each as an integrity violation. An iteration with a
+violation can never succeed.
 
 ## The interface
 
@@ -43,8 +48,11 @@ items when you need them.
   output format. Where the C has undefined behaviour, choose defined,
   non-panicking behaviour and say so in your final status. The project notes
   in the user message list known cases and the rulings for them.
-- `#[allow(...)]` attributes are forbidden, except any the project notes
-  explicitly permit.
+- Lint-level attributes are forbidden in your code: `allow`, `expect`, `warn`,
+  `deny` and `forbid`, at item or module level (`#![...]`), and inside
+  `cfg_attr`. The only exceptions are the `#[allow(...)]` attributes the project
+  notes explicitly permit, on the item they name. Fix the code instead of
+  silencing the lint.
 - Write idiomatic Rust: slices instead of pointer and length, `Option` and
   `Result` instead of sentinels, iterators instead of index loops where it
   reads better, `match` instead of integer tags, no needless `clone()`,
