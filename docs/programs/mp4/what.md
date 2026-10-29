@@ -403,7 +403,7 @@ optionally `simplify`.
 
 **Spec**:
 1. Create `MP4/docs/rubric_traceability.md`: one row per why.md R and Z key
-   (38 rows) with columns Artifact path(s) | Verification command | Evidence
+   (37 rows: 21 R + 16 Z; corrected M5, was 38) with columns Artifact path(s) | Verification command | Evidence
    (output excerpt or path) | Status (verified / pending-run / proxy /
    owner-blocked) | Phase. Fill the seven T1/T2 rows now by running each
    verification command and pasting real output. Write
@@ -434,7 +434,7 @@ optionally `simplify`.
 
 **Owner gates**: none.
 
-**Verification**: `rubric_traceability.md` has 38 rows; the 7 T1/T2 rows are
+**Verification**: `rubric_traceability.md` has 37 rows; the 7 T1/T2 rows are
 verified with pasted command + output, the rest pending-run/owner-blocked
 (status histogram printed); adversarial table shows 7/7 traps caught with
 check name and message; fresh-clone transcript pasted with exit codes 0;
@@ -736,12 +736,12 @@ safety numbers; inventing a usage-limit anecdote; editing `translations/`.
 report and trajectories, and the branch is in a state the owner could submit
 as-is if the blocked rows never cleared.
 
-**Why / findings covered**: all 22 R keys, Z1-Z16, D4, D9.
+**Why / findings covered**: all 21 R keys, Z1-Z16, D4, D9.
 
 **Tooling**: `code-review` (max) over the diff since M8.
 
 **Spec**:
-1. Rubric walk: for each of the 22 rows run the verification from `why.md`
+1. Rubric walk: for each of the 21 rows run the verification from `why.md`
    against a fresh clone in scratch (`--help`, `--dry-run` both projects,
    `--check-only` both projects after `cargo clean`); mark verified / proxy /
    owner-blocked in `rubric_traceability.md` with pasted evidence; every T4
@@ -764,7 +764,7 @@ as-is if the blocked rows never cleared.
 
 **Owner gates**: none.
 
-**Verification**: `rubric_traceability.md` status histogram printed: 22 rows
+**Verification**: `rubric_traceability.md` status histogram printed: 21 rows
 none pending except exactly the owner-blocked ones; fresh-clone output pasted
 with exit codes 0; consistency table with zero mismatches after fixes; scans
 clean; provenance exit 0 both projects; review-3.md committed; floor passes.

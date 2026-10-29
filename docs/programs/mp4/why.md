@@ -10,7 +10,10 @@ Source of truth for grading: the MP4 handout, 430 points, due 2026-11-18
 
 ---
 
-## R — Rubric rows (22 rows, 430 points)
+## R — Rubric rows (21 rows, 430 points)
+
+*Corrected M5 (2026-10-29): the handout lists 3 + 4 + 2 x 4 + 6 = 21 point-bearing
+deliverables; the earlier "22 rows" was a miscount (the table always had 21).*
 
 | Key | Task | Pts | Requirement (condensed from handout) | How a reviewer verifies it from the repo | Owner-blocked |
 |---|---|---|---|---|---|
@@ -52,13 +55,13 @@ overlaps the 21-30 band; read as a typo for >30. Verified M1, 2026-10-28.)
 
 | Key | Trap | Guard in code |
 |---|---|---|
-| Z1 | Altering benchmark tests or required public interfaces to force a pass may result in zero credit for the affected categories | `integrity.py` checksum manifest; restore + record; iteration can never be green |
-| Z2 | Detecting benchmark inputs and returning hard-coded outputs receives zero functional-correctness credit even if visible tests pass | test-literal hard-coding scan; `if <expr> == <literal> { return` heuristic; M8 manual read |
+| Z1 | Altering benchmark tests or required public interfaces to force a pass may result in zero credit for the affected categories | `integrity.py` checksum manifest; restore + record; iteration can never be green. M5: files the agent adds outside `src/` (`.cargo/config.toml`, `clippy.toml`, `tests/`, `build.rs`) are not reverted; review-1 G1, asked at M6 |
+| Z2 | Detecting benchmark inputs and returning hard-coded outputs receives zero functional-correctness credit even if visible tests pass | test-literal hard-coding scan (M5: satc's harness has no string literals, so it cannot fire for project_1); the `if <expr> == <literal> { return` heuristic is not implemented in code (M5), so the M8 manual read is the guard |
 | Z3 | Calls the original C implementation through FFI = 0 safety points; the Rust must implement the behaviour itself | `safety_check.py` fails on `extern "C"`, `#[link`, `libc::`, `cc::`, `build.rs`, any `*.c`/`*.h` under translations |
 | Z4 | Wrapping unsafe inside a safe-looking function does not remove it from the metrics | regex counts count every unsafe region regardless of wrapper |
 | Z5 | Do not modify the provided tests (reading and running is allowed) | Z1 guard; agent has no git; test files in manifest |
 | Z6 | Do not replace the specified Rust interface | `check_interface.py` pub-item diff; interfaces in manifest |
-| Z7 | Do not manually repair individual translated functions; prompts, agent config, orchestration and reruns are allowed; infrastructure interventions must be documented | `integrity.py --provenance` (translations == final run's last snapshot) in the floor; `configs/CHANGELOG.md`; README interventions section |
+| Z7 | Do not manually repair individual translated functions; prompts, agent config, orchestration and reruns are allowed; infrastructure interventions must be documented | `integrity.py --provenance` (translations == the snapshot of the final run's `final_iteration_dir`, M5) in the floor; `configs/CHANGELOG.md`; README interventions section |
 | Z8 | A single "translate this project" prompt saved to disk does not satisfy Task 2 | loop with >= 2 iterations recorded; feedback text in every repair prompt |
 | Z9 | Supplying project-specific context is allowed; hard-coding individual C function implementations is not | selftest asserts no Rust fn bodies for interface items in configs/ or src/ |
 | Z10 | Never commit API keys, tokens, passwords or credentials; remove secrets from trajectories | `scrub_secrets.py --check` on write, before commit, in the floor; `git log -p` scan before the owner pushes |
@@ -139,7 +142,7 @@ overlaps the 21-30 band; read as a typo for >30. Verified M1, 2026-10-28.)
 - D8 `read_test_vector` is **known-failing**: excluded from the success predicate, wrapper verifies it is the only failure and fails on the documented assertion, prompt forbids suppressing callbacks, README and report disclose it, **owner raises it with course staff**; any ruling is injected into `configs/projects/project_2.yaml`.
 - D9 Cut-off **2026-11-15** for M12/M13; afterwards they are marked dropped and proxy numbers ship labelled.
 - D10 Jacob and Ross polish the report prose; Joseph + sessions do everything else.
-- D-ALLOW (**confirmed M3 gate 2026-10-29: "One allow, that fn only"**) exactly one `#[allow(clippy::too_many_arguments)]` on `satc_is_separating_axis`; all other allow-attributes forbidden (grep-checked).
+- D-ALLOW (**confirmed M3 gate 2026-10-29: "One allow, that fn only"**) exactly one `#[allow(clippy::too_many_arguments)]` on `satc_is_separating_axis`; all other allow-attributes forbidden (grep-checked by the M8 review; M5 found the loop does not enforce it, review-1 G1 asks the owner at M6).
 - D-CLIMAIN (**confirmed M3 gate 2026-10-29: "Make it pub fn main"**) libpsbt `cli::main` becomes `pub fn main() -> i32`, no extra bin.
 - D-FAITHFUL (**confirmed M3 gate 2026-10-29: "Faithful; define UB safely"**) faithful where the C is well-defined; defined non-panicking behaviour where the C is UB; every ruling in the project yaml and README.
 - D-FORBID (**confirmed M3 gate 2026-10-29: "Yes, inject it"**) the wrapper injects `#![forbid(unsafe_code)]` at workspace init as a documented infrastructure intervention ("program logic affected: no").

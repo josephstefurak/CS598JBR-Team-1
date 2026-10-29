@@ -57,7 +57,7 @@ the specific conflict rather than picking an alternative.*
 | M2 | Checks library, integrity guards, self-test | **done** | 2026-10-28 — a8994d9 | selftest 54 PASS / 0 FAIL (baseline null → 54); interface items satc 45, libpsbt 52; check-only on pristine satc: build.ok false, E0583, missing 45; course tool exit 2; check-only on M1 Baseline B copies reproduces M1 clippy split (libpsbt harness style 2) and 4 tests after dedupe |
 | M3 | Configs, prompts, agent runner, smoke run | **done** | 2026-10-29 — 2e0f3d2 | rulings: all 4 defaults + D-STRUCTOUT; selftest 54 → 88 (+34, incl. 5 runner scenarios); smoke 2/3 D7 calls spent: init tools 6+StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5; git denied; cargo 1.89.0-nightly; no leak markers; read-only Bash auto-approved (finding) → fixed same day, probe 5/5, D7 smoke calls now 3/3 spent |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **done** | 2026-10-29 — 23c88b2 | selftest 88 → 120 (+32); drills A–H + D2, E2 all PASS (A SUCCESS@2, B MAX_ITERATIONS@1, C NO_PROGRESS@4, D restored, E attempt2, E2 exit 75, F 143→resume, G rerun identical, H tamper reverted); README 12/12 headings, generated sections current; no model calls |
-| M5 | Review 1: pipeline vs rubric, guard test, traceability | **not-started** | — | — |
+| M5 | Review 1: pipeline vs rubric, guard test, traceability | **done** | 2026-10-29 — 1ac3cd4 | 50 findings (44 angles + 6 sweep): 32 fixed + security S1/S2, 6 to owner gates G1–G7 (asked at M6), 12 backlog/M8/M12; selftest 120 → 166 (+46); traps 7/7; interface fuzz 241 hangs + 92 crashes → 0; matrix 37 rows (6 verified, 22 pending-run, 2 proxy, 7 owner-blocked); fresh clone exit 0 before and after the fixes |
 | M6 | Full run: project_1 (satc) | **not-started** | — | — |
 | M7 | Full run: project_2 (libpsbt) | **not-started** | — | — |
 | M8 | Review 2: translations and trajectories vs rubric | **not-started** | — | — |
@@ -737,6 +737,132 @@ loggedIn true, and `caffeinate -dims` should be running (O6). **O1 still
 deferred.** D8 remains the working assumption, and O1 must be resolved or
 consciously accepted before submission.
 
+### M5 — Review 1: pipeline vs rubric, guard test, traceability (2026-10-29, 1ac3cd4 + this commit)
+
+**Shipped** (product terms): Before any quota is spent, the pipeline has been reviewed end to end, attacked
+the way a misbehaving agent would attack it, and repaired. The run can no longer:
+- declare success while a test hangs or crashes;
+- wedge forever, or crash on every resume, when the agent leaves a half-written file;
+- leave runaway test processes behind;
+- measure a tampered test build after restoring the test file;
+- count the agent's own unit tests in the graded totals;
+- fail provenance after a usage-limit retry;
+- spend a second agent call on one attempt;
+- inherit an API key or the caller's build flags.
+
+Every graded rubric row and zero-credit trap now has a row in `MP4/docs/rubric_traceability.md`, with the
+command that checks it and the evidence so far. The seven zero-credit traps from the spec are permanent
+selftest assertions. The holes that need an owner decision (lint suppression, files outside `src/`,
+auth-error pause, minimum iterations, agent environment, interface layout, best-vs-last, transient
+errors) are written up as a seven-question batch for the start of M6.
+
+**Deviations from spec**:
+- **37 rows, not 38.** The handout has 21 point-bearing rubric rows, and why.md's table always had 21. The
+  "22 rows" header was a miscount, and the spec's 38 was derived from it. The handout was re-read with
+  pypdf to confirm. Counts corrected in why.md and in what.md (M5, M11).
+- **T1/T2 rows: 5 of 7 verified.** R-T1-TOOLLIST and R-T2-TRAJECTORIES depend on trajectories, so they are
+  `pending-run`, with their pre-run evidence pasted. The spec's "the 7 T1/T2 rows are verified" was read as
+  "verified as far as they can be judged before a run" (the spec's own Goal wording).
+- **Z9 marked `verified`.** It is a pipeline-side check and complete now; the spec expected the non-T1/T2
+  rows to be pending-run or owner-blocked.
+- **`/security-review` could not start.** Its first step needs `origin/HEAD`, which this repository does not
+  have. Setting it would change the owner's git metadata, so the security pass was done by hand and
+  recorded in review-1.md.
+- **No per-candidate verifier agents.** The code-review recipe's separate verifier per candidate was not
+  run. Candidates were verified by reproduction (by the finders or this session) or by direct reading
+  (review-1.md, Method).
+- **Fixes built in a scratch clone.** They were written in a scratch clone while the reviewers read the real
+  tree, then ported as one patch.
+- **Fixes beyond "mechanical", flagged for owner veto:**
+  - the missing-init fail-closed rule;
+  - the `apiKeySource` check;
+  - the cap of 3 consecutive usage-limit attempts before exit 75;
+  - refusing a new run while another run of the project is open.
+
+  All four enforce documented invariants (isolation asserted on every call, D1 subscription only, no
+  unattended unbounded spend), so they were treated as bug fixes rather than stop-semantics changes. They
+  are listed so the owner can veto them at the M6 gate.
+- **New SUCCESS blockers counted as bug fixes.** The hung-test, clippy-error and unexplained-`cargo test`-exit
+  blockers make SUCCESS match its documented definition: "every test passes", and "clippy warnings 0" assumes
+  that clippy ran. They are listed for the same veto.
+- Spec drift count: 1 immaterial (the row count). No plan amendment proposed.
+
+**Owner gates**: none for this row. The seven gate questions (G1–G7) are logged for M6 step 1, per spec, and
+not asked here.
+
+**Verification** (real output):
+- **Self-test.** `python3 -I MP4/src/selftest.py` printed `selftest: 166 PASS, 0 FAIL` (exit 0, 86.9 s), up
+  from the 120 baseline (+46).
+  - The new `_run_m5` section holds the 7 guard traps through `do_checks`, and a regression for every fix.
+  - Each new check was shown to fail on the unfixed code: by this session for trap (a)'s stale binary (2/2 vs
+    1/2), the hang (x6: SUCCESS 1/1 vs blocked 1/2) and the parser and prompt checks; the sweep confirmed the
+    rest.
+  - The patched suite ran 162/162 three times in a row in the scratch clone before the sweep fixes added four
+    more checks.
+- **Guard traps** (M5 step 2). All seven are caught: (a) `integrity violations: 1`; (b) the same, and
+  `new_dependency libc` on an unrestored copy; (c) `safety finding: extern_c` + `build_rs`; (d) `build fails`
+  + `unsafe metrics: 2` + `deny_unsafe_build_failed`; (e) `hard-coding hits: 1`; (f) `interface missing 0,
+  changed 1`; (g) `workspace_tamper` with `modified [fixture.rs]`, reverted. The before/after table for these
+  and probes x1–x6 is in review-1.md.
+- **Interface fuzz.** 861 truncations of the 6 real interface files. The original code gave 528 ok, 241 HANG
+  and 92 exceptions. Fixed: 769 ok, 92 `parse_error`, 0 hangs, 0 exceptions.
+- **Fresh clone.** At `5a26167`: `--help` 0, `--dry-run` 0 for both projects (92 and 94 lines), `--check-only`
+  on the fixture 0, on `project_1` exit 2 (no translation yet), `summarize.py` exit 2 (PENDING), `--check-readme`
+  0, `config.py` 0, selftest 120/0, tree clean. At `1ac3cd4`: the same exits, check-only on the fixture shows
+  tests 0/4 (satc's declared tests) with 0 home paths in its output, selftest 166/0, tree clean.
+- **Traceability.** `MP4/docs/rubric_traceability.md` has 37 rows, and its R and Z keys are identical to
+  why.md (diff empty). Histogram: `7 owner-blocked, 22 pending-run, 2 proxy, 6 verified`. The T1/T2 evidence is
+  pasted from the real tree (`claude --version` = `2.1.235 (Claude Code)`, matching the README).
+- **Reusability.** `satc_|psbt_|compactsize` hits only selftest.py, whose assertions use the benchmark names as
+  expected values. The `sk-ant-|Bearer |api_key|/Users/` grep has 3 hits, the scanner's own pattern names
+  (refuted). py_compile exit 0 on 3.9.12. 11/11 entry points insert their own dir.
+- **Lint.** `py_compile` exit 0; `pyflakes` exit 0; `flake8 --max-line-length 120 MP4/src/` exit 0.
+- **Floor and safety checks.**
+  - Scrub: `scrub_secrets.py --check MP4/` → `scrub_secrets: 0 hit(s)`; on `MP4/docs/` → 0 hits.
+  - CLI: `run_pipeline.py --help` exit 0; `--dry-run` exit 0 for both projects; `summarize.py --check-readme` →
+    up to date.
+  - Floor `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/ docs/`: empty over `MP4/`, 9 lines over `docs/`.
+    All 9 quote the pattern itself in the program docs, including the floor line in program.yaml:44, so the
+    floor item as written can never print nothing (discovery below).
+  - Subjects checksums: `verify_subjects` → `{project_1: [], project_2: []}`.
+  - No leftover test processes after the selftest (`ps` empty).
+- **Docs-claims check.** Grepped for "22 rows" / "38 rows", "grep-checked", the Z1/Z2/Z7 guard cells, and the
+  README tool-scope, isolation, `--dry-run` and usage-limit sentences. Fixed 5 count lines in what.md and
+  why.md, 4 guard claims in why.md and 5 README passages, and regenerated the README stopping condition from
+  `summarize.py`.
+- **Spend.** No pipeline model call: no run, no smoke, the D7 envelope is untouched. The review itself ran 11
+  subagents (10 finder angles + 1 sweep), about 3.2 M subagent tokens of this session's subscription, as the
+  spec's `/code-review max` requires.
+- **Tooling pass.** Used: `code-review`. `security-review` was attempted and could not start (`origin/HEAD`).
+  `simplify` was considered and rejected: its cleanups are backlog and out of this row's scope. Workflow was not
+  used (not opted into).
+
+**NOT demonstrated**:
+- No real agent has run against the fixed loop. Every behaviour above is shown with the fake agent or
+  direct calls on the fixture.
+- The agent receiving an unscrubbed prompt, and the `apiKeySource` check, are verified only against
+  recorded streams and the fake CLI.
+- Lint suppression and crate-root files still reach SUCCESS (probes x2, x3), pending G1.
+- Isolation from the repo-root CLAUDE.md in the real working directory is not demonstrated (F36): the
+  smoke calls ran from a temp directory.
+- The SIGKILL-orphaned agent B and the tamper check on attempts after a usage-limit pause are not fixed
+  (backlog).
+- The libpsbt stdout-glue fix is shown on synthetic output, not on a real libpsbt test run.
+- The fuzzing covers truncations of the six interface files, not arbitrary agent code.
+
+**Discoveries logged for later rows**:
+- (M6 step 1) G1–G7, review-1.md § "Owner decisions for M6 step 1".
+- (M6) Scan iteration 1's assistant text for the leak markers (F36).
+- (M12) Wire `safety.tool`; `course()` must return numbers, not None (F35).
+- (M8) The Z2 numeric heuristic does not exist; the manual read is the only guard for project_1 (F34).
+- (post-merge backlog) F33, F37–F44.
+- (close-out) The floor item `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/ docs/` always matches its own
+  text in program.yaml and the program docs. Narrow it to `MP4/` (plus `docs/programs/mp4/evidence/`) or
+  accept the known 9 lines.
+
+**Queued for owner**: O9 (answer G1–G7 at the start of M6; runbook Stage 2). Optional: remove the leaked
+`$TMPDIR/mp4crate_*` copies (runbook Stage 2). **O1 still deferred.** D8 remains the working assumption.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -752,4 +878,5 @@ consciously accepted before submission.
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | open |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
 | O8 | Log the `claude` CLI in (`claude auth login`) and keep it logged in for model runs (runbook Stage 2) | The CLI's login is separate from the desktop app's; it was logged out, so agent B failed with "OAuth session expired" (first diagnosed, wrongly, as a sandbox issue) | M3 smoke; M6, M7, M9 | **done 2026-10-29** (owner ran `claude auth login`; status loggedIn true, claude.ai, max) |
+| O9 | Answer the M6 gate batch G1–G7 (stop semantics and tool permissions), each with options and a recommendation in `docs/programs/mp4/reviews/review-1.md` § "Owner decisions for M6 step 1" | M5 found holes whose fixes change stop semantics or permissions; what.md M5/M6 route them to the owner at M6 step 1 | M6 | open (asked by the M6 session at its start; runbook Stage 2) |
 | O7 | After the program reports ready-to-merge: merge `mp4-program` into `main` with a merge commit and push `main` before 2026-11-18 23:59 | invariant 6/7 | submission | open |

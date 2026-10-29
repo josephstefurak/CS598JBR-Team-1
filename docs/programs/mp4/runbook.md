@@ -81,6 +81,28 @@ Before M6, M7 and M9, check that `claude auth status` shows `"loggedIn": true`.
 (An earlier version of this note blamed the session sandbox. That was wrong:
 once the CLI was logged in, the session shell could use it.)
 
+**O9 — the M6 gate batch (from M5, 2026-10-29).** The M6 session starts by asking seven questions
+(G1–G7) about stop rules and the agent's permissions. Each has options and a recommendation in
+`docs/programs/mp4/reviews/review-1.md` § "Owner decisions for M6 step 1". Read that section before M6;
+nothing in M6 starts until they are answered.
+
+**Optional — temp-dir leftovers.** Before M5's fix, every safety check left a crate copy in your temp
+directory (87 found on 2026-10-29, about 75-100 MB; macOS also purges them on its own). To see them and,
+if you want, remove them:
+
+```bash
+ls -d "$TMPDIR"/mp4crate_* | wc -l
+```
+
+```bash
+rm -rf "$TMPDIR"/mp4crate_*
+```
+
+**Behaviour to know before M6 (M5 fixes).** A new run is refused while another run of the same project is
+still open (running, paused or interrupted): continue it with `--resume-run`. A resume is refused if the
+configuration changed since the run started, or if `claude auth status` is logged out. After three refused
+usage-limit attempts on one iteration the run exits with code 75 instead of waiting again.
+
 ## Stage 3 — when the course releases its tools (cut-off 2026-11-15)
 
 **O3 — unsafe-metrics tool.** Place it at `MP4/tools/unsafe-metrics/` if its
