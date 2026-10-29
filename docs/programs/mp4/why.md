@@ -149,4 +149,16 @@ overlaps the 21-30 band; read as a typo for >30. Verified M1, 2026-10-28.)
 - D-TRAJ (default) commit every run as stream-json + diagnostics; no `~/.claude` session copies; home paths → `~`.
 - D-DIAGRAM (default) TikZ in `.tex`, Mermaid in README.
 - D-M5GATES (owner, 2026-10-29, review-1 G1–G7, answered in the M5 session): G1 "Both guards" (revert and record files outside src/ that are not in the skeleton, plus symlinks; and a lint-attribute scan that blocks SUCCESS except the D-ALLOW pair); G2 "Pause, resumable" (auth failure exits 75, resume after `claude auth login`); G3 "Require 2 iterations" (`loop.min_iterations: 2`); G4 "Keep env, deny flags" (keep the smoke-verified environment, M6 scans iteration 1 for leak markers, deny `--config` and `--manifest-path` on the allowed cargo commands); G5 "Add the project note" (keep every public item in `src/<module>.rs`); G6 "Ship the best" (restore the best-scoring snapshot into translations/ and name it in `final_iteration_dir`); G7 "Pause" (overloaded/connection failures pause like a usage limit, same 3-attempt cap). Applied in M6 step 1, with CHANGELOG entries for the config parts.
+- D-M8GATES (owner, 2026-10-29, M8 gate, review-2.md §6–7; verbatim option labels):
+  - M9 rerun: "Neither (Recommended)". M9 is dropped and the M6/M7 results are accepted.
+  - After a success that min_iterations continues past: "Ship the success, stop (Recommended)". Once an
+    iteration has succeeded and min_iterations is reached, stop at the first unsuccessful iteration and ship
+    the successful one; this also covers ABORT.
+  - Outage wait: "Short backoff (Recommended)": 2, then 4, then 8 minutes under the 3-attempt cap, with no
+    wait carried over to a resume.
+  - Lint hardening: "Before any rerun (Recommended)": pinned cargo/clippy config plus a `--force-warn`
+    comparison.
+
+  The last three were asked as "applied before any rerun; otherwise the post-merge backlog". With M9 dropped
+  they are approved changes in `post-merge.md`; none affects the committed runs.
 - D-STRUCTOUT (owner, M3 2026-10-29: "Allow StructuredOutput too") `--json-schema` adds a `StructuredOutput` tool to the init tools[]; the isolation check expects exactly the configured six plus `StructuredOutput`, anything else aborts. Evidence: `docs/programs/mp4/evidence/smoke/attempt1_isolation_abort/`.

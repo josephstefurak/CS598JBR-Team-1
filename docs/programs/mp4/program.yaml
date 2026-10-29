@@ -64,6 +64,7 @@ baselines:                        # recorded by the phase that creates each harn
     f_pub_signature: "interface missing 0, changed 1"
     g_hand_edit: "workspace_tamper modified [fixture.rs], reverted"
   m5_open_gaps: "closed at M6 step 1 (f69ae8d): lint attributes block SUCCESS, files outside src/ and symlinks are removed and recorded (G1); selftest 166 -> 192"
+  m8_review_fixes: "M8 2026-10-29: review-2 fixes in MP4/src; selftest 192 -> 214, 0 FAIL; 14/14 mutation reverts caught by _run_m8; check-only of both translations unchanged (summary diff {})"
   # M1 Baseline B, 2026-10-28: unique (lint, file, line) sites with primary span
   # under src/bin/, from the rubric clippy run. rustc = non-clippy warnings.
   # Evidence: MP4/trajectories/project_N/baseline/README.md + clippy.json.

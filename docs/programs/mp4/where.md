@@ -60,8 +60,8 @@ the specific conflict rather than picking an alternative.*
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **done** | 2026-10-29 — 1ac3cd4 | 50 findings (44 angles + 6 sweep): 32 fixed + security S1/S2, 6 to owner gates G1–G7 (asked at M6), 12 backlog/M8/M12; selftest 120 → 166 (+46); traps 7/7; interface fuzz 241 hangs + 92 crashes → 0; matrix 37 rows (6 verified, 22 pending-run, 2 proxy, 7 owner-blocked); fresh clone exit 0 before and after the fixes |
 | M6 | Full run: project_1 (satc) | **done** | 2026-10-29 — c8435d7 (step 1 f69ae8d) | G1–G7 applied, selftest 166 → 192 (+26); run `20261029T184931Z` SUCCESS after 2 iterations / 2 attempts in 7.6 min, no pauses; both iterations 4/4 tests, agent clippy 0/0/0/0, harness 0/0/0/0, proxy safety 0, interface 0/0, integrity 0, lint attrs 0; 29 turns, 39 971 output tokens; 0 leak markers; 2 denials (`ls -R`); check-only diff empty; provenance ok; D7 full run 1/1 for project_1 spent |
 | M7 | Full run: project_2 (libpsbt) | **done** | 2026-10-29 — f09f89c | run `20261029T194929Z` SUCCESS after 2 iterations / 2 attempts in 22.1 min, no pauses; pipeline code and configs identical to M6 (diff empty); both iterations 3/4 tests with only `read_test_vector` failing as documented (D8, test.rs:126, left 4 right 0), agent clippy 0/0/0/0, harness style 2 + rustc 8 (M1 baseline), proxy safety 0, interface 52 items 0/0, integrity 0, lint attrs 0; 87 turns (iter 1: 56 of 60), 111 569 output tokens; 0 leak markers; 3 denials (`ls`/`wc`); check-only diff empty; provenance ok; D7 full run 1/1 for project_2 spent |
-| M8 | Review 2: translations and trajectories vs rubric | **not-started** | — | — |
-| M9 | Tuning rerun | **optional — owner-triggered** | — | Flipped to not-started by the M8 session only if the owner chooses a rerun at the M8 gate; otherwise set `dropped (owner accepted M6/M7 results)` |
+| M8 | Review 2: translations and trajectories vs rubric | **done** | 2026-10-29 — 18b3a74 (fixes) | fresh-clone re-measurement 0 mismatches (both projects, 11 fields); spot checks satc 52/52 bit-identical, libpsbt 31/34 (3 = ruled UB, base62 index 63); `/code-review max` of f69ae8d: 10 angles + sweep, 23 + 6 defects, 24 fixed, 4 to the owner (D-M8GATES), cleanup to backlog; committed runs unaffected; selftest 192 → 214 (+22), 14/14 mutation reverts caught; 27 traceability rows verified; owner: M9 "Neither" |
+| M9 | Tuning rerun | **dropped (owner accepted M6/M7 results)** | 2026-10-29 (M8 gate) | D-M8GATES: "Neither (Recommended)". The three approved orchestration changes went to `post-merge.md` |
 | M10 | Results, README final, report draft | **not-started** | — | — |
 | M11 | Review 3: fresh-clone rubric walk, consistency, submittable as-is | **not-started** | — | — |
 | M12 | Course unsafe-metrics tool: adapter, retroactive run, table swap | **blocked (course unsafe-metrics tool not yet released; owner drops it at the path named in the runbook and flips this row to not-started)** | — | Cut-off 2026-11-15 (D9) |
@@ -1156,6 +1156,183 @@ MP4/src/run_pipeline.py --project project_2 --yes`. The Mac was on battery (100 
 **Queued for owner**: nothing new. M8 (review 2) is next and asks the M9 rerun question at its gate. **O1 still
 deferred.** D8 remains the working assumption, and O1 must be resolved or consciously accepted before
 submission.
+
+### M8 — Review 2: translations and trajectories vs rubric (2026-10-29, 18b3a74 + this commit)
+
+**Shipped** (product terms): Both translations were measured again from scratch by an independent path, and the
+numbers held exactly. Their behaviour was compared with the original C programs on inputs the tests never use,
+and they behaved the same, including the C bugs the owner ruled must be kept. Every Task 3 rubric row, the
+trajectory row and every zero-credit trap now has a verdict with pasted evidence; 27 of 37 traceability rows are
+`verified`.
+
+A maximum-depth code review of the safeguards added at M6 found real holes. In a future run, an agent could
+silence the graders' lint check in several ways the safeguards missed. A mistyped maintenance command could
+delete the committed translations. An interrupted stop could run an extra paid iteration. 24 of the
+29 findings are fixed and proven by tests that fail when a fix is removed. The rest are recorded with the
+owner's decisions. Neither committed run was affected by any of them. The owner accepted the M6/M7 results,
+so there will be no tuning rerun.
+
+**Deviations from spec**:
+- **Fixes in MP4/src before the gate.** Step 6 says "fix mechanical findings in `MP4/src`/`MP4/configs`".
+  24 fixes landed in `MP4/src`, plus the README interventions section and a CHANGELOG entry. Several are not
+  small:
+  - the after-measurement integrity check;
+  - the guard-aware ship-best ranking;
+  - the persisted stop;
+  - the pause snapshot;
+  - the crate-workspace guard.
+
+  They were treated as mechanical because each enforces an invariant the program already states:
+  - G1 "no lint suppression / files outside `src/` reach SUCCESS";
+  - D7 "no iteration beyond the envelope";
+  - Z7 "no hand edit credited to the agent".
+
+  Policy changes (stop semantics, wait times, measurement redesign) went to the owner instead.
+
+  Existing code changed, with before → after:
+  - `integrity.verify`: restored immutable files, but accepted a symlink with identical content → now
+    replaces every symlink, and refuses a non-crate directory.
+  - `integrity.hardcode_scan`: read only `*.rs` library sources → now every library file, matching non-`.rs`
+    files as raw text.
+  - `mp4common.copy_crate`: dereferenced symlinks, and crashed on a dangling one → copies links as links.
+  - `run_pipeline.do_checks`: discarded the post-measurement verify → records and restores it.
+  - `tamper_check`/`ship_best`: `rmtree` with no guard → `restore_src`.
+  - `finalize`/`_drive`: the stop was saved only after `ship_best` → `pending_stop` is saved first.
+  - `_usage_limit`: capped on the attempt number → capped on unattended waits.
+  - `write_index`: last iteration → shipped iteration.
+  - `agent_runner.classify`: missed the CLI's own connection wordings → now matches them.
+  - `prompt_builder.digest`: uncapped integrity list → capped at 20.
+  - `config.validate_pipeline`: added a bound on `min_iterations`.
+  - `summarize.compare`: did not compare the guard counts → now does.
+
+  The f69ae8d code rewritten here (`sweep_strays`, `lint_attribute_scan`, `leak_scan`) was this program's
+  own new code under review.
+- **No separate verifier agent per candidate**, as at M5. The finders reproduced their candidates with scripts,
+  and most were found by several angles (C9 by 6, C1 by 5, C3 by 5). This session confirmed the single-source
+  ones against the code.
+- **Owner gate widened from 1 question to 4.** The required M9 question was asked together with the three
+  stop-semantics/measurement items the review could not settle as mechanical. All four were asked in one batch.
+- **Behavioural spot check, C side.** A scratch `<endian.h>` shim (identity on little-endian arm64) and
+  `-ffp-contract=off` were needed. clang's default FMA contraction makes the C differ from itself by
+  `-ffp-contract`, while Rust never contracts. Both builds are reported.
+- **Spec drift: none.** "≥ 3 inputs per project" was exceeded: satc 52 values, libpsbt 34 lines.
+
+**Owner gates**: asked in one batch (M8 gate, review-2.md §7), with the answers verbatim (why.md D-M8GATES):
+- **M9 rerun:** "Neither (Recommended)". M9 is set to `dropped (owner accepted M6/M7 results)`.
+- **After a success:** "Ship the success, stop (Recommended)".
+- **Outage wait:** "Short backoff (Recommended)".
+- **Lint hardening:** "Before any rerun (Recommended)".
+
+The last three were asked as "applied before any rerun; otherwise the post-merge backlog". With no rerun they are
+PM1–PM3 in `post-merge.md`.
+
+**Verification** (real output; full text in `docs/programs/mp4/reviews/review-2.md`):
+- **Step 1, fresh clone.** `git clone` at 88a45ac into scratch, then `cargo clean`, `build --all-targets
+  --locked`, `check`, `test --locked --no-fail-fast` and the exact rubric clippy, by hand:
+  - satc: build/check/test exit 0, `4 passed; 0 failed`, clippy exit 0 with 2 rustc warnings, both
+    `src/bin/satc_test.rs`.
+  - libpsbt: build/check exit 0, test exit 101 with `3 passed; 1 failed` in both test executables, clippy
+    exit 0, every span in `src/bin/test.rs`.
+  - `--check-only` from the clone against `run_summary.json` `final`: 11 fields compared, mismatches `{}` for
+    both projects.
+- **Step 2, integrity and traps.**
+  - Provenance True for both; `verify --no-restore` gives `{"ok": true, "violations": []}` for both;
+    checksums 13/0 and 28/0.
+  - Every protected file byte-identical; `lib.rs` = forbid line + skeleton. Interface 45/0/0 and 52/0/0.
+  - unsafe/FFI greps 0; `hardcode_scan` 0. Allow attributes: the forbid line plus `satc.rs:411` only.
+  - Library counts: satc unwrap/expect/panic/assert/clone/cast all 0; libpsbt clone 1, casts 13, the rest 0.
+  - Safety proxy 0/0/0/0 for both, `deny_unsafe_build ok`.
+  - `run_summary` iterations equal INDEX.md (2 each); manifest config hashes equal the committed configs.
+  - The iteration-2 prompts carry all six feedback sections.
+  - Init isolation: 6 tools + StructuredOutput, no MCP, no slash commands, dontAsk, `claude-opus-5`, ×4.
+  - Tool names in the streams: 24 Bash, 17 Edit, 6 Glob, 2 Grep, 53 Read, 4 StructuredOutput, 6 Write.
+  - Scrub 0; secret grep 0; no file > 50 MB; project identifiers outside the selftest 0.
+- **Step 3, spot checks.**
+  - satc: 52/52 values bit-identical to the C built with `-ffp-contract=off`, including rotation sign, NaN
+    `normalize([0,0])`, `project` = (45, 60) and the response written on a miss. 4 values differ only against
+    clang's FMA build.
+  - libpsbt: 31/34 lines identical: compact-size marker overwrite (65535 → `ffff`), read errors for
+    `fe`/`ff`, base64 round trips, failing empty decode, undersized buffer. The 3 others are all base62
+    index 63: C undefined behaviour reads `p`, and the Rust gives the ruled NUL (D-FAITHFUL).
+  - Classification: no translation defect.
+- **Step 4, structural inspection.** `review-2-structural.md`, with `path:line` throughout. Shape: the
+  interface imposes a C-shaped API, and where the agent was free it sometimes mirrored C control flow
+  (`psbt_read`). Hard-coding: none found after reading every function that consumes test-visible inputs.
+- **Step 5, repair candidates.** `repair-candidates.md`: 8 candidates (4 driven by feedback, 4 self-review),
+  quotes grep-confirmed. This session re-checked R1 (`error[E0502]` at P2 iter_01 L633) and R2
+  (`byte_char_slices` at L652, the `b"\0"` edit at L657).
+- **Step 6, code review.**
+  - 10 finder angles plus a gap sweep produced about 76 candidates, deduplicated to 29 defects (C1–C23,
+    S1–S6) plus cleanup.
+  - Disposition: 24 fixed (C5, S4 and C22 partially), 4 decided by the owner, 1 prompt item and the cleanup
+    to the backlog.
+  - ReportFindings was called with the 15 most severe, then again with outcomes: 13 fixed, 2 skipped (C6,
+    C11).
+  - Committed runs unaffected: every Write/Edit in the four streams targets `src/*.rs`, all
+    `integrity.json` are empty, no bypass channel is present, no ancestor config file exists, and both runs
+    stopped at SUCCESS.
+- **Fixes, verified.**
+  - `python3 -I MP4/src/selftest.py` → `selftest: 214 PASS, 0 FAIL` (192 → 214, +22). The new `_run_m8`
+    section has one or more checks per fix; the cap test was updated for S3.
+  - **Mutation check.** Each of 14 fixes was reverted, one at a time, in a scratch copy, with only
+    `_run_m8` run. All 14 reverts are caught:
+    - 13 make their check FAIL: C1, C2, C3 (+C9), C4, C5, C7, C8, C9, C10, C12, C14, C15, C16.
+    - C13's revert raises `shutil.Error`.
+  - After the fixes: `--check-only` of both translations gives summary diff `{}` against the committed
+    results, `summarize.compare` with the guard fields gives `[]`, and provenance is ok for both. The
+    rewritten `check.json` files differ only in timestamps and dict order, so they were restored.
+  - The wider leak scan over the four real streams finds 0 markers.
+- **Floor.**
+  - `py_compile` 0, `flake8 --max-line-length 120` 0, `pyflakes` 0; selftest 214/0; scrub 0; `--help` 0;
+    check-only and provenance 0 for both projects; `--check-readme` up to date.
+  - The secret grep over `MP4/` gives the 3 known self-quoting lines in `rubric_traceability.md` (M6
+    discovery). The tree is clean after the commits.
+- **Docs-claims check.**
+  - Grepped `last iteration|final iteration's snapshot|AUTH_ERROR|%d-minute|no project has been translated|
+    162 at M5|213`.
+  - Fixed: the README interventions intro plus 2 new bullets; 3 integrity docstrings; the traceability
+    header, the selftest count (including this session's own "162 at M5" slip, which is now 166), and the
+    R-T2-SRC evidence block (line numbers re-run); the CHANGELOG entry for the M8 behaviour changes,
+    including the logged 5xx decision.
+- **Tooling pass.**
+  - Used: `code-review` (max). Agents: 2 for steps 4–5, plus 10 finders and 1 sweep.
+  - Workflow was not used: it was not opted into, so plain Agent calls were used instead.
+  - `simplify` was rejected: its cleanups are backlog (PM5).
+- **Spend.** No pipeline model call; the D7 envelope is untouched (tuning slots 0 of 2 used, smoke 3 of 3 as
+  before). The review's 13 subagents used about 3.4 M tokens of this session's subscription.
+
+**NOT demonstrated**:
+- PM3's channels remain open for any future run: macro-built lint attributes, `#[clippy::msrv]`,
+  `cfg(clippy)`, and ancestor `.cargo/config.toml` / `clippy.toml`. They are recorded and approved, but not
+  built.
+- The new safeguards were exercised with the fake agent and direct calls only. No real agent has run against
+  them, and none will under the current plan (M9 dropped).
+- The CLI's connection wordings were confirmed as strings in the 2.1.235 binary, not by inducing a real
+  outage.
+- The spot checks cover 52 + 34 outputs on chosen inputs, not exhaustive behaviour. Hidden tests may probe
+  other paths, and `psbt_geterr`'s constant (config-induced, PM-documented) is a known divergence from the C.
+- Mutation checks covered 14 of the fixes. C19, C21, C23, S1, S2, S3 and S6 have selftest checks but were not
+  reverted to prove they bite.
+- The structural verdicts are one reviewer's reading. Rubric 3.4's structural inspection is subjective, and
+  its points are not predicted here.
+
+**Discoveries logged for later rows**:
+- (M10) Document `psbt_geterr` in the README interventions or idiom notes. It returns the interface's
+  pre-filled constant because our M3 project note said "keep their behaviour"; the C returns the last message,
+  so the CLI prints "psbt error". Say this is a deliberate reading of a pre-filled interface body.
+- (M10) For R-T4-REPAIR-ANALYSIS, pick from `repair-candidates.md`: R3 (correctness, review iteration), R1
+  (compile error), R2 (clippy). There is no memory-safety repair, because the crates never held unsafe code;
+  say so honestly. The C-macro faithfulness story (R3) and the `args_os` fix (R4) are the strongest evidence
+  that the review iteration adds value the tests cannot see.
+- (M10/M11) R-T1-TOOLLIST is still `pending-run`. The tool names in the streams are 6 tools +
+  StructuredOutput (Bash, Edit, Glob, Grep, Read, Write); compare them with the README table.
+- (M10) The spot-check method (bit patterns, `-ffp-contract=off`, the endian shim) is report material for the
+  correctness discussion.
+- (close-out) PM1–PM5 are in `post-merge.md`. The floor's secret-grep item still matches self-quoting doc
+  lines.
+
+**Queued for owner**: nothing new. M10 (results, README final, report draft) is next. **O1 still deferred.** D8
+remains the working assumption, and O1 must be resolved or consciously accepted before submission.
 
 ## Owner-action queue (only the owner can clear these)
 
