@@ -93,9 +93,26 @@ def _toolchain_version():
     return out.strip() if code == 0 else None
 
 
-def _scrub_paths(text, work):
-    text = text.replace(work, "<crate>")
-    return text.replace(os.path.expanduser("~"), "~")
+def _scrub_paths(text, work, log_dir=None, crate_label="<crate>"):
+    """Crate path -> crate_label, log dir -> its repo-relative path, then secrets, e-mails and home paths (Z10).
+    macOS reports a temp dir both as /var/... and as /private/var/..., so both spellings are replaced."""
+    for path, label in ((work, crate_label), (log_dir, mc.rel(log_dir, mc.REPO_DIR) if log_dir else None)):
+        if path:
+            for p in sorted({os.path.realpath(path), path}, key=len, reverse=True):
+                text = text.replace(p, label)
+    return scrub_secrets.scrub_text(text)
+
+
+def _scrub_logs(log_dir, work, names=None, crate_label="<crate>"):
+    """Rewrite the logs measure_crate wrote (cargo output carries absolute paths) through _scrub_paths."""
+    for name in names if names is not None else os.listdir(log_dir):
+        p = os.path.join(log_dir, name)
+        if os.path.isfile(p):
+            body = mc.read_text(p)
+            new = _scrub_paths(body, work, log_dir, crate_label)
+            if new != body:
+                with open(p, "w", encoding="utf-8") as fh:
+                    fh.write(new)
 
 
 def check_only(project, crate, out_path):
@@ -116,14 +133,8 @@ def check_only(project, crate, out_path):
             "subjects_checksums_ok": not integrity.verify_subjects(source),
         }
         res.update(measure_crate(work, source, log_dir))
-        text = _scrub_paths(json.dumps(res, indent=2), work)
-        for name in os.listdir(log_dir):
-            p = os.path.join(log_dir, name)
-            with open(p, encoding="utf-8", errors="replace") as fh:
-                body = fh.read()
-            with open(p, "w", encoding="utf-8") as fh:
-                fh.write(_scrub_paths(body, work).replace(log_dir, mc.rel(log_dir, mc.REPO_DIR)))
-        text = text.replace(log_dir, mc.rel(log_dir, mc.REPO_DIR))
+        _scrub_logs(log_dir, work)
+        text = _scrub_paths(json.dumps(res, indent=2), work, log_dir)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     with open(out_path, "w", encoding="utf-8") as fh:
@@ -369,6 +380,7 @@ def smoke_probe(project, claude_bin=None):
 STEPS = ("init", "prompt", "agent", "checks", "closed")   # run_state.json step cursor
 EXIT_USAGE_LIMIT = 75
 EXIT_INTERRUPTED = 143
+MAX_LIMIT_ATTEMPTS = 3    # consecutive usage-limit attempts of one iteration before the run exits for a person
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 STOP_SUCCESS = "SUCCESS"
 STOP_MAX_ITERATIONS = "MAX_ITERATIONS"
@@ -377,6 +389,7 @@ STOP_ABORT = "ABORT"
 STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
 STOP_AUTH_ERROR = "AUTH_ERROR"
 NO_CLIPPY = 10 ** 6   # clippy count used in the score when the build failed and clippy could not run
+MEASURE_LOGS = ("build.log", "test.log", "clippy_rubric.log", "safety_proxy.json")   # + clippy_<group>.json
 
 
 class Interrupted(Exception):
@@ -388,14 +401,21 @@ def _on_signal(signum, _frame):
 
 
 def measure_crate(work, source, log_dir):
-    """Build, test, clippy, safety, interface, integrity (report-only) and hard-coding for one crate."""
-    res = dict(checks.run_all(work, log_dir))
+    """Build, test, clippy, safety, interface, integrity (report-only) and hard-coding for one crate.
+    Tests are counted against the benchmark's own test names (source/src/bin), not whatever ran."""
+    res = dict(checks.run_all(work, log_dir, checks.benchmark_tests(source)))
     res["safety"] = safety_check.proxy(work, raw_path=os.path.join(log_dir, "safety_proxy.json"), source=source)
     res["interface"] = check_interface.compare(os.path.join(source, "src", "interfaces"), work)
     res["integrity"] = {"violations": integrity.verify(work, source, restore=False)}
     res["hardcode_hits"] = integrity.hardcode_scan(work)
     res["summary"] = summarize(res)
     return res
+
+
+def _build_error_count(check):
+    """All build errors; check["build"]["errors"] keeps only the first 50 (a score on it stops moving)."""
+    b = check["build"]
+    return b.get("error_count", len(b["errors"]))
 
 
 def evaluate(check, proj):
@@ -416,6 +436,15 @@ def evaluate(check, proj):
     unexpected = sorted(failed - set(known))
     if unexpected:
         blockers.append("failing tests: %s" % ", ".join(unexpected))
+    missing = t.get("missing_names") or []
+    if s["compiles"] and missing:
+        blockers.append("tests with no result (hung, crashed or timed out): %s" % ", ".join(missing))
+    added_failing = sorted(n for n, st in (t.get("extra_tests") or {}).items() if st == "FAILED")
+    if added_failing:
+        blockers.append("failing tests outside the benchmark: %s" % ", ".join(added_failing))
+    if s["compiles"] and t.get("exit_code") not in (0, None) and not (failed or missing or added_failing):
+        # cargo test failed, but no parsed result explains it (e.g. a doc test that does not compile)
+        blockers.append("cargo test exited %d with no failing test parsed (see test.log)" % t["exit_code"])
     for name, v in known_failing.items():
         if not all(v.values()):
             blockers.append("known-failing test %s does not fail as documented" % name)
@@ -424,6 +453,11 @@ def evaluate(check, proj):
     clippy_total = s["clippy_agent_total"]
     if clippy_total is None or clippy_total > 0:
         blockers.append("agent clippy warnings: %s" % clippy_total)
+    clippy_errors = (check.get("clippy") or {}).get("errors") or 0
+    if s["compiles"] and clippy_errors:
+        # a lint raised to an error in the source (e.g. #![deny(warnings)]) is not counted as a warning: the
+        # warning count of a clippy run that failed is not a measurement
+        blockers.append("clippy errors: %d" % clippy_errors)
     safety_total = sum(v for v in s["safety"].values())
     if safety_total:
         blockers.append("unsafe metrics: %d" % safety_total)
@@ -437,7 +471,7 @@ def evaluate(check, proj):
         blockers.append("integrity violations: %d" % s["integrity_violations"])
     if s["hardcode_hits"]:
         blockers.append("hard-coding hits: %d" % s["hardcode_hits"])
-    score = [s["tests_passed"], -len(check["build"]["errors"]),
+    score = [s["tests_passed"], -_build_error_count(check),
              -(clippy_total if clippy_total is not None else NO_CLIPPY), -safety_total,
              -(s["interface_missing"] + s["interface_changed"])]
     return {"success": not blockers, "blockers": blockers, "known_failing": known_failing,
@@ -544,6 +578,17 @@ def real_run_count():
     return counts
 
 
+def open_runs(traj):
+    """Ids of the runs under traj that are not stopped (running, paused at a usage limit, or interrupted)."""
+    out = []
+    if os.path.isdir(traj):
+        for d in sorted(os.listdir(traj)):
+            sp = os.path.join(traj, d, "run_state.json")
+            if d.startswith("run_") and os.path.exists(sp) and _read_json(sp).get("status") != "stopped":
+                out.append(d[len("run_"):])
+    return out
+
+
 def spend_check(project):
     """D7 envelope: per project one full run, plus at most 2 tuning reruns in total. Returns an error or None."""
     counts = real_run_count()
@@ -574,8 +619,18 @@ def _agent_argv(run, k, n):
     return agent_runner.build_argv(run.cfg, add_dirs=[run.cfg["c_dir"]])
 
 
+def require_intact_subjects(run):
+    """The skeleton is the reference every integrity check compares against: it must still match the
+    committed CHECKSUMS.sha256, or no verdict of this run can be trusted."""
+    bad = integrity.verify_subjects(run.skeleton)
+    if bad:
+        raise SystemExit("%s no longer matches CHECKSUMS.sha256 (%s); restore it with git before resuming" % (
+            mc.rel(run.skeleton, mc.REPO_DIR), ", ".join(bad)))
+
+
 def init_workspace(run):
     """Step 0: fresh workspace from the skeleton, forbid(unsafe_code) injected (D-FORBID), integrity manifest."""
+    require_intact_subjects(run)
     if os.path.exists(run.workspace):
         shutil.rmtree(run.workspace)
     shutil.copytree(run.skeleton, run.workspace)
@@ -583,7 +638,10 @@ def init_workspace(run):
     with open(lib, "w", encoding="utf-8") as fh:
         fh.write(integrity.expected_lib_rs(run.skeleton))
     integrity.write_manifest(run.workspace, run.skeleton)
-    shutil.copytree(os.path.join(run.workspace, "src"), os.path.join(run.dir, "init_src"))
+    init_src = os.path.join(run.dir, "init_src")
+    if os.path.exists(init_src):   # left by an interrupted setup that is now being redone on resume
+        shutil.rmtree(init_src)
+    mc.copy_src_tree(os.path.join(run.workspace, "src"), init_src)
 
 
 def write_manifest(run):
@@ -617,13 +675,26 @@ def tamper_check(run, k):
     if d["clean"]:
         return None
     shutil.rmtree(os.path.join(run.workspace, "src"))
-    shutil.copytree(snap_dir, os.path.join(run.workspace, "src"))
+    mc.copy_src_tree(snap_dir, os.path.join(run.workspace, "src"))   # fresh mtimes: cargo rebuilds
     record = {"iteration": k, "against": snap, "added": d["added"], "removed": d["removed"],
               "modified": d["modified"], "reverted": True}
     run.state.setdefault("workspace_tamper", []).append(record)
     run.log("workspace_tamper before iteration %d: %s (reverted to %s)" % (
         k, ", ".join(d["added"] + d["removed"] + d["modified"]), snap))
     return record
+
+
+def _prompt_for_agent(run, k, it):
+    """What agent B receives: a fresh render, so its paths stay absolute (prompt.md is the scrubbed record, with
+    home paths shown as ~). The render is deterministic for a given state; if it no longer matches the record,
+    the recorded prompt is sent."""
+    with open(os.path.join(it, "prompt.md"), encoding="utf-8") as fh:
+        recorded = fh.read()
+    fresh = build_prompt(run, k)
+    if scrub_secrets.scrub_text(fresh) == recorded:
+        return fresh
+    run.log("iteration %d: prompt.md differs from a fresh render; sending the recorded prompt" % k)
+    return recorded
 
 
 def build_prompt(run, k):
@@ -650,6 +721,7 @@ def do_checks(run, k, n, agent_outcome):
     """Steps 3-8 for one attempt. Idempotent: a rerun after a crash reuses integrity.json and rewrites the
     same check.json and iteration_summary.json."""
     it = run.iter_dir(k, n)
+    require_intact_subjects(run)
     integ_path = os.path.join(it, "integrity.json")
     if os.path.exists(integ_path):
         violations = _read_json(integ_path)["violations"]
@@ -657,6 +729,9 @@ def do_checks(run, k, n, agent_outcome):
         violations = integrity.verify(run.workspace, run.skeleton, restore=True)
         _write_json(integ_path, {"violations": violations})
     check = measure_crate(run.workspace, run.skeleton, it)
+    in_repo = os.path.abspath(run.workspace).startswith(mc.REPO_DIR + os.sep)
+    _scrub_logs(it, run.workspace, MEASURE_LOGS + tuple("clippy_%s.json" % g for g in mc.CLIPPY_GROUPS),
+                crate_label=mc.rel(run.workspace, mc.REPO_DIR) if in_repo else "<crate>")
     check["integrity"] = {"violations": violations}
     check["summary"] = summarize(check)
     check["known_failing_tests"] = [x["name"] for x in run.proj["known_failing_tests"]]
@@ -664,7 +739,7 @@ def do_checks(run, k, n, agent_outcome):
     snap = os.path.join(it, "src_after")
     if os.path.exists(snap):
         shutil.rmtree(snap)
-    shutil.copytree(os.path.join(run.workspace, "src"), snap)
+    mc.copy_src_tree(os.path.join(run.workspace, "src"), snap)   # committed: no symlinked content
     prev = os.path.join(run.dir, run.state["last_snapshot"]) if run.state.get("last_snapshot") else \
         os.path.join(run.dir, "init_src")
     with open(os.path.join(it, "changes.diff"), "w", encoding="utf-8") as fh:
@@ -675,10 +750,11 @@ def do_checks(run, k, n, agent_outcome):
     s = check["summary"]
     summary = {
         "iteration": k, "attempt": n, "dir": os.path.basename(it), "agent_outcome": agent_outcome,
-        "compiles": s["compiles"], "build_errors": len(check["build"]["errors"]),
+        "compiles": s["compiles"], "build_errors": _build_error_count(check),
         "build_error_codes": s["build_error_codes"],
         "tests_passed": s["tests_passed"], "tests_total": s["tests_total"],
-        "failed_tests": check["test"]["failed_names"], "known_failing": ev["known_failing"],
+        "failed_tests": check["test"]["failed_names"], "missing_tests": check["test"].get("missing_names", []),
+        "known_failing": ev["known_failing"],
         "clippy_agent": s["clippy_agent"], "clippy_agent_total": s["clippy_agent_total"],
         "clippy_harness": s["clippy_harness"], "safety": s["safety"], "safety_total": ev["safety_total"],
         "safety_tool": s["safety_tool"], "interface_missing": s["interface_missing"],
@@ -789,6 +865,18 @@ def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None)
         if not os.path.exists(run.state_path):
             print("no run state at %s" % mc.rel(run.state_path, mc.REPO_DIR), file=sys.stderr)
             return 2
+        saved = _read_json(run.state_path)
+        if saved.get("status") != "stopped":
+            if saved.get("config_hash") != cfg["config_hash"]:
+                print("run %s was started with config_hash %s, but the configuration now hashes to %s: resuming "
+                      "would mix two configurations in one run (restore the configuration, or start a new run)" % (
+                          run_id, saved.get("config_hash"), cfg["config_hash"]), file=sys.stderr)
+                return 2
+            if a["kind"] == "claude":
+                err = auth_check(a["claude_bin"])
+                if err:    # resuming logged out would stop the run for good with AUTH_ERROR
+                    print(err, file=sys.stderr)
+                    return 2
     else:
         run_id = run_id or datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         if not RUN_ID_RE.match(run_id):
@@ -797,6 +885,12 @@ def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None)
         run = Run(cfg, run_id)
         if os.path.exists(run.dir):
             print("run %s already exists; use --resume-run" % run_id, file=sys.stderr)
+            return 2
+        busy = open_runs(cfg["trajectory_root"])
+        if busy:   # a new run would replace the open run's workspace under it
+            print("run %s for %s is not stopped: continue it with --resume-run (to abandon it instead, set its "
+                  "run_state.json status to stopped; it still counts as a run)" % (", ".join(busy), cfg["project"]),
+                  file=sys.stderr)
             return 2
         if a["kind"] == "claude":
             for err in (spend_check(cfg["project"]), auth_check(a["claude_bin"])):
@@ -817,7 +911,8 @@ def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None)
                     return 2
     os.makedirs(run.dir, exist_ok=True)
     run.acquire_lock()
-    old = {sig: signal.signal(sig, _on_signal) for sig in (signal.SIGTERM, signal.SIGINT)}
+    # SIGHUP too: a closed terminal must stop agent B (its own process group) like SIGTERM does
+    old = {sig: signal.signal(sig, _on_signal) for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)}
     try:
         if resume:
             run.state = _read_json(run.state_path)
@@ -826,6 +921,11 @@ def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None)
             if run.state["status"] == "stopped":
                 run.log("run already stopped: %s" % run.state["stop_reason"])
                 return 0
+            if run.state["step"] == "init":   # interrupted while the workspace was being set up: set it up again
+                write_manifest(run)
+                init_workspace(run)
+                run.state["step"] = "prompt"
+                run.save()
         else:
             run.state = {"run_id": run.run_id, "project": cfg["project"], "config_hash": cfg["config_hash"],
                          "created": _now(), "status": "running", "iteration": 1, "attempt": 1, "step": "init",
@@ -856,6 +956,8 @@ def _drive(run, between_iterations):
     st = run.state
     rl = run.p["rate_limit"]
     while True:
+        if st["step"] not in ("prompt", "agent", "checks", "closed"):
+            raise RuntimeError("run state has step %r, which the loop cannot continue from" % st["step"])
         k, n = st["iteration"], st["attempt"]
         it = run.iter_dir(k, n)
         if st.get("pause_until"):
@@ -875,32 +977,38 @@ def _drive(run, between_iterations):
             run.save()
         if st["step"] == "agent":
             res_path = os.path.join(it, "agent_result.json")
-            if st.get("agent_started") == [k, n] and not os.path.exists(res_path):
+            if st.get("agent_started") == [k, n] and os.path.exists(res_path):
+                # resumed after the process died between recording the result and moving on: reuse the result,
+                # never call the agent (and spend quota) a second time for the same attempt
+                res = _read_json(res_path)
+                run.log("iteration %d attempt %d: agent result already recorded (%s)" % (k, n, res["outcome"]))
+            elif st.get("agent_started") == [k, n]:
                 # resumed after the process died mid-agent: the attempt is over, its edits stand, check them
-                outcome = "aborted_interrupted"
-                _write_json(res_path, {"outcome": outcome, "note": "agent step interrupted; checks run on resume"})
-                run.log("iteration %d attempt %d: agent step was interrupted; marked %s" % (k, n, outcome))
+                res = {"outcome": "aborted_interrupted", "note": "agent step interrupted; checks run on resume"}
+                _write_json(res_path, res)
+                run.log("iteration %d attempt %d: agent step was interrupted; marked %s" % (k, n, res["outcome"]))
             else:
                 st["agent_started"] = [k, n]
                 st["attempts_total"] = st.get("attempts_total", 0) + 1
                 run.save()
-                with open(os.path.join(it, "prompt.md"), encoding="utf-8") as fh:
-                    prompt = fh.read()
+                argv = _agent_argv(run, k, n)
+                prompt = _prompt_for_agent(run, k, it)
                 run.log("iteration %d attempt %d: agent start" % (k, n))
-                res = agent_runner.run(run.cfg, _agent_argv(run, k, n), run.workspace, prompt,
-                                       os.path.join(it, "agent.stream.jsonl"))
+                res = agent_runner.run(run.cfg, argv, run.workspace, prompt, os.path.join(it, "agent.stream.jsonl"))
+                res["argv"] = argv   # the exact command of this attempt, session id included (scrubbed on write)
                 _write_json(res_path, res)
-                outcome = res["outcome"]
-                run.log("iteration %d attempt %d: agent %s after %.1f s" % (k, n, outcome, res["elapsed_s"]))
-                if outcome == "usage_limit":
-                    return _usage_limit(run, res, rl)
-                if outcome == "isolation_violation":
-                    finalize(run, STOP_ABORT_ISOLATION)
-                    return 1
-                if outcome == "auth_error":
-                    run.log("agent could not authenticate: run `claude auth login`, then " + _resume_cmd(run))
-                    finalize(run, STOP_AUTH_ERROR)
-                    return 1
+                run.log("iteration %d attempt %d: agent %s after %.1f s" % (k, n, res["outcome"], res["elapsed_s"]))
+            outcome = res["outcome"]
+            if outcome == "usage_limit":
+                return _usage_limit(run, res, rl)
+            if outcome == "isolation_violation":
+                finalize(run, STOP_ABORT_ISOLATION)
+                return 1
+            if outcome == "auth_error":
+                # AUTH_ERROR is a stop: a stopped run cannot be resumed
+                run.log("agent could not authenticate; the run stops. Run `claude auth login` before a new run")
+                finalize(run, STOP_AUTH_ERROR)
+                return 1
             st["step"] = "checks"
             st["agent_outcome"] = outcome
             run.save()
@@ -949,8 +1057,10 @@ def _usage_limit(run, res, rl):
     run.save()
     run.log("iteration %d attempt %d hit the usage limit (resets_at=%s); attempt %d after %.0f s" % (
         k, n, resets, n + 1, wait))
-    if rl["mode"] == "exit":
-        run.log("rate_limit.mode exit: resume with: %s" % _resume_cmd(run))
+    if rl["mode"] == "exit" or n >= MAX_LIMIT_ATTEMPTS:
+        # mode exit, or the same iteration was refused MAX_LIMIT_ATTEMPTS times in a row (a weekly limit, or an
+        # error the text match mistakes for a limit): hand back to a person instead of retrying unattended
+        run.log("usage limit: resume with: %s" % _resume_cmd(run))
         print(_resume_cmd(run))
         return EXIT_USAGE_LIMIT
     return _drive(run, None)
@@ -971,6 +1081,7 @@ def main(argv=None):
         if args.resume_run:
             return run_loop(cfg, run_id=args.resume_run, resume=True, yes=True)
         return run_loop(cfg, run_id=args.run_id, yes=args.yes)
+    config.load(args.project)   # the measurement settings it uses (toolchain, rubric clippy) must be valid too
     crate = os.path.abspath(args.crate_dir) if args.crate_dir else mc.translation_dir(args.project)
     if not os.path.exists(os.path.join(crate, "Cargo.toml")):
         print("no crate at %s (no translation yet? pass --crate-dir)" % mc.rel(crate, mc.REPO_DIR), file=sys.stderr)

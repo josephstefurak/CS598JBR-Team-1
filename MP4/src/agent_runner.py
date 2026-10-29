@@ -75,9 +75,16 @@ def build_argv(cfg, max_turns=None, session_id=None, claude_bin=None, add_dirs=N
     return argv
 
 
+# Credentials that would make agent B bill an API account instead of the subscription (D1, D7)
+API_KEY_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+
+
 def agent_env(cfg):
-    """cargo-ready PATH plus the isolation variables (C4)."""
-    return mc.cargo_env(dict(cfg["pipeline"]["agent"]["env"]))
+    """cargo-ready PATH plus the isolation variables (C4), without API credentials from the caller's shell."""
+    env = mc.cargo_env(dict(cfg["pipeline"]["agent"]["env"]))
+    for k in API_KEY_ENV:
+        env.pop(k, None)
+    return env
 
 
 def check_init(init, cfg):
@@ -101,6 +108,8 @@ def check_init(init, cfg):
         v.append("permissionMode %r != %r" % (init.get("permissionMode"), a["permission_mode"]))
     if a["model"] not in str(init.get("model", "")).lower():
         v.append("model %r does not match %r" % (init.get("model"), a["model"]))
+    if init.get("apiKeySource", "none") != "none":   # every recorded subscription call reports "none"
+        v.append("apiKeySource %r: not the subscription login" % (init.get("apiKeySource"),))
     return v
 
 
@@ -200,6 +209,8 @@ def run(cfg, argv, cwd, prompt, stream_path, wall_clock_s=None, env=None):
                     ev = json.loads(line)
                 except ValueError:
                     continue
+                if not isinstance(ev, dict):
+                    continue
                 etype = ev.get("type")
                 if etype == "system" and ev.get("subtype") == "init" and init is None:
                     init = ev
@@ -224,6 +235,10 @@ def run(cfg, argv, cwd, prompt, stream_path, wall_clock_s=None, env=None):
     if stderr_text:
         with open(stream_path + ".stderr", "w", encoding="utf-8") as fh:
             fh.write(scrub_secrets.scrub_text("".join(stderr_text)))
+    if init is None:
+        # every recorded real call starts with system/init (smoke, probe, auth failure); without it isolation
+        # cannot be asserted, so the call fails closed (e.g. a CLI update that rejects a flag at startup)
+        violation = ["no system/init event: isolation could not be checked"]
     outcome = classify(result, rate_rejected, resets_at, killed_for_timeout, violation)
     return {
         "outcome": outcome,

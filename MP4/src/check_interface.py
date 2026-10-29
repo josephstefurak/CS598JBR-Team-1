@@ -88,7 +88,8 @@ def _item_end(code, i):
         elif depth == 0 and ch == ";":
             return j + 1
         elif depth == 0 and ch == "{":
-            return rustlex.match_brace(code, j) + 1
+            close = rustlex.match_brace(code, j)
+            return close + 1 if close >= 0 else len(code)   # unclosed (agent stopped mid-edit): rest of file
         j += 1
     return len(code)
 
@@ -182,6 +183,8 @@ def _scan_block(code, start, end, items, self_type):
             break
         if code.startswith("#!", i) or code.startswith("#[", i):
             br = code.find("[", i)
+            if br < 0:   # a stray `#!` with no attribute after it: nothing left to parse
+                break
             close = _balanced(code, br, "[", "]")
             if code.startswith("#[", i):
                 attrs.append(code[i:close + 1])
@@ -282,7 +285,13 @@ def compare(interface_dir, crate):
         mod = fname[:-3]
         want = extract_items(mc.read_text(os.path.join(interface_dir, fname)))
         impl_path = module_file(crate, mod)
-        have = extract_items(mc.read_text(impl_path)) if impl_path else {}
+        parse_error = None
+        try:
+            have = extract_items(mc.read_text(impl_path)) if impl_path else {}
+        except (IndexError, AttributeError, ValueError) as exc:
+            # a file this regex-level scan cannot read (e.g. cut off mid-edit) has no checkable items; the
+            # build reports the real error, and the loop must go on rather than crash on every resume
+            have, parse_error = {}, "%s: %s" % (type(exc).__name__, exc)
         missing = sorted(k for k in want if k not in have)
         changed = []
         for k in sorted(set(want) & set(have)):
@@ -294,7 +303,7 @@ def compare(interface_dir, crate):
         extra = sorted(k for k in have if k not in want)
         report["modules"][mod] = {"file": mc.rel(impl_path, crate) if impl_path else None,
                                   "interface_items": len(want), "missing": missing, "changed": changed,
-                                  "extra": extra}
+                                  "extra": extra, "parse_error": parse_error}
         report["interface_items"] += len(want)
         report["missing"] += len(missing)
         report["changed"] += len(changed)

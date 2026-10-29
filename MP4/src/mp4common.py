@@ -5,8 +5,10 @@ on sys.path so `python3 -I` works.
 """
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
+import threading
 
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 MP4_DIR = os.path.dirname(SRC_DIR)
@@ -34,6 +36,7 @@ RUBRIC_CLIPPY_ARGS = [
 FORBID_LINE = "#![forbid(unsafe_code)]"
 HARDCODE_MIN_LITERAL = 20
 CARGO_TIMEOUT_S = 900
+TIMEOUT_EXIT = 124        # exit code cargo() reports for a timeout
 HARNESS_PREFIXES = ("src/bin/",)
 INFRA_DIRS = ("src/bin", "src/interfaces")
 SKIP_DIRS = frozenset({"target", ".git", "__pycache__", ".integrity"})
@@ -66,9 +69,16 @@ def translation_dir(project):
     return os.path.join(TRANSLATIONS_DIR, check_project(project))
 
 
+# Variables from the caller's shell that would change what cargo builds or lints (flags, wrappers, target dir).
+# The measurements, and agent B's own cargo commands, must not depend on who launched the controller.
+CARGO_ENV_DROP = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS", "RUSTDOCFLAGS",
+                  "CARGO_ENCODED_RUSTDOCFLAGS", "CARGO_TARGET_DIR", "CARGO_BUILD_TARGET_DIR", "CARGO_BUILD_TARGET",
+                  "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CARGO_BUILD_RUSTC_WRAPPER")
+
+
 def cargo_env(extra=None):
-    """Environment for cargo children: ~/.cargo/bin first on PATH, no colour."""
-    env = dict(os.environ)
+    """Environment for cargo children: ~/.cargo/bin first on PATH, no colour, no inherited build flags."""
+    env = {k: v for k, v in os.environ.items() if k not in CARGO_ENV_DROP}
     cargo_bin = os.path.join(os.path.expanduser("~"), ".cargo", "bin")
     parts = [p for p in env.get("PATH", "").split(os.pathsep) if p and p != cargo_bin]
     env["PATH"] = os.pathsep.join([cargo_bin] + parts)
@@ -78,27 +88,90 @@ def cargo_env(extra=None):
     return env
 
 
-def cargo(args, cwd, log_path=None, env_extra=None, timeout=CARGO_TIMEOUT_S):
+def _kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+# cargo runs in its own process group, so a terminal hangup (SIGHUP), Ctrl-\ (SIGQUIT) or a plain kill (SIGTERM)
+# reaches only this process. While cargo runs, such a signal whose action is still the default is caught, cargo's
+# group is killed, and the signal is sent again with its default action. SIGINT raises KeyboardInterrupt anyway.
+_HANDOVER_SIGNALS = tuple(getattr(signal, n) for n in ("SIGHUP", "SIGQUIT", "SIGTERM") if hasattr(signal, n))
+
+
+class _Signalled(BaseException):
+    pass
+
+
+def _raise_signalled(signum, _frame):
+    raise _Signalled(signum)
+
+
+def cargo(args, cwd, log_path=None, env_extra=None, timeout=None):
     """Run `cargo +TOOLCHAIN <args>` in cwd. Returns (exit_code, combined_output).
 
     The full combined stdout+stderr is written to log_path when given. A
-    timeout is reported as exit code 124 with the partial output.
+    timeout (default CARGO_TIMEOUT_S, read at call time so pipeline.yaml
+    applies) is reported as exit code 124 with the partial output. cargo runs
+    in its own process group, and a timeout or an interruption kills the whole
+    group: a hung test binary must not outlive the run.
     """
+    timeout = timeout or CARGO_TIMEOUT_S
     cmd = ["cargo", "+" + TOOLCHAIN] + list(args)
     try:
-        proc = subprocess.run(cmd, cwd=cwd, env=cargo_env(env_extra), stdout=subprocess.PIPE,
-                              stderr=subprocess.STDOUT, timeout=timeout)
-        code, out = proc.returncode, proc.stdout.decode("utf-8", "replace")
-    except subprocess.TimeoutExpired as exc:
-        code = 124
-        out = (exc.output or b"").decode("utf-8", "replace") + "\n[mp4] cargo timed out after %ss\n" % timeout
+        proc = subprocess.Popen(cmd, cwd=cwd, env=cargo_env(env_extra), stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, start_new_session=True)
     except FileNotFoundError:
+        proc = None
         code, out = 127, "[mp4] cargo not found on PATH (expected ~/.cargo/bin/cargo)\n"
+    if proc is not None:
+        caught = {}
+        if threading.current_thread() is threading.main_thread():
+            for sig in _HANDOVER_SIGNALS:
+                if signal.getsignal(sig) == signal.SIG_DFL:
+                    caught[sig] = signal.signal(sig, _raise_signalled)
+        try:
+            raw, _ = proc.communicate(timeout=timeout)
+            code = proc.returncode
+        except subprocess.TimeoutExpired:
+            _kill_group(proc)
+            raw, _ = proc.communicate()   # the output read before the timeout is kept
+            code = TIMEOUT_EXIT
+            raw += b"\n[mp4] cargo timed out after %ds; its process group was killed\n" % timeout
+        except _Signalled as exc:
+            _kill_group(proc)
+            proc.wait()
+            for sig, old in caught.items():
+                signal.signal(sig, old)
+            caught = {}
+            os.kill(os.getpid(), exc.args[0])   # now with its default action
+            raise
+        except BaseException:
+            _kill_group(proc)
+            proc.wait()
+            raise
+        finally:
+            for sig, old in caught.items():
+                signal.signal(sig, old)
+        out = raw.decode("utf-8", "replace")
     if log_path:
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, "w", encoding="utf-8") as fh:
             fh.write("$ " + " ".join(cmd) + "\n" + out + "\n[exit %d]\n" % code)
     return code, out
+
+
+def _symlinks(directory, names):
+    return [n for n in names if os.path.islink(os.path.join(directory, n))]
+
+
+def copy_src_tree(src, dst):
+    """Copy a crate's src/ for a committed snapshot. Symlinks are left out: code the agent runs through cargo
+    could link a file from elsewhere on the machine into src/, and copytree would copy what it points to.
+    Fresh mtimes (copyfile), so a build made from an edited file is never reused as up to date."""
+    shutil.copytree(src, dst, ignore=_symlinks, copy_function=shutil.copyfile)
 
 
 def copy_crate(src, dst_parent=None):

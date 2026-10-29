@@ -129,19 +129,25 @@ def write_results(entries, out_dir):
 
 # ------------------------------------------------------------------------------------- README sections
 def generated_sections(pipeline):
+    import run_pipeline   # only for MAX_LIMIT_ATTEMPTS; keeps this module's imports light
     a, lp, rl = pipeline["agent"], pipeline["loop"], pipeline["rate_limit"]
     if rl["mode"] == "wait":
-        pause = "waits until the limit resets (+%d s, at most %d h)" % (
-            rl["resume_margin_seconds"], rl["max_wait_hours"])
+        pause = ("waits until the limit resets (+%d s, at most %d h) and redoes the iteration "
+                 "(`iter_KK_attemptN`); after %d refused attempts of one iteration it exits with code 75 for a "
+                 "`--resume-run`" % (rl["resume_margin_seconds"], rl["max_wait_hours"],
+                                     run_pipeline.MAX_LIMIT_ATTEMPTS))
     else:
-        pause = "exits with code 75 and prints the `--resume-run` command"
+        pause = ("exits with code 75 and prints the `--resume-run` command, which redoes the iteration "
+                 "(`iter_KK_attemptN`)")
     stopping = "\n".join([
         "The loop (`MP4/src/run_pipeline.py`) checks after every iteration, in this order:", "",
-        "1. **SUCCESS**: the crate builds with `%s`; every test passes except the documented known-defective "
-        "ones, and each of those fails on its documented assertion; agent-attributable clippy warnings are 0 in "
-        "all four rubric groups; the safety metrics are all 0, `#![forbid(unsafe_code)]` is in place and there "
-        "is no FFI; every interface item is present and unchanged; no integrity violation; no test literal "
-        "copied into library code." % pipeline["toolchain"]["name"],
+        "1. **SUCCESS**: the crate builds with `%s`; every benchmark test passes except the documented "
+        "known-defective ones, and each of those fails on its documented assertion (a benchmark test that "
+        "hangs, crashes or reports no result counts as failed; tests the agent adds are reported separately and "
+        "must pass too); clippy runs without errors and agent-attributable clippy warnings are 0 in all four "
+        "rubric groups; the safety metrics are all 0, `#![forbid(unsafe_code)]` is in place and there is no FFI; "
+        "every interface item is present and unchanged; no integrity violation; no test literal copied into "
+        "library code." % pipeline["toolchain"]["name"],
         "2. **ABORT**: integrity violations (tests, interfaces, `Cargo.toml`/`Cargo.lock` or `src/lib.rs` "
         "changed) in two consecutive iterations.",
         "3. **NO_PROGRESS**: the score (tests passed, then fewer build errors, clippy warnings, unsafe findings, "
@@ -149,9 +155,10 @@ def generated_sections(pipeline):
             "no_progress_rounds"],
         "4. **MAX_ITERATIONS**: %d iterations." % lp["max_iterations"], "",
         "Each iteration is one fresh agent session capped at %d turns and a %d-minute wall clock. The run also "
-        "stops if the agent's startup line shows any capability beyond the configured tools (ABORT_ISOLATION) "
-        "or the CLI is not logged in (AUTH_ERROR). A usage-limit rejection is not a stop: the run %s and redoes "
-        "the iteration (`iter_KK_attemptN`)." % (a["max_turns"], a["wall_clock_minutes"], pause),
+        "stops if the agent's startup line is missing, shows any capability beyond the configured tools, or "
+        "shows an API key instead of the subscription login (ABORT_ISOLATION), or if the CLI is not logged in "
+        "(AUTH_ERROR). A usage-limit rejection is not a stop: the run %s." % (
+            a["max_turns"], a["wall_clock_minutes"], pause),
     ])
     inference = "\n".join([
         "| Setting | Value | Where |", "|---|---|---|",

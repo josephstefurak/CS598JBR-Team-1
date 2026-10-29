@@ -7,6 +7,8 @@ rate_limit_event, result). FAKE_CLAUDE_MODE selects the scenario:
   max_turns    result error_max_turns
   slow         init, then sleeps (for the wall-clock kill)
   wrong_tools  init advertising an extra tool (isolation mismatch)
+  api_key      init reporting an API key as the credential (not the subscription login)
+  no_init      normal, but without the system/init event (isolation cannot be checked)
   secret       normal, with a planted key, e-mail and home path in assistant text
 """
 import json
@@ -35,9 +37,11 @@ def main():
     if mode == "wrong_tools":
         tools = tools + ["WebFetch"]
     sid = arg("--session-id", "00000000-0000-4000-8000-000000000000")
-    emit({"type": "system", "subtype": "init", "session_id": sid, "tools": tools, "mcp_servers": [],
-          "slash_commands": [], "model": "claude-opus-fake", "permissionMode": arg("--permission-mode"),
-          "claude_code_version": "0.0.0-fake", "cwd": os.getcwd()})
+    if mode != "no_init":
+        emit({"type": "system", "subtype": "init", "session_id": sid, "tools": tools, "mcp_servers": [],
+              "slash_commands": [], "model": "claude-opus-fake", "permissionMode": arg("--permission-mode"),
+              "apiKeySource": "ANTHROPIC_API_KEY" if mode == "api_key" else "none",
+              "claude_code_version": "0.0.0-fake", "cwd": os.getcwd()})
     if mode == "slow":
         time.sleep(60)
         return 0

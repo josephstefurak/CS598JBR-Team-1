@@ -17,9 +17,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import mp4common as mc  # noqa: E402
+import rustlex  # noqa: E402
 
 _ERR_RE = re.compile(r"^error(\[(E\d{4})\])?: (.*)$", re.M)
-_TEST_LINE_RE = re.compile(r"^test (\S+) \.\.\. (ok|FAILED|ignored)\s*$", re.M)
+_TEST_LINE_RE = re.compile(r"^test (.+?) \.\.\. (ok|FAILED|ignored)\s*$")   # names may hold spaces (doc tests)
+# Output a test writes to stdout itself is not captured by libtest. libpsbt's hex printer ends without a newline,
+# so it lands in front of libtest's own `test NAME ... ok` line. Such a glued line is read for benchmark names only.
+_GLUED_RE = re.compile(r"test (\S+) \.\.\. (ok|FAILED|ignored)\s*$")
+_STATUS_END = ("ok", "FAILED", "ignored")
+_TEST_FN_RE = re.compile(r"#\s*\[\s*test\s*\]\s*(?:#\s*\[[^\]]*\]\s*)*(?:pub(?:\s*\([^)]*\))?\s+)?fn\s+([A-Za-z_]\w*)")
 _RUNNING_RE = re.compile(r"^\s+Running (.+)$", re.M)
 _SUMMARY_RE = re.compile(r"^warning: `[^`]+` \([^)]*\) generated \d+ warnings?.*$", re.M)
 
@@ -58,42 +64,80 @@ def run_build(crate, log_dir):
     }
 
 
-def parse_test_output(out):
+def parse_test_output(out, expected=None):
     """Per-test results keyed by test name. The same name can run in several
     executables (libpsbt runs src/bin/test.rs as a bin harness and as [[test]],
-    why.md H-L10): a test passes only if every execution passed."""
+    why.md H-L10): a test passes only if every execution passed.
+
+    Only the output from cargo's first `Running` line on is read: the compile output before it can quote any
+    source text, a `test x ... ok` comment included. A line that does not start with `test ` counts only when
+    it ends in a result for one of the expected benchmark names (output glued in front, see _GLUED_RE)."""
     tests = collections.OrderedDict()
-    for m in _TEST_LINE_RE.finditer(out):
+    first = _RUNNING_RE.search(out)
+    expected = set(expected or ())
+    for line in (out[first.start():] if first else "").splitlines():
+        m = _TEST_LINE_RE.match(line)
+        if m is None and expected and line.rstrip().endswith(_STATUS_END):
+            g = _GLUED_RE.search(line)
+            m = g if g and g.group(1) in expected else None
+        if m is None:
+            continue
         name, status = m.group(1), m.group(2)
         entry = tests.setdefault(name, {"status": status, "executions": 0, "panic": None})
         entry["executions"] += 1
         if status == "FAILED" or entry["status"] == "FAILED":
             entry["status"] = "FAILED"
     # panic text: "---- name stdout ----" sections
-    for m in re.finditer(r"^---- (\S+) stdout ----\n(.*?)(?=^---- |^failures:|\Z)", out, re.M | re.S):
+    for m in re.finditer(r"^---- (.+?) stdout ----\n(.*?)(?=^---- |^failures:|\Z)", out, re.M | re.S):
         name = m.group(1)
         if name in tests and tests[name]["panic"] is None:
             tests[name]["panic"] = m.group(2).strip()[:2000]
     return tests
 
 
-def run_test(crate, log_dir):
-    """`cargo test --locked --no-fail-fast` -> test.log, with per-test status and panic text."""
+def benchmark_tests(source):
+    """Names of the #[test] fns in the benchmark's immutable test files (source/src/bin/*.rs).
+
+    They sit at the top level of each bin target, so these are the names cargo test prints."""
+    names = set()
+    bin_dir = os.path.join(source, "src", "bin")
+    if os.path.isdir(bin_dir):
+        for p in mc.walk_files(bin_dir):
+            if p.endswith(".rs"):
+                names.update(_TEST_FN_RE.findall(rustlex.strip(mc.read_text(p))))
+    return sorted(names)
+
+
+def run_test(crate, log_dir, expected=None):
+    """`cargo test --locked --no-fail-fast` -> test.log, with per-test status and panic text.
+
+    expected: the benchmark test names (benchmark_tests()). When given, passed/failed/total count only
+    those. A benchmark test with no result line (it hung until the cargo timeout, or its executable
+    crashed) is listed in missing_names and is not passed. Tests the agent wrote itself are reported in
+    extra_tests and never change the benchmark counts. Without expected, every test that ran counts.
+    """
     log = os.path.join(log_dir, "test.log")
     code, out = mc.cargo(["test", "--locked", "--no-fail-fast"], crate, log)
-    tests = parse_test_output(out)
-    passed = sorted(n for n, t in tests.items() if t["status"] == "ok")
-    failed = sorted(n for n, t in tests.items() if t["status"] == "FAILED")
-    ignored = sorted(n for n, t in tests.items() if t["status"] == "ignored")
+    tests = parse_test_output(out, expected)
+    names = list(tests) if expected is None else list(expected)
+    status = {n: (tests.get(n) or {}).get("status") for n in names}
+    passed = sorted(n for n in names if status[n] == "ok")
+    failed = sorted(n for n in names if status[n] == "FAILED")
+    ignored = sorted(n for n in names if status[n] == "ignored")
+    missing = sorted(n for n in names if status[n] is None)
     return {
         "compiled": bool(_RUNNING_RE.search(out)),
         "exit_code": code,
+        "timed_out": code == mc.TIMEOUT_EXIT,
         "passed": len(passed),
         "failed": len(failed),
         "ignored": len(ignored),
-        "total": len(tests),
+        "missing": len(missing),
+        "total": len(names),
         "passed_names": passed,
         "failed_names": failed,
+        "missing_names": missing,
+        "extra_tests": {n: t["status"] for n, t in tests.items() if n not in status},
         "tests": tests,
         "executables": _RUNNING_RE.findall(out),
         "first_error": "" if _RUNNING_RE.search(out) else _first_error_block(out),
@@ -197,11 +241,12 @@ def run_clippy_groups(crate, log_dir):
     return result
 
 
-def run_all(crate, log_dir):
-    """Build, test, rubric clippy, per-group clippy. Clippy is skipped when the build fails."""
+def run_all(crate, log_dir, expected_tests=None):
+    """Build, test, rubric clippy, per-group clippy. Clippy is skipped when the build fails.
+    expected_tests: the benchmark test names, see run_test()."""
     os.makedirs(log_dir, exist_ok=True)
     out = {"build": run_build(crate, log_dir)}
-    out["test"] = run_test(crate, log_dir)
+    out["test"] = run_test(crate, log_dir, expected_tests)
     if out["build"]["ok"]:
         out["clippy_rubric"] = run_clippy_rubric(crate, log_dir)
         out["clippy"] = run_clippy_groups(crate, log_dir)

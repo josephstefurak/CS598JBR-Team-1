@@ -96,6 +96,8 @@ def validate_pipeline(cfg):
         raise ConfigError("agent.effort must be one of %s" % sorted(EFFORTS))
     if a["permission_mode"] != "dontAsk":
         raise ConfigError("agent.permission_mode must be dontAsk (C2: a headless run must never prompt)")
+    if a["setting_sources"] != "project":
+        raise ConfigError("agent.setting_sources must be project (C4: no user settings, hooks or permissions)")
     for key in ("tools", "allowed_tools", "disallowed_tools"):
         if not all(isinstance(x, str) and x for x in a[key]):
             raise ConfigError("agent.%s must be a list of non-empty strings" % key)
@@ -119,9 +121,14 @@ def validate_project(p, name):
     for k in p["known_failing_tests"]:
         if not isinstance(k, dict) or set(k) != KNOWN_FAILING_KEYS:
             raise ConfigError("known_failing_tests entries need exactly %s" % sorted(KNOWN_FAILING_KEYS))
+        # name, assertion and location are matched as substrings (D8): an empty one would match anything
+        if not all(isinstance(v, str) and v.strip() for v in k.values()):
+            raise ConfigError("known_failing_tests values must be non-empty strings")
     for k in p["allow_attributes"]:
         if not isinstance(k, dict) or set(k) != ALLOW_ATTR_KEYS:
             raise ConfigError("allow_attributes entries need exactly %s" % sorted(ALLOW_ATTR_KEYS))
+        if not all(isinstance(v, str) and v.strip() for v in k.values()):
+            raise ConfigError("allow_attributes values must be non-empty strings")
     for key in ("modules", "c_files", "notes", "c_behaviour"):
         if not all(isinstance(x, str) for x in p[key]):
             raise ConfigError("%s must be a list of strings" % key)
@@ -161,6 +168,9 @@ def load(project):
     if settings.get("autoMemoryEnabled") is not False or settings.get("disableAllHooks") is not True:
         raise ConfigError("claude_settings.json must set autoMemoryEnabled false and disableAllHooks true (C4)")
     c_dir = os.path.normpath(os.path.join(mc.MP4_DIR, proj["c_dir"]))
+    if not c_dir.startswith(os.path.join(mc.SUBJECTS_DIR, project) + os.sep):
+        # c_dir becomes agent B's --add-dir: everything under it is readable without a permission rule
+        raise ConfigError("c_dir must be inside MP4/subjects/%s/: %r" % (project, proj["c_dir"]))
     if not os.path.isdir(c_dir):
         raise ConfigError("c_dir not found: %s" % proj["c_dir"])
     return {

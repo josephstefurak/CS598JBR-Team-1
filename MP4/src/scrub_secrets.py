@@ -40,10 +40,28 @@ SKIP_REL_PREFIXES = ("MP4/subjects/",)
 SKIP_EXT = (".pdf", ".png", ".jpg", ".jpeg", ".gif", ".zip", ".gz", ".pyc")
 
 
+_UPSTREAM_EMAILS = None
+
+
+def _upstream_emails():
+    """Addresses already published in the immutable benchmark sources (e.g. libpsbt's base64.c licence header).
+    A translation that keeps such an attribution is not leaking anything, and rewriting it would edit
+    generated Rust (never allowed)."""
+    global _UPSTREAM_EMAILS
+    if _UPSTREAM_EMAILS is None:
+        found = set()
+        rx = dict(PATTERNS)["email"]
+        for p in mc.walk_files(mc.SUBJECTS_DIR) if os.path.isdir(mc.SUBJECTS_DIR) else []:
+            if not p.endswith(SKIP_EXT) and not _is_binary(p):
+                found.update(m.group(0).lower() for m in rx.finditer(mc.read_text(p)))
+        _UPSTREAM_EMAILS = frozenset(found)
+    return _UPSTREAM_EMAILS
+
+
 def _allowed(kind, text):
     if kind == "email":
         low = text.lower()
-        return low in EMAIL_ALLOW or low.endswith(EMAIL_ALLOW_DOMAINS)
+        return low in EMAIL_ALLOW or low.endswith(EMAIL_ALLOW_DOMAINS) or low in _upstream_emails()
     return False
 
 
@@ -62,7 +80,8 @@ def iter_files(paths):
         files = [p] if os.path.isfile(p) else list(mc.walk_files(p))
         for f in files:
             r = mc.rel(f, mc.REPO_DIR)
-            if r.startswith(SKIP_REL_PREFIXES) or f.endswith(SKIP_EXT) or _is_binary(f):
+            # a symlink is skipped: --fix must never write through it to a file outside the repository
+            if os.path.islink(f) or r.startswith(SKIP_REL_PREFIXES) or f.endswith(SKIP_EXT) or _is_binary(f):
                 continue
             yield f
 

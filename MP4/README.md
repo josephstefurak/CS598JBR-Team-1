@@ -15,7 +15,8 @@ sends the prompt on stdin, and records the whole event stream as the iteration's
 isolated from the machine owner's setup. No user settings, hooks, MCP servers, skills or memory are
 loaded (`--setting-sources project`, `--strict-mcp-config`, `--disable-slash-commands`,
 `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`). Every call's startup event
-is checked, and the call is aborted if it reports any capability beyond the configured tools.
+is checked. The call is aborted if that event is missing, reports any capability beyond the configured
+tools, or shows an API key instead of the subscription login.
 
 ## Model(s) and provider / runtime
 
@@ -63,7 +64,12 @@ Recorded in `docs/environment.md`:
 | `StructuredOutput` | The agent's final status (done / needs more work / blocked, files changed, open issues), from `configs/prompts/status_schema.json`. |
 
 The agent has no web access, no git, no subagents, no MCP servers and no skills. The permission mode is
-`dontAsk`, so anything not pre-approved is denied without prompting. The course's unsafe-metrics tool has
+`dontAsk`, so anything not pre-approved is denied without prompting. These rules apply to the agent's tool
+calls. The Rust the agent writes is compiled and its tests are run by `cargo`, with the permissions of the
+user who runs the controller, so the controller does not rely on the tool rules alone. After every session
+it restores the protected benchmark files and re-checks the benchmark sources against their checksums. It
+also refuses FFI, `build.rs` and C sources, and every reported number can be re-measured independently
+(`--check-only`). The course's unsafe-metrics tool has
 not been released yet. Until it is, the controller runs an interim proxy (`src/safety_check.py`) and
 feeds its results back to the agent. The agent does not call it directly.
 
@@ -96,14 +102,16 @@ feeds its results back to the agent. The agent does not call it directly.
 From the repository root:
 
 ```bash
-python3 -I MP4/src/run_pipeline.py --project project_1 --dry-run     # print the exact agent command and first prompt; no model call
+python3 -I MP4/src/run_pipeline.py --project project_1 --dry-run     # print the agent command and first prompt (home paths as ~); no model call
 python3 -I MP4/src/run_pipeline.py --project project_1               # full run; asks for confirmation (add --yes to skip)
 python3 -I MP4/src/run_pipeline.py --project project_1 --resume-run <run_id>   # continue an interrupted or paused run
 ```
 
 Use `project_2` for libpsbt. A run first replaces `translations/project_N/` with a fresh copy of the
 benchmark skeleton. It writes every iteration to `trajectories/project_N/run_<id>/`, and the final
-Rust stays in `translations/project_N/`.
+Rust stays in `translations/project_N/`. Each attempt's exact agent command line, with its session id, is
+recorded in that attempt's `agent_result.json`. A resume is refused if the configuration changed since
+the run started, or if the CLI is logged out.
 
 **Evaluating without a Claude subscription.** This reruns every measurement (build, tests, rubric
 clippy, safety proxy, interface, integrity) on the committed translation without calling a model, and
@@ -120,12 +128,12 @@ python3 -I MP4/src/selftest.py                       # the controller's own test
 <!-- BEGIN GENERATED: stopping-condition -->
 The loop (`MP4/src/run_pipeline.py`) checks after every iteration, in this order:
 
-1. **SUCCESS**: the crate builds with `nightly-2025-05-13`; every test passes except the documented known-defective ones, and each of those fails on its documented assertion; agent-attributable clippy warnings are 0 in all four rubric groups; the safety metrics are all 0, `#![forbid(unsafe_code)]` is in place and there is no FFI; every interface item is present and unchanged; no integrity violation; no test literal copied into library code.
+1. **SUCCESS**: the crate builds with `nightly-2025-05-13`; every benchmark test passes except the documented known-defective ones, and each of those fails on its documented assertion (a benchmark test that hangs, crashes or reports no result counts as failed; tests the agent adds are reported separately and must pass too); clippy runs without errors and agent-attributable clippy warnings are 0 in all four rubric groups; the safety metrics are all 0, `#![forbid(unsafe_code)]` is in place and there is no FFI; every interface item is present and unchanged; no integrity violation; no test literal copied into library code.
 2. **ABORT**: integrity violations (tests, interfaces, `Cargo.toml`/`Cargo.lock` or `src/lib.rs` changed) in two consecutive iterations.
 3. **NO_PROGRESS**: the score (tests passed, then fewer build errors, clippy warnings, unsafe findings, missing interface items) has not strictly improved for 3 consecutive iterations.
 4. **MAX_ITERATIONS**: 8 iterations.
 
-Each iteration is one fresh agent session capped at 60 turns and a 45-minute wall clock. The run also stops if the agent's startup line shows any capability beyond the configured tools (ABORT_ISOLATION) or the CLI is not logged in (AUTH_ERROR). A usage-limit rejection is not a stop: the run waits until the limit resets (+60 s, at most 6 h) and redoes the iteration (`iter_KK_attemptN`).
+Each iteration is one fresh agent session capped at 60 turns and a 45-minute wall clock. The run also stops if the agent's startup line is missing, shows any capability beyond the configured tools, or shows an API key instead of the subscription login (ABORT_ISOLATION), or if the CLI is not logged in (AUTH_ERROR). A usage-limit rejection is not a stop: the run waits until the limit resets (+60 s, at most 6 h) and redoes the iteration (`iter_KK_attemptN`); after 3 refused attempts of one iteration it exits with code 75 for a `--resume-run`.
 <!-- END GENERATED: stopping-condition -->
 
 ## API and usage limits that affected the experiment
@@ -135,7 +143,8 @@ PENDING: filled in from the trajectories after the runs. Every usage-limit pause
 
 How limits are handled: the subscription has rolling 5-hour and weekly limits. A rejected request is
 detected from the event stream. The run then waits until the reported reset time, or exits with code 75
-for a later `--resume-run`, and repeats the interrupted iteration as a new attempt. Each iteration is
+for a later `--resume-run`, and repeats the interrupted iteration as a new attempt. After three refused
+attempts of the same iteration it always exits with code 75, so a person decides when to go on. Each iteration is
 capped at the turn limit and wall clock in the table above. The experiment budget is fixed in advance at
 one full run per project plus at most two tuning reruns, and the controller refuses runs beyond it.
 

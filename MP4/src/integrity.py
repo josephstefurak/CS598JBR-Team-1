@@ -83,10 +83,18 @@ def verify(workspace, source, restore=True):
     """Compare immutable files and src/lib.rs with the skeleton.
 
     Returns a list of violations {path, kind, restored}. kind is modified,
-    missing, added (new file in src/bin or src/interfaces) or lib_rs.
+    missing, added (new file in src/bin or src/interfaces), lib_rs or symlink.
     With restore=True every violation is undone in the workspace.
     """
     violations = []
+    # A linked src/, src/bin or src/interfaces would turn every restore below into writes and deletions in the
+    # directory it points to (code the agent runs through cargo could create one): remove the link first.
+    for d in ("src",) + tuple(mc.INFRA_DIRS):
+        p = os.path.join(workspace, d)
+        if os.path.islink(p):
+            if restore:
+                os.remove(p)
+            violations.append({"path": d, "kind": "symlink", "restored": restore})
     for r in immutable_files(source):
         want = os.path.join(source, r)
         have = os.path.join(workspace, r)
@@ -98,11 +106,15 @@ def verify(workspace, source, restore=True):
         if kind:
             if restore:
                 os.makedirs(os.path.dirname(have), exist_ok=True)
-                shutil.copy2(want, have)
+                if os.path.islink(have):   # never write through a link to a file outside the crate
+                    os.remove(have)
+                # copyfile, not copy2: the restored file must be newer than the build made from the agent's
+                # edit, or cargo keeps reusing that build (a tampered test binary) as up to date
+                shutil.copyfile(want, have)
             violations.append({"path": r, "kind": kind, "restored": restore})
     for d in mc.INFRA_DIRS:
         wd = os.path.join(workspace, d)
-        if not os.path.isdir(wd):
+        if not os.path.isdir(wd) or os.path.islink(wd):
             continue
         for p in mc.walk_files(wd):
             r = mc.rel(p, workspace)
@@ -112,8 +124,10 @@ def verify(workspace, source, restore=True):
                 violations.append({"path": r, "kind": "added", "restored": restore})
     lib = os.path.join(workspace, "src", "lib.rs")
     want_lib = expected_lib_rs(source)
-    if not os.path.exists(lib) or mc.read_text(lib) != want_lib:
+    if not os.path.exists(lib) or os.path.islink(lib) or mc.read_text(lib) != want_lib:
         if restore:
+            if os.path.islink(lib):
+                os.remove(lib)
             with open(lib, "w", encoding="utf-8") as fh:
                 fh.write(want_lib)
         violations.append({"path": "src/lib.rs", "kind": "lib_rs", "restored": restore})
@@ -154,12 +168,29 @@ def final_snapshot(project):
     if not isinstance(run_id, str) or not re.match(r"^[A-Za-z0-9_.-]+$", run_id):
         return None, "run_summary.json has no valid run_id"
     run_dir = os.path.join(traj, "run_%s" % run_id)
-    iters = sorted(d for d in os.listdir(run_dir) if re.match(r"^iter_\d+$", d)) if os.path.isdir(run_dir) else []
-    for it in reversed(iters):
+    final_dir = data.get("final_iteration_dir")
+    if final_dir is not None:
+        # the attempt the run's last check measured, e.g. iter_03_attempt2 after a usage-limit retry
+        if not isinstance(final_dir, str) or not _ITER_DIR_RE.match(final_dir):
+            return None, "run_summary.json has an invalid final_iteration_dir"
+        snap = os.path.join(run_dir, final_dir, "src_after")
+        if os.path.isdir(snap):
+            return snap, None
+        return None, "run %s has no %s/src_after/" % (run_id, final_dir)
+    iters = [d for d in os.listdir(run_dir) if _ITER_DIR_RE.match(d)] if os.path.isdir(run_dir) else []
+    for it in sorted(iters, key=_iter_key, reverse=True):
         snap = os.path.join(run_dir, it, "src_after")
         if os.path.isdir(snap):
             return snap, None
     return None, "run %s has no iter_*/src_after/" % run_id
+
+
+_ITER_DIR_RE = re.compile(r"^iter_(\d+)(?:_attempt(\d+))?$")
+
+
+def _iter_key(name):
+    m = _ITER_DIR_RE.match(name)
+    return int(m.group(1)), int(m.group(2) or 1)
 
 
 def provenance(project):

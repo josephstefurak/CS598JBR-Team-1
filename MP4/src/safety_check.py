@@ -179,7 +179,12 @@ def proxy(crate, raw_path=None, build=True, source=None):
     build_res = None
     if build:
         copy = mc.copy_crate(crate)
-        code, out = mc.cargo(["build", "--lib", "--locked"], copy, env_extra={"RUSTFLAGS": "-D unsafe_code"})
+        try:
+            code, out = mc.cargo(["build", "--lib", "--locked"], copy, env_extra={"RUSTFLAGS": "-D unsafe_code"})
+        finally:
+            shutil.rmtree(os.path.dirname(copy), ignore_errors=True)   # copy_crate's temp parent
+        for p in sorted({os.path.realpath(copy), copy}, key=len, reverse=True):   # the temp path is noise
+            out = out.replace(p, "<crate>")
         build_res = {"ok": code == 0, "exit_code": code,
                      "unsafe_code_errors": len(re.findall(r"^error: .*unsafe", out, re.M))}
         if code != 0:
@@ -253,9 +258,13 @@ def all_snapshots(project, tool):
                 res = course(snap)
             else:
                 # a snapshot is the crate's src/ only: lay it out as <tmp>/src so the same scan applies
-                crate = os.path.join(tempfile.mkdtemp(prefix="mp4snap_"), "crate")
-                shutil.copytree(snap, os.path.join(crate, "src"))
-                res = proxy(crate, build=False)
+                tmp = tempfile.mkdtemp(prefix="mp4snap_")
+                try:
+                    crate = os.path.join(tmp, "crate")
+                    shutil.copytree(snap, os.path.join(crate, "src"))
+                    res = proxy(crate, build=False)
+                finally:
+                    shutil.rmtree(tmp, ignore_errors=True)
             out.append({"run": run, "iter": it, "result": res})
     return out
 

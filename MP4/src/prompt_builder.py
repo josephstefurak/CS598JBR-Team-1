@@ -57,8 +57,9 @@ def digest(check, caps):
         errs = b.get("errors") or []
         for e in errs[:caps["max_build_errors"]]:
             out.append("- %s%s" % ("[%s] " % e["code"] if e.get("code") else "", e["message"]))
-        if len(errs) > caps["max_build_errors"]:
-            out.append("- ... %d more" % (len(errs) - caps["max_build_errors"]))
+        total = b.get("error_count", len(errs))   # errors keeps only the first 50
+        if total > caps["max_build_errors"]:
+            out.append("- ... %d more" % (total - min(len(errs), caps["max_build_errors"])))
         if b.get("first_error"):
             out += ["", "```", _clip(b["first_error"], caps["max_panic_chars"]), "```"]
     t = check.get("test") or {}
@@ -70,6 +71,15 @@ def digest(check, caps):
         panic = (t.get("tests", {}).get(name) or {}).get("panic") or ""
         label = " (known-defective test, expected to fail)" if name in known else ""
         out += ["- `%s` FAILED%s" % (name, label), "", "```", _clip(panic, caps["max_panic_chars"]), "```"]
+    if b.get("ok") and t.get("missing_names"):
+        out.append("- no result for %s: the test %s, or its process crashed" % (
+            ", ".join("`%s`" % n for n in t["missing_names"]),
+            "ran until the time limit (likely an endless loop)" if t.get("timed_out") else "did not finish"))
+    added = t.get("extra_tests") or {}
+    if added:
+        out.append("- tests outside the benchmark (yours; not counted above): %d passed, failing: %s" % (
+            sum(1 for st in added.values() if st == "ok"),
+            ", ".join("`%s`" % n for n, st in sorted(added.items()) if st == "FAILED") or "none"))
     c = check.get("clippy")
     out.append("")
     if c:
@@ -82,6 +92,9 @@ def digest(check, caps):
         rustc = [s for s in (c.get("rustc") or {}).get("sites", []) if s["origin"] == "agent"]
         for s in rustc[:caps["max_clippy_sites"]]:
             out.append("- `%s:%d` %s (rustc): %s" % (s["file"], s["line"], s["lint"], s["message"]))
+        if c.get("errors"):
+            out.append("- clippy stopped with %d error(s); a crate counts as clean only when clippy runs without "
+                       "errors" % c["errors"])
     else:
         out.append("### Clippy: not run (the build failed)")
     s = check.get("safety") or {}
@@ -98,6 +111,9 @@ def digest(check, caps):
     out.append("")
     out.append("### Interface: %s missing, %s changed" % (i.get("missing"), i.get("changed")))
     for mod, m in (i.get("modules") or {}).items():
+        if m.get("parse_error"):
+            out.append("- `%s` could not be read for the interface check, so its items count as missing" % (
+                m.get("file") or mod))
         for item in m.get("missing", []):
             out.append("- missing `%s::%s`" % (mod, item))
         for ch in m.get("changed", []):
