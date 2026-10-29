@@ -47,9 +47,11 @@ SMOKE_CALLS = [
           "and report both outputs."),
 ]
 # Distinctive phrases from the owner's ~/.claude/CLAUDE.md, the repo CLAUDE.md and auto-memory. None may
-# appear in an isolated agent's answer (C4, C9).
+# appear in an isolated agent's answer (C4, C9). Not the repo name: it is part of the --add-dir path the
+# agent legitimately sees (smoke 2026-10-29 false positive).
 LEAK_MARKERS = ["Working agreement", "Build forward", "program-builder", "commit-only", "mp4-program",
-                "one phase per session", "MP4 group and framework", "forum post", "CS598JBR"]
+                "one phase per session", "MP4 group and framework", "forum post", "owner gate",
+                "MP1-MP3", "Jacob and Ross"]
 
 
 def build_parser():

@@ -68,19 +68,18 @@ Leave the second command running in a terminal for the duration of the run.
 Check remaining plan quota in an interactive `claude` session with `/usage`
 before M6 and M7.
 
-**O8 — run the M3 smoke from your own terminal (found 2026-10-29).** A
-Claude Code session's shell is sandboxed and cannot reach your Claude login:
-`claude auth status` there reports `loggedIn: false`, and agent B fails with
-"OAuth session expired". Anything that calls the model (`--smoke` now, the
-full runs in M6/M7/M9) must therefore run from your own terminal, where you
-are logged in. Uses 2 of D7's 3 smoke calls, at most 2 turns each:
+**O8 — keep the Claude CLI logged in (DONE 2026-10-29).** The `claude` CLI
+keeps its own login, separate from the desktop app. It was logged out, so the
+first smoke attempt failed with "OAuth session expired". Fixed by running, in
+your own terminal:
 
 ```bash
-cd ~/CS598JBR-Team-1 && claude auth status && python3 -I MP4/src/run_pipeline.py --project project_1 --smoke
+claude auth login
 ```
 
-It writes `docs/programs/mp4/evidence/smoke/`. Then tell the session (or the
-next `/mp4-phase`) that it ran; the session reads the evidence and closes M3.
+Before M6, M7 and M9, check that `claude auth status` shows `"loggedIn": true`.
+(An earlier version of this note blamed the session sandbox. That was wrong:
+once the CLI was logged in, the session shell could use it.)
 
 ## Stage 3 — when the course releases its tools (cut-off 2026-11-15)
 
