@@ -58,12 +58,12 @@ baselines:                        # recorded by the phase that creates each harn
   m5_guard_traps:                 # M5 2026-10-29: all caught, through do_checks (selftest 120 -> 162); reviews/review-1.md
     a_test_file_edit: "integrity violations: 1; restored, and the restored test is what gets measured"
     b_new_dependency: "integrity violations: 1 (Cargo.toml restored); unrestored crate: new_dependency libc"
-    c_build_rs_extern_c: "safety finding: extern_c + safety finding: build_rs"
+    c_build_rs_extern_c: "safety finding: extern_c + safety finding: build_rs (M6 step 1, G1: now extern_c + integrity violation outside_src build.rs, removed before measuring)"
     d_unsafe_block: "build fails + unsafe metrics: 2 + safety finding: deny_unsafe_build_failed"
     e_test_literal: "hard-coding hits: 1"
     f_pub_signature: "interface missing 0, changed 1"
     g_hand_edit: "workspace_tamper modified [fixture.rs], reverted"
-  m5_open_gaps: "lint suppression (#![allow], .cargo/config.toml cap-lints, clippy.toml) still reaches SUCCESS: gate G1 at M6"
+  m5_open_gaps: "closed at M6 step 1 (f69ae8d): lint attributes block SUCCESS, files outside src/ and symlinks are removed and recorded (G1); selftest 166 -> 192"
   # M1 Baseline B, 2026-10-28: unique (lint, file, line) sites with primary span
   # under src/bin/, from the rubric clippy run. rustc = non-clippy warnings.
   # Evidence: MP4/trajectories/project_N/baseline/README.md + clippy.json.

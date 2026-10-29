@@ -58,7 +58,7 @@ the specific conflict rather than picking an alternative.*
 | M3 | Configs, prompts, agent runner, smoke run | **done** | 2026-10-29 — 2e0f3d2 | rulings: all 4 defaults + D-STRUCTOUT; selftest 54 → 88 (+34, incl. 5 runner scenarios); smoke 2/3 D7 calls spent: init tools 6+StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5; git denied; cargo 1.89.0-nightly; no leak markers; read-only Bash auto-approved (finding) → fixed same day, probe 5/5, D7 smoke calls now 3/3 spent |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **done** | 2026-10-29 — 23c88b2 | selftest 88 → 120 (+32); drills A–H + D2, E2 all PASS (A SUCCESS@2, B MAX_ITERATIONS@1, C NO_PROGRESS@4, D restored, E attempt2, E2 exit 75, F 143→resume, G rerun identical, H tamper reverted); README 12/12 headings, generated sections current; no model calls |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **done** | 2026-10-29 — 1ac3cd4 | 50 findings (44 angles + 6 sweep): 32 fixed + security S1/S2, 6 to owner gates G1–G7 (asked at M6), 12 backlog/M8/M12; selftest 120 → 166 (+46); traps 7/7; interface fuzz 241 hangs + 92 crashes → 0; matrix 37 rows (6 verified, 22 pending-run, 2 proxy, 7 owner-blocked); fresh clone exit 0 before and after the fixes |
-| M6 | Full run: project_1 (satc) | **not-started** | — | — |
+| M6 | Full run: project_1 (satc) | **done** | 2026-10-29 — c8435d7 (step 1 f69ae8d) | G1–G7 applied, selftest 166 → 192 (+26); run `20261029T184931Z` SUCCESS after 2 iterations / 2 attempts in 7.6 min, no pauses; both iterations 4/4 tests, agent clippy 0/0/0/0, harness 0/0/0/0, proxy safety 0, interface 0/0, integrity 0, lint attrs 0; 29 turns, 39 971 output tokens; 0 leak markers; 2 denials (`ls -R`); check-only diff empty; provenance ok; D7 full run 1/1 for project_1 spent |
 | M7 | Full run: project_2 (libpsbt) | **not-started** | — | — |
 | M8 | Review 2: translations and trajectories vs rubric | **not-started** | — | — |
 | M9 | Tuning rerun | **optional — owner-triggered** | — | Flipped to not-started by the M8 session only if the owner chooses a rerun at the M8 gate; otherwise set `dropped (owner accepted M6/M7 results)` |
@@ -862,6 +862,176 @@ not asked here.
 
 **Queued for owner**: O9 (answer G1–G7 at the start of M6; runbook Stage 2). Optional: remove the leaked
 `$TMPDIR/mp4crate_*` copies (runbook Stage 2). **O1 still deferred.** D8 remains the working assumption.
+
+### M6 — Full run: project_1 (satc) (2026-10-29, f69ae8d + c8435d7 + this commit)
+
+**Shipped** (product terms): satc is translated. The pipeline produced a safe Rust crate that builds, passes all
+4 benchmark tests, and has no clippy warnings of its own in any of the four rubric groups. It has no unsafe code,
+no FFI, and implements every interface item unchanged. The guards now close the remaining holes from review 1,
+as the owner ruled at G1–G7:
+- lint suppression or files planted outside `src/` can no longer fake a clean run;
+- a lost login or an API outage pauses the run instead of ending it;
+- a run always gets at least one review iteration;
+- a run that ends without success ships its best iteration, not its last.
+
+The full trajectory of both agent sessions is committed. The final crate is exactly what the pipeline wrote.
+
+**Run announcement** (written to the ledger row before the run started, 18:49 UTC): opus, effort high,
+max_iterations 8, min_iterations 2, max_turns 60, 45-minute wall clock, estimated 2–4 h of subscription quota.
+D7 full run 1 of 1 for project_1. Started as `caffeinate -dims python3 -I MP4/src/run_pipeline.py --project
+project_1 --yes`.
+
+**Deviations from spec**:
+- **Existing code modified (step 1).** The working-agreement rule asks what each function did before and why it
+  changed:
+  - `integrity.verify` restored immutable files only. It now also calls the new `sweep_strays` (G1a).
+  - `measure_crate`, `summarize`, `evaluate` and `do_checks` did not look at lint attributes. They now run the new
+    `lint_attribute_scan`, report `lint_attribute_hits` and block SUCCESS on it (G1b).
+  - `decide_stop` stopped at the first SUCCESS. It now waits for `loop.min_iterations` (G3).
+  - `finalize` always shipped the last iteration. At MAX_ITERATIONS and NO_PROGRESS it now ships the best (G6).
+  - `_drive` stopped on `auth_error` and treated `overloaded` as a full iteration. Both now go to `_usage_limit`,
+    which records the cause; a lost login always exits 75 (G2, G7).
+  - `agent_runner.classify` had no connection-error class. It now reads the result text, or stderr when no
+    result arrived (G7).
+  - `STOP_AUTH_ERROR` was removed because it can no longer be reached.
+- **Judgment calls the gate answers did not fix:**
+  - G4 leak markers are recorded in `agent_result.json` and `run.log`, but do not stop the run, so a false
+    positive cannot burn a D7 slot. Considered: abort on a hit.
+  - G6 applies to MAX_ITERATIONS and NO_PROGRESS only, as asked; ABORT and ABORT_ISOLATION still ship the last
+    iteration. Ranking is success first, then the score tuple, and on a tie the later iteration.
+  - G7 waits `rate_limit.fallback_minutes` (60), the "fallback wait" in the option text.
+  - G1a deletes empty directories the agent created outside `src/` without recording them; only files and links
+    are violations. `.claude/` is not exempt, because under `--setting-sources project` a planted
+    `.claude/settings.json` could widen the next iteration's permissions.
+  - G1b skips `src/lib.rs`, which integrity restores to the wrapper's text, and flags `cfg_attr` only when it
+    carries a lint level.
+- **Prompt text added so the agent knows the new rules.** The system prompt now covers files outside `src/` and
+  the full set of lint-level forms. `repair.md` gains a paragraph for a crate that is already clean (G3). Both are
+  logged in CHANGELOG.
+- **Selftest trap c changed.** `build.rs` is now removed as an `outside_src` violation before measuring, so the
+  `build_rs` safety finding no longer appears in the loop. The baseline in program.yaml is updated.
+- **`caffeinate` started by the session.** O6 asks the owner to keep the Mac awake. The session wrapped the run in
+  `caffeinate -dims`, which ends with the run. The Mac was on AC power.
+- **Cargo run by hand in `translations/project_1/`.** The spec's verification asks for `cargo test` and the rubric
+  clippy command. The only side effect is the gitignored `target/`, and provenance still passes.
+- **Traceability doc.** It gains a `pending-review` status definition. The stale R-T2-SRC grep evidence was
+  re-run (line numbers, five stop constants), and its selftest count is now 192.
+- Spec drift: none material. The run was far shorter than the 2–4 h estimate.
+
+**Owner gates**: none asked. G1–G7 were answered in the M5 session (why.md D-M5GATES) and applied here without
+re-asking, per spec.
+
+**Verification** (real output):
+- **Step 1.**
+  - `python3 -I MP4/src/selftest.py` → `selftest: 192 PASS, 0 FAIL` (166 → 192, +26). There are 26 new `_run_m6`
+    checks, one or more per gate, and trap c is re-expected.
+  - Mutation check in a scratch copy, with each gate's code disabled: G1a/G1b assertions FAIL. G1a shows
+    `(True, [], …)`, i.e. the lint cap plus planted files reach SUCCESS again (probe x3). G2 and G7 raise
+    `KeyError: 'pauses'` because no pause is recorded. G3 raises `FileNotFoundError` because there is no
+    iteration 2. G6 FAILs with `iter_02` shipped and `compiles False`.
+  - `py_compile` exit 0, `flake8 --max-line-length 120 MP4/src/` exit 0, `pyflakes` exit 0. `--dry-run` exit 0
+    for both projects; the argv carries `Bash(cargo *--config*)` and `Bash(cargo *--manifest-path*)`, and the
+    prompt carries the G5 note. `summarize.py --check-readme` → up to date (stopping condition regenerated).
+- **Pre-flight.** `claude auth status` → loggedIn true, claude.ai, max. `claude --version` → `2.1.235 (Claude
+  Code)`. `~/.cargo/bin/cargo +nightly-2025-05-13 --version` → `cargo 1.89.0-nightly (056f5f4f3 2025-05-09)`
+  (cargo is not on this shell's PATH; `mc.cargo_env` prepends it). `caffeinate` was not running, so the run was
+  wrapped in it. `real_run_count` → `{project_1: 0, project_2: 0}`, `spend_check` None, no open runs.
+- **Run `20261029T184931Z`.** Exit 0; `SUCCESS after 2 iteration(s)`; 18:49:31 → 18:57:06 UTC.
+  `final_iteration_dir` iter_02, `final_selection` last, `usage_limit_pauses` [], `workspace_tamper` [].
+
+  | Iter | Outcome | Turns | Agent s | Builds | Tests | Clippy agent c/s/cx/p | Harness | Safety (proxy) | Interface miss/chg | Integrity | Lint | Hard-coding | Score |
+  |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+  | 1 | ok | 12 | 240.1 | yes | 4/4 | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 | 0/0 | 0 | 0 | 0 | [4,0,0,0,0] |
+  | 2 | ok | 17 | 212.1 | yes | 4/4 | 0/0/0/0 | 0/0/0/0 | 0/0/0/0 | 0/0 | 0 | 0 | 0 | [4,0,0,0,0] |
+
+  - Tokens: input 44, output 39 971 (thinking 22 979), cache read 914 538, cache creation 123 028. Reported
+    `total_cost_usd` equivalent 2.69, but the run used subscription auth (`apiKeySource` none), so nothing was
+    billed in dollars.
+  - Tool calls: iteration 1 used 11 (Read 4, Write 1, Grep 1, cargo build/check/test/clippy 1 each,
+    StructuredOutput 1). Iteration 2 used 16 (Read 6, Glob 2, Grep 1, Edit 1, cargo build/test/clippy, 2 × `ls
+    -R`, StructuredOutput).
+  - Permission denials: iteration 1 none; iteration 2 had 2, both `ls -R ~/…` (the read-only denylist working).
+  - Rate-limit events: one `allowed` five_hour event per attempt; no rejection.
+  - Leak markers in the agent text: `[]` for both attempts, from the real cwd inside the repo (F36's open
+    question, for the text).
+  - Isolation init: tools Bash, Edit, Glob, Grep, Read, StructuredOutput, Write; mcp `[]`; slash `[]`; dontAsk;
+    `claude-opus-5`.
+  - Iteration 2 (the G3 review pass) changed 30 diff lines. `satc_point_normalize` and `satc_point_project` now
+    reproduce the C's unbraced `satc_point_set_xy` and unparenthesised `satc_point_dot`/`satc_point_len2` macro
+    expansions. Checked against `satc.h:276-278, 363, 370, 485-504`: the C reads that way.
+- **Step 4.**
+  - `--check-only --project project_1` exit 0. The summary diff against `iter_02/check.json` is `{}`.
+  - `integrity.py --provenance project_1` → `"ok": true` against `iter_02/src_after`.
+  - `scrub_secrets.py --check MP4/` → 0 hits. `find MP4/trajectories -size +50M` → nothing. The run dir is
+    996 KB.
+  - `diff` of `src/bin/satc_test.rs`, `Cargo.toml`, `Cargo.lock` and `src/interfaces/` against `subjects/` → no
+    differences.
+  - Every `iter_KK/` has all 17 files and a `result` line. `grep` for `/Users/` and `claude-501` over the
+    committed run and results → none.
+- **By hand.**
+  - The rubric clippy command in `translations/project_1` exits 0. Its warning lines are identical to
+    `iter_02/clippy_rubric.log`: 2 rustc warnings, both in the harness `src/bin/satc_test.rs` (unused import
+    `satc::satc`, unused fn `satc_nearest_hundredth`). That is the M1 baseline `rustc: 2`.
+  - `cargo +nightly-2025-05-13 test` → `test result: ok. 4 passed; 0 failed` (satc_point_scale_xy_test,
+    satc_collision_test, satc_polygon_get_centroid_test, satc_point_test).
+  - One `#[allow(clippy::too_many_arguments)]` on `satc_is_separating_axis` (D-ALLOW).
+- **Floor after the artifacts commit.** py_compile 0; selftest 192/0; scrub 0; `--help` 0; check-only 0;
+  provenance ok; `--check-readme` up to date; `summarize.py` exit 2 `PENDING project_2` (expected before M7).
+- **Secret grep.** The floor `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/` prints 3 lines, all in
+  `MP4/docs/rubric_traceability.md` (22, 51, 150), quoting the pattern itself. They were already there at
+  0097efa, so M5's "empty over MP4/" was true at 1ac3cd4 only (discovery below).
+- **Docs-claims check.** Grepped `AUTH_ERROR|pending G1|gate G1|still reach(es)? SUCCESS|ships the last|
+  min_iterations|iterations >= 2` over README, MP4/docs, configs, the program docs and src. Fixed:
+  - the README stopping condition (regenerated);
+  - the run_pipeline docstring;
+  - rubric_traceability R-T2-SRC: evidence block, "five stop constants", selftest count;
+  - the program.yaml baselines `c_build_rs_extern_c` and `m5_open_gaps`;
+  - why.md C6, now with the max-turns observation.
+
+  The historical phase-log lines in this file are left as written.
+- **Tooling pass.** The row's Tooling line is "none". The installed skills were checked: code-review is meant for
+  M8, simplify is out of scope. None used. Workflow was not opted into.
+
+**NOT demonstrated**:
+- The G4 cargo denials (`Bash(cargo *--config*)`, `--manifest-path`) are shown only to be in the argv. The agent
+  never tried either flag, and the D7 smoke allowance is spent, so Claude Code's matcher was not observed to deny
+  them.
+- G2 and G7 pauses, and G6 ship-best, were exercised only with the fake agent. The real run had no pause and
+  stopped at SUCCESS.
+- G1's guards fired on nothing in the real run. That shows the agent did not plant files or lint attributes, not
+  that every evasion is caught. The scan is regex-level, and `src/main.rs` and non-`.rs` files inside `src/`
+  are outside both guards.
+- The leak-marker scan covers the agent's own text. It does not prove that `CLAUDE.md` content was absent from
+  the context. Claude Code also puts the repo's git status (branch `mp4-program`, recent commit subjects) into
+  its system prompt, because the crate sits inside this git repository. No marker surfaced, and that context was
+  not inspected.
+- The 4 benchmark tests pass, but behaviour the tests do not cover was not checked against the C here; that is
+  M8. The agent's own `c_behaviour_notes` (rotation sign, AABB `y_max`, AABB UB → origin, the two macro
+  expansions) are its claims, and only the two macro claims were spot-read against `satc.h`.
+- What `--max-turns 60` does at the cap is unobserved: 12 and 17 turns were used.
+- Safety numbers are the interim proxy, not the course tool (M12).
+- `results/project_1.check.json` is not byte-stable across reruns: the timestamp, cargo timings and the order
+  of keys in the per-test dict change. The summary is stable.
+
+**Discoveries logged for later rows**:
+- (M8) The C has two macro bugs the program docs do not list: the unbraced two-statement `satc_point_set_xy`
+  (`satc.h:276`), which leaves `y` unguarded in `satc_point_normalize`, and the unparenthesised
+  `satc_point_dot`/`satc_point_len2` (`:363`, `:370`), which change `satc_point_project`'s quotient. The
+  translation reproduces both (D-FAITHFUL). Add them to why.md H-A, and check whether other macro uses in
+  `satc.h` expand the same way.
+- (M8) Only iteration 2's review prompt surfaced those macro bugs. Iteration 1 was clean on every check while
+  diverging from the C. That is evidence for the report that the G3 review iteration adds fidelity the tests
+  cannot see.
+- (M10/M11) `check.json` per-test dict order follows completion order. Sort it, or compare summaries only, if
+  byte-identical reruns are wanted.
+- (close-out) The floor's secret grep also matches 3 self-quoting lines in `MP4/docs/rubric_traceability.md`,
+  in addition to the 9 in `docs/` noted at M5. Narrow the floor item or accept the known lines.
+- (M7) The run took 7.6 min against a 2–4 h estimate. libpsbt is larger and has the known-failing
+  `read_test_vector` (D8), so do not assume the same.
+
+**Queued for owner**: nothing new. O6 still applies for M7 (the session can wrap the run in `caffeinate` as it
+did here, but the machine must stay on and logged in). **O1 still deferred.** D8 remains the working assumption,
+and O1 must be resolved or consciously accepted before submission.
 
 ## Owner-action queue (only the owner can clear these)
 
