@@ -1,0 +1,16 @@
+--- a/src/cli.rs
++++ b/src/cli.rs
+@@ -94,9 +94,12 @@
+     let mut buffer = vec![0u8; 4096];
+     let mut psbt = Psbt::new(4096);
+ 
+-    let Some(psbt_hex) = std::env::args().nth(1) else {
++    // the C reads argv[1] as raw bytes, so take the OS string and convert it
++    // lossily rather than panicking on an argument that is not valid UTF-8
++    let Some(psbt_hex) = std::env::args_os().nth(1) else {
+         return usage();
+     };
++    let psbt_hex = psbt_hex.to_string_lossy();
+ 
+     psbt_init(&mut psbt, &mut buffer, 4096);
+ 

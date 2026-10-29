@@ -1,0 +1,451 @@
+{
+  "project": "project_2",
+  "crate": "MP4/translations/project_2",
+  "generated_at": "2026-10-29T20:11:50Z",
+  "toolchain": "cargo 1.89.0-nightly (056f5f4f3 2025-05-09)",
+  "subjects_checksums_ok": true,
+  "build": {
+    "ok": true,
+    "exit_code": 0,
+    "error_count": 0,
+    "error_codes": [],
+    "errors": [],
+    "first_error": "",
+    "log": "MP4/results/project_2.check.logs/build.log"
+  },
+  "test": {
+    "compiled": true,
+    "exit_code": 101,
+    "timed_out": false,
+    "passed": 3,
+    "failed": 1,
+    "ignored": 0,
+    "missing": 0,
+    "total": 4,
+    "passed_names": [
+      "empty_input_test",
+      "encode_decode_test",
+      "test_vector"
+    ],
+    "failed_names": [
+      "read_test_vector"
+    ],
+    "missing_names": [],
+    "extra_tests": {},
+    "tests": {
+      "test_vector": {
+        "status": "ok",
+        "executions": 2,
+        "panic": null
+      },
+      "empty_input_test": {
+        "status": "ok",
+        "executions": 2,
+        "panic": null
+      },
+      "encode_decode_test": {
+        "status": "ok",
+        "executions": 2,
+        "panic": null
+      },
+      "read_test_vector": {
+        "status": "FAILED",
+        "executions": 2,
+        "panic": "thread 'read_test_vector' panicked at src/bin/test.rs:126:26:\nassertion `left == right` failed\n  left: 4\n right: 0\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace"
+      }
+    },
+    "executables": [
+      "unittests src/lib.rs (target/debug/deps/libpsbt-988333bac3d1cde3)",
+      "unittests src/bin/test.rs (target/debug/deps/test-a6484d7750abaf7b)",
+      "src/bin/test.rs (target/debug/deps/test-da6ede4e6fc56d5e)"
+    ],
+    "first_error": "",
+    "log": "MP4/results/project_2.check.logs/test.log"
+  },
+  "clippy_rubric": {
+    "exit_code": 0,
+    "summary_lines": [
+      "warning: `libpsbt` (bin \"test\") generated 8 warnings (run `cargo clippy --fix --bin \"test\"` to apply 2 suggestions)",
+      "warning: `libpsbt` (test \"test\") generated 4 warnings (3 duplicates)",
+      "warning: `libpsbt` (bin \"test\" test) generated 4 warnings (3 duplicates) (run `cargo clippy --fix --bin \"test\" --tests` to apply 1 suggestion)"
+    ],
+    "error_count": 0,
+    "log": "MP4/results/project_2.check.logs/clippy_rubric.log"
+  },
+  "clippy": {
+    "groups": {
+      "correctness": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_2.check.logs/clippy_correctness.json"
+      },
+      "style": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 2,
+        "external": 0,
+        "lints": {
+          "clippy::uninlined_format_args": {
+            "agent": 0,
+            "harness": 1,
+            "external": 0
+          },
+          "clippy::single_match": {
+            "agent": 0,
+            "harness": 1,
+            "external": 0
+          }
+        },
+        "sites": [
+          {
+            "lint": "clippy::uninlined_format_args",
+            "file": "src/bin/test.rs",
+            "line": 6,
+            "column": 9,
+            "origin": "harness",
+            "message": "variables can be used directly in the `format!` string"
+          },
+          {
+            "lint": "clippy::single_match",
+            "file": "src/bin/test.rs",
+            "line": 123,
+            "column": 9,
+            "origin": "harness",
+            "message": "you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`"
+          }
+        ],
+        "log": "MP4/results/project_2.check.logs/clippy_style.json"
+      },
+      "complexity": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_2.check.logs/clippy_complexity.json"
+      },
+      "perf": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_2.check.logs/clippy_perf.json"
+      }
+    },
+    "rustc": {
+      "agent": 0,
+      "harness": 8,
+      "external": 0,
+      "lints": {
+        "unused_imports": {
+          "agent": 0,
+          "harness": 1,
+          "external": 0
+        },
+        "dead_code": {
+          "agent": 0,
+          "harness": 6,
+          "external": 0
+        },
+        "unused_assignments": {
+          "agent": 0,
+          "harness": 1,
+          "external": 0
+        }
+      },
+      "sites": [
+        {
+          "lint": "unused_imports",
+          "file": "src/bin/test.rs",
+          "line": 1,
+          "column": 5,
+          "origin": "harness",
+          "message": "unused import: `libpsbt::psbt::*`"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/test.rs",
+          "line": 4,
+          "column": 4,
+          "origin": "harness",
+          "message": "function `hex_print` is never used"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/test.rs",
+          "line": 12,
+          "column": 7,
+          "origin": "harness",
+          "message": "constant `PSBT_HEX` is never used"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/test.rs",
+          "line": 13,
+          "column": 7,
+          "origin": "harness",
+          "message": "constant `TRANSACTION` is never used"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/test.rs",
+          "line": 23,
+          "column": 7,
+          "origin": "harness",
+          "message": "constant `REDEEM_SCRIPT_A` is never used"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/test.rs",
+          "line": 30,
+          "column": 7,
+          "origin": "harness",
+          "message": "constant `REDEEM_SCRIPT_B` is never used"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/test.rs",
+          "line": 35,
+          "column": 7,
+          "origin": "harness",
+          "message": "constant `EMPTY_INPUTS` is never used"
+        },
+        {
+          "lint": "unused_assignments",
+          "file": "src/bin/test.rs",
+          "line": 133,
+          "column": 9,
+          "origin": "harness",
+          "message": "value assigned to `step` is never read"
+        }
+      ]
+    },
+    "agent_total": 0,
+    "harness_total": 2,
+    "errors": 0,
+    "ok": true
+  },
+  "safety": {
+    "tool": "proxy",
+    "tool_version": "proxy-1",
+    "unsafe_lines": 0,
+    "unsafe_calls": 0,
+    "unsafe_casts": 0,
+    "pointer_arithmetic": 0,
+    "extra": {
+      "raw_pointer_types": 0,
+      "manual_alloc": 0,
+      "unsafe_impl": 0,
+      "static_mut": 0,
+      "unsafe_blocks": 0,
+      "unsafe_fns": 0,
+      "transmute": 0,
+      "forbid_unsafe_code_first_line": true,
+      "deny_unsafe_build": {
+        "ok": true,
+        "exit_code": 0,
+        "unsafe_code_errors": 0
+      },
+      "ffi": 0,
+      "build_rs": false,
+      "c_sources": 0,
+      "dependencies": [
+        "base64",
+        "thiserror"
+      ],
+      "extra_dependencies": [],
+      "per_file": {
+        "src/base64.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        },
+        "src/cli.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        },
+        "src/compactsize.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        },
+        "src/lib.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        },
+        "src/psbt.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        },
+        "src/tx.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        }
+      }
+    },
+    "findings": [],
+    "raw_path": "MP4/results/project_2.check.logs/safety_proxy.json"
+  },
+  "interface": {
+    "modules": {
+      "base64": {
+        "file": "src/base64.rs",
+        "interface_items": 3,
+        "missing": [],
+        "changed": [],
+        "extra": [],
+        "parse_error": null
+      },
+      "cli": {
+        "file": "src/cli.rs",
+        "interface_items": 0,
+        "missing": [],
+        "changed": [],
+        "extra": [
+          "main"
+        ],
+        "parse_error": null
+      },
+      "compactsize": {
+        "file": "src/compactsize.rs",
+        "interface_items": 4,
+        "missing": [],
+        "changed": [],
+        "extra": [],
+        "parse_error": null
+      },
+      "psbt": {
+        "file": "src/psbt.rs",
+        "interface_items": 38,
+        "missing": [],
+        "changed": [],
+        "extra": [
+          "set_errmsg"
+        ],
+        "parse_error": null
+      },
+      "tx": {
+        "file": "src/tx.rs",
+        "interface_items": 7,
+        "missing": [],
+        "changed": [],
+        "extra": [
+          "parse_btc_tx"
+        ],
+        "parse_error": null
+      }
+    },
+    "interface_items": 52,
+    "missing": 0,
+    "changed": 0,
+    "extra": 3,
+    "ok": true
+  },
+  "integrity": {
+    "violations": []
+  },
+  "hardcode_hits": [],
+  "lint_attributes": [],
+  "summary": {
+    "compiles": true,
+    "build_error_codes": [],
+    "tests_passed": 3,
+    "tests_total": 4,
+    "clippy_agent": {
+      "correctness": 0,
+      "style": 0,
+      "complexity": 0,
+      "perf": 0
+    },
+    "clippy_harness": {
+      "correctness": 0,
+      "style": 2,
+      "complexity": 0,
+      "perf": 0
+    },
+    "clippy_agent_total": 0,
+    "safety": {
+      "unsafe_lines": 0,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "pointer_arithmetic": 0
+    },
+    "safety_tool": "proxy",
+    "interface_missing": 0,
+    "interface_changed": 0,
+    "integrity_violations": 0,
+    "hardcode_hits": 0,
+    "lint_attribute_hits": 0
+  }
+}

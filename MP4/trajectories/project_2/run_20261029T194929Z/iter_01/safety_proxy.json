@@ -1,0 +1,125 @@
+{
+  "tool": "proxy",
+  "tool_version": "proxy-1",
+  "unsafe_lines": 0,
+  "unsafe_calls": 0,
+  "unsafe_casts": 0,
+  "pointer_arithmetic": 0,
+  "extra": {
+    "raw_pointer_types": 0,
+    "manual_alloc": 0,
+    "unsafe_impl": 0,
+    "static_mut": 0,
+    "unsafe_blocks": 0,
+    "unsafe_fns": 0,
+    "transmute": 0,
+    "forbid_unsafe_code_first_line": true,
+    "deny_unsafe_build": {
+      "ok": true,
+      "exit_code": 0,
+      "unsafe_code_errors": 0
+    },
+    "ffi": 0,
+    "build_rs": false,
+    "c_sources": 0,
+    "dependencies": [
+      "base64",
+      "thiserror"
+    ],
+    "extra_dependencies": [],
+    "per_file": {
+      "src/base64.rs": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "extra": {
+          "raw_pointer_types": 0,
+          "manual_alloc": 0,
+          "unsafe_impl": 0,
+          "static_mut": 0,
+          "unsafe_blocks": 0,
+          "unsafe_fns": 0,
+          "transmute": 0
+        }
+      },
+      "src/cli.rs": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "extra": {
+          "raw_pointer_types": 0,
+          "manual_alloc": 0,
+          "unsafe_impl": 0,
+          "static_mut": 0,
+          "unsafe_blocks": 0,
+          "unsafe_fns": 0,
+          "transmute": 0
+        }
+      },
+      "src/compactsize.rs": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "extra": {
+          "raw_pointer_types": 0,
+          "manual_alloc": 0,
+          "unsafe_impl": 0,
+          "static_mut": 0,
+          "unsafe_blocks": 0,
+          "unsafe_fns": 0,
+          "transmute": 0
+        }
+      },
+      "src/lib.rs": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "extra": {
+          "raw_pointer_types": 0,
+          "manual_alloc": 0,
+          "unsafe_impl": 0,
+          "static_mut": 0,
+          "unsafe_blocks": 0,
+          "unsafe_fns": 0,
+          "transmute": 0
+        }
+      },
+      "src/psbt.rs": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "extra": {
+          "raw_pointer_types": 0,
+          "manual_alloc": 0,
+          "unsafe_impl": 0,
+          "static_mut": 0,
+          "unsafe_blocks": 0,
+          "unsafe_fns": 0,
+          "transmute": 0
+        }
+      },
+      "src/tx.rs": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "extra": {
+          "raw_pointer_types": 0,
+          "manual_alloc": 0,
+          "unsafe_impl": 0,
+          "static_mut": 0,
+          "unsafe_blocks": 0,
+          "unsafe_fns": 0,
+          "transmute": 0
+        }
+      }
+    }
+  },
+  "findings": [],
+  "raw_path": "MP4/trajectories/project_2/run_20261029T194929Z/iter_01/safety_proxy.json"
+}
