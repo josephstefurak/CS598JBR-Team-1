@@ -463,6 +463,8 @@ R-T4-OVERALL-RESULTS (data), R-T1-README (usage-limit evidence), Z1-Z10, D7.
 **Spec**:
 1. If M5 logged discoveries that change stop semantics or tool permissions,
    ask them now in one batch and apply to configs with CHANGELOG entries.
+   (M5's batch G1–G7 was answered on 2026-10-29: why.md D-M5GATES. Apply those
+   answers, code and config, with a selftest check for each; do not re-ask.)
 2. Pre-flight: `--dry-run --project project_1`, `claude auth status` logged
    in, toolchain present, `caffeinate` running (O6); write the run
    announcement (model, max_iterations 8, max_turns 60, estimated 2-4 h) in

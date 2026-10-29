@@ -259,6 +259,8 @@ row says so. The recommendations are this review's, not decisions.
 | G6 | At MAX_ITERATIONS or NO_PROGRESS, ship the best-scoring iteration instead of the last? (F29) | keep the last; or restore the best snapshot into `translations/` and name it in `run_summary.final_iteration_dir` (provenance already follows that field) | Best. Otherwise a session killed mid-refactor in the last iteration ships a crate that does not build |
 | G7 | Treat `overloaded` and connection failures like a usage-limit pause, rather than a full iteration? (F30) | pause, with the fallback wait and the attempt cap; or keep | Pause. An outage should not consume NO_PROGRESS rounds |
 
+**Owner answers, 2026-10-29** (asked in the M5 session at the owner's request, verbatim option labels): G1 "Both guards" (revert and record files outside src/ that are not in the skeleton, plus symlinks; and a lint-attribute scan that blocks SUCCESS except the D-ALLOW pair); G2 "Pause, resumable" (auth failure exits 75, resume after `claude auth login`); G3 "Require 2 iterations" (`loop.min_iterations: 2`); G4 "Keep env, deny flags" (keep the smoke-verified environment, M6 scans iteration 1 for leak markers, deny `--config` and `--manifest-path` on the allowed cargo commands); G5 "Add the project note" (keep every public item in `src/<module>.rs`); G6 "Ship the best" (restore the best-scoring snapshot into translations/ and name it in `final_iteration_dir`); G7 "Pause" (overloaded/connection failures pause like a usage limit, same 3-attempt cap).
+
 ## Backlog (below the bar, not rows)
 
 F33 (tamper snapshot at the end of a refused attempt), F37 (dead configuration keys), F38–F44 (efficiency and

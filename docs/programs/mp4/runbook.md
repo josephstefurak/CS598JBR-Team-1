@@ -84,7 +84,7 @@ once the CLI was logged in, the session shell could use it.)
 **O9 — the M6 gate batch (from M5, 2026-10-29).** The M6 session starts by asking seven questions
 (G1–G7) about stop rules and the agent's permissions. Each has options and a recommendation in
 `docs/programs/mp4/reviews/review-1.md` § "Owner decisions for M6 step 1". Read that section before M6;
-nothing in M6 starts until they are answered.
+nothing in M6 starts until they are answered. **Answered 2026-10-29** (see where.md O9); M6 applies them.
 
 **Optional — temp-dir leftovers.** Before M5's fix, every safety check left a crate copy in your temp
 directory (87 found on 2026-10-29, about 75-100 MB; macOS also purges them on its own). To see them and,
