@@ -20,7 +20,8 @@ PIPELINE_YAML = os.path.join(CONFIGS_DIR, "pipeline.yaml")
 
 PROJECTS = ("project_1", "project_2")
 
-# TODO-move-to-pipeline.yaml: defaults below move to configs/pipeline.yaml in M3.
+# Fallback defaults. configs/pipeline.yaml (toolchain.*, checks.*) overrides them at import
+# time; see _apply_pipeline_config() at the end of this module.
 TOOLCHAIN = "nightly-2025-05-13"
 CLIPPY_GROUPS = ("correctness", "style", "complexity", "perf")
 RUBRIC_CLIPPY_ARGS = [
@@ -143,3 +144,20 @@ def library_sources(crate):
 def read_text(path):
     with open(path, encoding="utf-8", errors="replace") as fh:
         return fh.read()
+
+
+def _apply_pipeline_config():
+    """Take toolchain and check settings from configs/pipeline.yaml, so they live in one place."""
+    global TOOLCHAIN, CLIPPY_GROUPS, RUBRIC_CLIPPY_ARGS, FORBID_LINE, HARDCODE_MIN_LITERAL, CARGO_TIMEOUT_S
+    cfg = load_pipeline_config()
+    tc = cfg.get("toolchain") or {}
+    ck = cfg.get("checks") or {}
+    TOOLCHAIN = tc.get("name", TOOLCHAIN)
+    CARGO_TIMEOUT_S = tc.get("cargo_timeout_seconds", CARGO_TIMEOUT_S)
+    CLIPPY_GROUPS = tuple(ck.get("clippy_groups", CLIPPY_GROUPS))
+    RUBRIC_CLIPPY_ARGS = list(ck.get("clippy_rubric_args", RUBRIC_CLIPPY_ARGS))
+    FORBID_LINE = ck.get("forbid_line", FORBID_LINE)
+    HARDCODE_MIN_LITERAL = ck.get("hardcode_min_literal", HARDCODE_MIN_LITERAL)
+
+
+_apply_pipeline_config()

@@ -16,8 +16,11 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import agent_runner  # noqa: E402
 import check_interface  # noqa: E402
 import checks  # noqa: E402
+import config  # noqa: E402
+import prompt_builder  # noqa: E402
 import integrity  # noqa: E402
 import mp4common as mc  # noqa: E402
 import rustlex  # noqa: E402
@@ -25,6 +28,7 @@ import safety_check  # noqa: E402
 import scrub_secrets  # noqa: E402
 
 FIXTURE = os.path.join(mc.SRC_DIR, "selftest_fixture")
+FAKE_CLAUDE = os.path.join(mc.SRC_DIR, "tests", "fake_claude.py")
 RESULTS = {"pass": 0, "fail": 0}
 
 
@@ -201,6 +205,105 @@ def _run(tmp_root):
         expect_true("secret removed from file", secret not in fh.read())
     # assembled so this file does not trip its own scan
     expect("home path rewritten", scrub_secrets.scrub_text("/" + "Users" + "/someone/x"), "~/x")
+
+    fixture_check = dict(res)
+    fixture_check["safety"] = s
+    fixture_check["interface"] = check_interface.compare(os.path.join(FIXTURE, "src", "interfaces"), FIXTURE)
+    fixture_check["integrity"] = {"violations": [{"path": "src/bin/fixture_test.rs", "kind": "modified",
+                                                  "restored": True}]}
+    fixture_check["hardcode_hits"] = integrity.hardcode_scan(FIXTURE)
+    _run_m3(tmp_root, fixture_check)
+
+
+def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
+    argv = [sys.executable, FAKE_CLAUDE] + agent_runner.build_argv(cfg)[1:]
+    env = agent_runner.agent_env(cfg)
+    env["FAKE_CLAUDE_MODE"] = mode
+    stream = os.path.join(tmp_root, "fake_%s" % mode, "agent.stream.jsonl")
+    return agent_runner.run(cfg, argv, tmp_root, "prompt", stream, wall_clock_s=wall_clock_s, env=env), stream
+
+
+def _run_m3(tmp_root, fixture_check):
+    # --- config.py ---------------------------------------------------------------------------
+    cfgs = {p: config.load(p) for p in mc.PROJECTS}
+    expect("config loads both projects", sorted(cfgs), list(mc.PROJECTS))
+    import copy
+    import yaml
+    with open(mc.PIPELINE_YAML, encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
+    bad = copy.deepcopy(raw)
+    bad["surprise"] = 1
+    try:
+        config.validate_pipeline(bad)
+        expect("unknown top-level key rejected", "accepted", "ConfigError")
+    except config.ConfigError:
+        expect("unknown top-level key rejected", "ConfigError", "ConfigError")
+    for label, key, value in (("model outside D7 rejected", "model", "sonnet"),
+                              ("max_turns > 60 rejected", "max_turns", 61)):
+        bad = copy.deepcopy(raw)
+        bad["agent"][key] = value
+        try:
+            config.validate_pipeline(bad)
+            expect(label, "accepted", "ConfigError")
+        except config.ConfigError:
+            expect(label, "ConfigError", "ConfigError")
+    expect("config_hash is stable", config.load("project_1")["config_hash"], cfgs["project_1"]["config_hash"])
+
+    # --- agent_runner argv (C2-C6) -------------------------------------------------------------
+    cfg = cfgs["project_1"]
+    argv = agent_runner.build_argv(cfg)
+    required = ["-p", "--output-format", "--verbose", "--model", "--effort", "--max-turns", "--max-budget-usd",
+                "--permission-mode", "--tools", "--allowedTools", "--disallowedTools", "--setting-sources",
+                "--settings", "--append-system-prompt-file", "--json-schema", "--strict-mcp-config",
+                "--mcp-config", "--disable-slash-commands", "--session-id", "--add-dir"]
+    expect("argv carries every C1-C6 flag", [f for f in required if f not in argv], [])
+    expect("argv denies git", "Bash(git *)" in argv, True)
+    expect("argv add-dir is the project's C dir", argv[argv.index("--add-dir") + 1], cfg["c_dir"])
+    expect("agent env sets isolation vars",
+           {k: agent_runner.agent_env(cfg).get(k) for k in ("CLAUDE_CODE_DISABLE_CLAUDE_MDS",
+                                                            "CLAUDE_CODE_DISABLE_AUTO_MEMORY")},
+           {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"})
+
+    # --- agent_runner scenarios against fake_claude.py ----------------------------------------
+    r, _ = _fake_run(cfg, tmp_root, "normal")
+    expect("runner: normal completion -> ok", (r["outcome"], r["isolation_violations"]), ("ok", []))
+    expect("runner: structured status captured", (r["result"] or {}).get("structured_output", {}).get("status"),
+           "done")
+    r, _ = _fake_run(cfg, tmp_root, "usage_limit")
+    expect("runner: usage limit detected", (r["outcome"], r["resets_at"]), ("usage_limit", 1900000000))
+    r, _ = _fake_run(cfg, tmp_root, "max_turns")
+    expect("runner: max turns detected", r["outcome"], "max_turns")
+    r, _ = _fake_run(cfg, tmp_root, "slow", wall_clock_s=2)
+    expect("runner: wall-clock kill -> timeout", r["outcome"], "timeout")
+    expect_true("runner: killed promptly", r["elapsed_s"] < 20, "%.1fs" % r["elapsed_s"])
+    r, _ = _fake_run(cfg, tmp_root, "wrong_tools")
+    expect("runner: tool-list mismatch aborts", r["outcome"], "isolation_violation")
+    r, stream = _fake_run(cfg, tmp_root, "secret")
+    with open(stream, encoding="utf-8") as fh:
+        body = fh.read()
+    expect("runner: stream scrubbed on write (key, e-mail, home path)",
+           [scrub_secrets.scan_text(body), "[REDACTED:anthropic_key]" in body, "[REDACTED:email]" in body],
+           [[], True, True])
+
+    # --- prompt_builder -------------------------------------------------------------------------
+    for p in mc.PROJECTS:
+        c = cfgs[p]
+        prompts = {"initial": prompt_builder.build_initial(c),
+                   "repair": prompt_builder.build_repair(c, 2, fixture_check, [
+                       {"iteration": 1, "outcome": "ok", "compiles": True, "tests_passed": 1, "tests_total": 2,
+                        "clippy_agent_total": 4, "safety_total": 3, "interface_missing": 1}])}
+        for kind, text in prompts.items():
+            expect("%s %s: every guardrail phrase present" % (p, kind),
+                   [rx.pattern for rx in prompt_builder.GUARDRAIL_PATTERNS if not rx.search(text)], [])
+            expect("%s %s: no Rust fn body" % (p, kind), prompt_builder.FN_BODY_RE.findall(text), [])
+            expect("%s %s: no unfilled placeholder" % (p, kind), "{{" in text, False)
+        expect("%s repair: carries the failing test and its panic" % p,
+               "`fails` FAILED" in prompts["repair"] and "planted failure" in prompts["repair"], True)
+        expect("%s repair: carries clippy sites" % p, "clippy::eq_op" in prompts["repair"], True)
+    texts = prompt_builder.template_texts(cfgs["project_1"])
+    expect("templates/system prompt/cheatsheet: no satc_/psbt_ identifiers",
+           {k: prompt_builder.PROJECT_IDENT_RE.findall(v) for k, v in texts.items()
+            if prompt_builder.PROJECT_IDENT_RE.findall(v)}, {})
 
 
 if __name__ == "__main__":

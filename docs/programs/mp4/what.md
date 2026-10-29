@@ -304,7 +304,7 @@ argv containing every flag in C2-C6 and a prompt with no project-specific
 function bodies; `grep -niE 'do not (modify|alter|change).*test|FFI|unsafe|hard.?cod' MP4/configs/prompts/*`
 non-empty; `grep -rn 'configs/' MP4/src/` non-empty; selftest PASS count rises
 (record delta) including the 5 agent_runner scenarios; smoke init line shows
-tools[] == [Read, Edit, Write, Glob, Grep, Bash], mcp_servers empty,
+tools[] == [Read, Edit, Write, Glob, Grep, Bash] + StructuredOutput (D-STRUCTOUT, M3), mcp_servers empty,
 slash_commands empty, permissionMode dontAsk, model opus; assistant text
 mentions no working agreement / memory / CLAUDE.md; `result.permission_denials`
 contains the git call; scrub clean over evidence; `--check-only` still works.

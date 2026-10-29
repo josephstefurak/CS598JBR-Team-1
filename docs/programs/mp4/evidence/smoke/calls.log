@@ -1,0 +1,4 @@
+2026-10-29T14:50:17Z	not-spent	call_a	isolation_violation	corrected: killed at init, duration_api_ms 0, tokens 0
+2026-10-29T14:50:18Z	not-spent	call_b	isolation_violation	corrected: killed at init, duration_api_ms 0, tokens 0
+2026-10-29T14:53:29Z	not-spent	call_a	error	corrected: OAuth expired in sandboxed shell, model <synthetic>, duration_api_ms 0, tokens 0
+2026-10-29T14:53:30Z	not-spent	call_b	error	corrected: OAuth expired in sandboxed shell, model <synthetic>, duration_api_ms 0, tokens 0

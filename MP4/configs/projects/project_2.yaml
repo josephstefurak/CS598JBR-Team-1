@@ -1,0 +1,44 @@
+# Project context for project_2. Pattern-level notes only: no Rust function
+# bodies (why.md Z9). Loaded by MP4/src/config.py; unknown keys are errors.
+name: project_2
+label: libpsbt (CRUST-bench)
+crate: libpsbt
+modules: [base64, cli, compactsize, psbt, tx]
+c_dir: subjects/project_2/c
+c_files: [base64.c, base64.h, cli.c, common.h, compactsize.c, compactsize.h, psbt.c, psbt.h, result.h, tx.c, tx.h]
+test_file: src/bin/test.rs
+interface_dir: src/interfaces
+expected_pub_items: 52                 # check_interface.py on the pristine interface (M2)
+allow_attributes: []
+known_failing_tests:                   # D8: excluded from the success predicate, still run and reported
+  - name: read_test_vector
+    reason: >-
+      Defective benchmark test (why.md H-L1). Its checker callback declares
+      `let mut step = 0;` inside the callback, so every record callback asserts
+      record_type == 0, but the test vector contains records of other types.
+      A faithful parser fails here. Do not suppress, skip or reorder callbacks
+      to make it pass.
+    expected_assertion: "assertion `left == right` failed"
+    expected_location: "src/bin/test.rs:126"
+notes:
+  - cli.c is a command-line driver; test.c is the C test driver. The library is base64, compactsize, psbt and tx.
+  - Ignore misleading interface comments. The `hex` crate is not a dependency and you cannot add it. The C implements hex, base64 and base62 encodings (protobuf returns NotImplemented). Reading does not "simulate" anything and calls the callback for every element. "For simulation purposes we keep a list of records" is not how the C works.
+  - Parameters with a leading underscore (source size, PSBT length, tx size, data) are real inputs. Tests pass 2048-byte buffers whose real content is shorter. Use the length arguments as the C does.
+  - Callbacks are plain fn pointers with `&mut dyn Any` user data. Reading must count inputs and outputs from the unsigned transaction and forward every transaction element to the user's handler, like the C counter does. A clean design is a private generic parser taking a closure, wrapped by the fn-pointer API.
+  - The C keeps a global error message written from many places. The interface's error getter returns a constant; a thread_local or Mutex is acceptable. Never static mut.
+  - The C byte cursor reads and writes through one pointer with space checks. Use a usize index with checked slicing and return the interface's error variants instead of panicking.
+  - Some interface bodies are already implemented (constructor, size, error getter, Display). Keep their behaviour. The Display impl's `{:?}` format trips clippy's uninlined_format_args.
+  - The enums derive only Debug, PartialEq, Eq (the scope enum also Clone). Add derives if you need them; do not remove any.
+  - Hex output is lowercase with a trailing NUL and out_len = 2*len + 1. Decoding detects base64 by the prefix the C checks. The C base64 decoder is lenient, so translate it by hand rather than using the base64 crate's strict engine.
+  - Dependencies are pinned in Cargo.lock (base64, thiserror). Always build with the locked versions.
+  - The `test` bin is also declared as [[test]], so the tests run twice under cargo test. That is benchmark infrastructure; ignore the warning about multiple build targets.
+  - cli::main must become `pub fn main() -> i32` (owner ruling D-CLIMAIN). Do not add a bin target.
+rulings:                               # owner rulings, M3 gate 2026-10-29 (why.md D)
+  D-ALLOW: "One allow, that fn only"
+  D-CLIMAIN: "Make it pub fn main"
+  D-FAITHFUL: "Faithful; define UB safely"
+  D-FORBID: "Yes, inject it"
+c_behaviour:                           # D-FAITHFUL applied to known C bugs no visible test exercises
+  - The C compact-size writer overwrites its 0xFD/0xFE/0xFF marker byte for sizes >= 253. Reproduce it exactly.
+  - "The C base62 encoder indexes its 62-character alphabet with 6-bit values. Index 62 reads the string's terminating NUL (well defined: reproduce it as a 0 byte). Index 63 is past the array (undefined behaviour): choose a defined, non-panicking result and state it in your final status."
+  - The C transaction parser's segwit witness branch is dead (its flag is never set). Keep it dead.

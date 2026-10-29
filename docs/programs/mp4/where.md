@@ -46,7 +46,8 @@ the specific conflict rather than picking an alternative.*
 - D8 `read_test_vector` known-failing; owner raises with staff.
 - D9 cut-off 2026-11-15 for M12/M13.
 - D10 Jacob and Ross polish report prose.
-- D-ALLOW, D-CLIMAIN, D-FAITHFUL, D-FORBID, D-TRAJ, D-DIAGRAM: defaults, confirmed at the M3 gate.
+- D-ALLOW, D-CLIMAIN, D-FAITHFUL, D-FORBID: defaults confirmed verbatim at the M3 gate (2026-10-29). D-TRAJ, D-DIAGRAM: defaults.
+- D-STRUCTOUT (M3): isolation check admits `StructuredOutput` (added by `--json-schema`) beside the six tools.
 
 ## Phase ledger
 

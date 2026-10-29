@@ -1,0 +1,39 @@
+# Project context for project_1. Pattern-level notes only: no Rust function
+# bodies (why.md Z9). Loaded by MP4/src/config.py; unknown keys are errors.
+name: project_1
+label: satc (CRUST-bench)
+crate: satc
+modules: [satc]
+c_dir: subjects/project_1/c
+c_files: [satc.h, satc-test.c]
+test_file: src/bin/satc_test.rs
+interface_dir: src/interfaces
+expected_pub_items: 45                 # check_interface.py on the pristine interface (M2)
+allow_attributes:                      # D-ALLOW: the only permitted allow-attribute
+  - lint: clippy::too_many_arguments
+    item: satc_is_separating_axis
+    reason: fixed 8-parameter signature in the immutable interface
+known_failing_tests: []
+notes:
+  - The whole library is header-only C in satc.h; satc-test.c is the C test driver, not library code.
+  - Pure arithmetic on 2-D points; no I/O, no callbacks, nothing that needs unsafe.
+  - Points are [f64; 2] and Copy. Never .clone() them; pass by value or reference as the interface says.
+  - The interface's point functions return a new [f64; 2] where the C mutates its argument in place. Follow the interface signature and the C arithmetic.
+  - Polygon derived data (calc_points, edges, normals) must be recomputed on construction and whenever points are set, exactly as the C recalc helper does it.
+  - The polygon-polygon test uses the raw points plus the position and the normals, not calc_points. Follow the C.
+  - Point-in-polygon builds a tiny box polygon (1e-6 sides) and returns the response's a-in-b flag, as in the C.
+  - Tests compare f64 values with assert_eq!. Keep the C's order of operations so results are bit-identical.
+  - The interface file imports std::f64::MAX and std::f64::consts::PI. Use f64::MAX directly and drop imports you do not use.
+  - SatcResponse::new() takes no arguments; also implement Default.
+  - satc_point_copy has a first parameter the C overwrites; keep the signature.
+  - "Edition 2024: gen is a reserved word."
+rulings:                               # owner rulings, M3 gate 2026-10-29 (why.md D)
+  D-ALLOW: "One allow, that fn only"
+  D-CLIMAIN: "Make it pub fn main"
+  D-FAITHFUL: "Faithful; define UB safely"
+  D-FORBID: "Yes, inject it"
+c_behaviour:                           # D-FAITHFUL applied to known C bugs no visible test exercises
+  - The C point rotation computes the new y with a sign error. Reproduce it exactly.
+  - The C polygon translate sets every point to (x, y) instead of adding. Reproduce it exactly.
+  - The C polygon AABB initialises y_max from x_max. Reproduce it exactly.
+  - The C polygon AABB adds its bounds to an uninitialised stack position (undefined behaviour). Choose a defined, non-panicking value and state it in your final status.
