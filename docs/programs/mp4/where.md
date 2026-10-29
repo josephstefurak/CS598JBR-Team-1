@@ -55,7 +55,7 @@ the specific conflict rather than picking an alternative.*
 |---|---|---|---|---|
 | M1 | MP4 layout, subjects, toolchain, baselines | **done** | 2026-10-28 — 0122f84 | 9/9 paths; checksums 13/13 + 28/28 OK; nightly = rustc 1.89.0-nightly 2025-05-12; Baseline A E0583 x1 (satc) / x5 (libpsbt); Baseline B 0/4 + 0/4 tests; harness clippy satc 0/0/0/0, libpsbt style 2; H-L10 answered; 10 why.md corrections |
 | M2 | Checks library, integrity guards, self-test | **done** | 2026-10-28 — a8994d9 | selftest 54 PASS / 0 FAIL (baseline null → 54); interface items satc 45, libpsbt 52; check-only on pristine satc: build.ok false, E0583, missing 45; course tool exit 2; check-only on M1 Baseline B copies reproduces M1 clippy split (libpsbt harness style 2) and 4 tests after dedupe |
-| M3 | Configs, prompts, agent runner, smoke run | **not-started** | — | — |
+| M3 | Configs, prompts, agent runner, smoke run | **code-complete (owner actions pending: O8 — run `--smoke` from an authenticated terminal; the session shell cannot reach the Claude login)** | 2026-10-29 — be3de95 | selftest 54 → 88; rulings = all defaults; D-STRUCTOUT; smoke attempts 1–2 reached the model 0 times (0/3 D7 smoke calls spent) |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **not-started** | — | — |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **not-started** | — | — |
 | M6 | Full run: project_1 (satc) | **not-started** | — | — |
@@ -372,4 +372,5 @@ submission.
 | O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | open |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
+| O8 | Run `python3 -I MP4/src/run_pipeline.py --project project_1 --smoke` from your own logged-in terminal (runbook Stage 2) | The session shell is sandboxed away from the Claude login (`loggedIn: false`); agent B cannot authenticate from it | M3 close; also every model run (M6, M7, M9) | open |
 | O7 | After the program reports ready-to-merge: merge `mp4-program` into `main` with a merge commit and push `main` before 2026-11-18 23:59 | invariant 6/7 | submission | open |

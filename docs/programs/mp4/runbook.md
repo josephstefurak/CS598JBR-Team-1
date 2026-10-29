@@ -68,6 +68,20 @@ Leave the second command running in a terminal for the duration of the run.
 Check remaining plan quota in an interactive `claude` session with `/usage`
 before M6 and M7.
 
+**O8 — run the M3 smoke from your own terminal (found 2026-10-29).** A
+Claude Code session's shell is sandboxed and cannot reach your Claude login:
+`claude auth status` there reports `loggedIn: false`, and agent B fails with
+"OAuth session expired". Anything that calls the model (`--smoke` now, the
+full runs in M6/M7/M9) must therefore run from your own terminal, where you
+are logged in. Uses 2 of D7's 3 smoke calls, at most 2 turns each:
+
+```bash
+cd ~/CS598JBR-Team-1 && claude auth status && python3 -I MP4/src/run_pipeline.py --project project_1 --smoke
+```
+
+It writes `docs/programs/mp4/evidence/smoke/`. Then tell the session (or the
+next `/mp4-phase`) that it ran; the session reads the evidence and closes M3.
+
 ## Stage 3 — when the course releases its tools (cut-off 2026-11-15)
 
 **O3 — unsafe-metrics tool.** Place it at `MP4/tools/unsafe-metrics/` if its
