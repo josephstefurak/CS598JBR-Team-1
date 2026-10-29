@@ -136,8 +136,8 @@ python3 -I MP4/src/selftest.py                       # the controller's own test
 
 `summarize.py` refuses to write anything if a number in the run's `run_summary.json` differs from the
 `--check-only` re-measurement. It also writes the per-iteration trend tables, the usage-limit digest and
-`results/repair_mining.md`, a line-numbered timeline of every compiler, test and clippy message the agent
-saw, which the report's repair examples cite.
+`results/repair_mining.md`, a line-numbered timeline of every cargo call the agent made, with the library
+errors and warnings it reported and its test totals, which the report's repair examples cite.
 
 Running the agent itself (`--project` without `--check-only`) needs the Claude Code CLI logged in with a
 Claude subscription (`claude auth login`). An interrupted or paused run continues with

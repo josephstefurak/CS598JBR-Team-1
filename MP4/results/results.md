@@ -32,7 +32,7 @@ Warnings from the immutable benchmark test file are excluded above: libpsbt (CRU
 
 ## Per-iteration trend: satc (CRUST-bench)
 
-Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`.
+Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
 
 | Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (proxy) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -41,7 +41,7 @@ Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's me
 
 ## Per-iteration trend: libpsbt (CRUST-bench)
 
-Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`.
+Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
 
 | Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (proxy) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -50,9 +50,11 @@ Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's me
 
 ## API and usage limits
 
-| Project | `rate_limit_event` records | Statuses | Limit windows | Rejected | Usage-limit pauses |
-|---|---|---|---|---|---|
-| satc (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 |
-| libpsbt (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 |
+| Project | `rate_limit_event` records | Statuses | Limit windows | Rejected | Usage-limit pauses | Other pauses (outage, login) |
+|---|---|---|---|---|---|---|
+| satc (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 | 0 |
+| libpsbt (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 | 0 |
 
-Source: `grep -c '"type":"rate_limit_event"' trajectories/project_*/run_*/iter_*/agent.stream.jsonl` and `run_summary.json` `usage_limit_pauses`.
+Final runs only. Rejected = status `rejected`, the only status on which the controller pauses (the records' `overageStatus` field is a different setting). Pauses are `run_summary.json` `usage_limit_pauses`, split by `cause`. To count the records, from the repository root:
+`cat MP4/trajectories/project_1/run_20261029T184931Z/iter_*/agent.stream.jsonl | grep -c '"type":"rate_limit_event"'`,
+`cat MP4/trajectories/project_2/run_20261029T194929Z/iter_*/agent.stream.jsonl | grep -c '"type":"rate_limit_event"'`

@@ -43,7 +43,7 @@ test harness, the safety metrics, the interface check, a hard-coding scan and a 
   interface gaps and integrity violations, plus a history table of every earlier iteration. Safety feedback
   comes only through this channel: the agent cannot run the safety checker, so the controller runs it and
   reports the counts. When every check is already clean, the prompt asks the agent to review the
-  translation against the C "for behaviour the tests do not cover, fix only real divergences"
+  translation against the C for "behaviour the tests do not cover, fix only real divergences"
   (P1 `iter_02/prompt.md` line 78).
 
 **Stopping condition.** After each iteration the controller stops with **SUCCESS** when the crate builds,
@@ -63,12 +63,14 @@ iteration.
 **Usage limits.** No request was rejected for a usage limit and neither run paused:
 
 <!-- BEGIN GENERATED: usage -->
-| Project | `rate_limit_event` records | Statuses | Limit windows | Rejected | Usage-limit pauses |
-|---|---|---|---|---|---|
-| satc (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 |
-| libpsbt (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 |
+| Project | `rate_limit_event` records | Statuses | Limit windows | Rejected | Usage-limit pauses | Other pauses (outage, login) |
+|---|---|---|---|---|---|---|
+| satc (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 | 0 |
+| libpsbt (CRUST-bench) | 2 | allowed | five_hour | 0 | 0 | 0 |
 
-Source: `grep -c '"type":"rate_limit_event"' trajectories/project_*/run_*/iter_*/agent.stream.jsonl` and `run_summary.json` `usage_limit_pauses`.
+Final runs only. Rejected = status `rejected`, the only status on which the controller pauses (the records' `overageStatus` field is a different setting). Pauses are `run_summary.json` `usage_limit_pauses`, split by `cause`. To count the records, from the repository root:
+`cat MP4/trajectories/project_1/run_20261029T184931Z/iter_*/agent.stream.jsonl | grep -c '"type":"rate_limit_event"'`,
+`cat MP4/trajectories/project_2/run_20261029T194929Z/iter_*/agent.stream.jsonl | grep -c '"type":"rate_limit_event"'`
 <!-- END GENERATED: usage -->
 
 ## Overall Results
@@ -95,8 +97,9 @@ inputs the tests do not use, after the runs and without changing anything. Float
 compared bit for bit, with the C compiled with `-ffp-contract=off`, because clang's default fused
 multiply-add makes the C differ from itself, while Rust never fuses. satc matched on 52 of 52 values.
 libpsbt matched on 31 of 34 outputs; the other 3 are one C undefined-behaviour case (reading index 63 of a
-63-entry base62 table), where the translation returns a defined value by design (source:
-`docs/programs/mp4/reviews/review-2.md` §3).
+63-entry base62 table), where the translation returns a defined value by design. This was a one-off
+manual comparison during our review, not part of the pipeline, and `--check-only` does not reproduce it;
+its method and outputs are recorded in `docs/programs/mp4/reviews/review-2.md` §3.
 
 ## Safety Analysis
 
@@ -150,7 +153,7 @@ official numbers and any additional metrics the course tool reports are **PENDIN
 ### Per-iteration measurements
 
 <!-- BEGIN GENERATED: trend_project_1 -->
-Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`.
+Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
 
 | Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (proxy) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -159,7 +162,7 @@ Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's me
 <!-- END GENERATED: trend_project_1 -->
 
 <!-- BEGIN GENERATED: trend_project_2 -->
-Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`.
+Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
 
 | Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (proxy) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -201,8 +204,9 @@ hand (`docs/programs/mp4/reviews/review-2-structural.md`):
 - **Unnecessary clones.** One: `cli.rs:45` clones a `PsbtScope` that could have derived `Copy`. satc has
   none, because `[f64; 2]` points are copied with `*p`.
 - **Overly complex expressions and control flow.** `psbt_read` (`psbt.rs:200-293`) keeps the C's 94-line
-  state-machine `while`/`match`, with seven early `return res;` sites, rather than an inner `Result`
-  function.
+  state-machine `while`/`match`, with three early `return res` exits inside it (`psbt.rs:204`, `:235`,
+  `:264`) rather than an inner `Result` function. The same status-code pattern recurs in five other
+  functions.
 - **Collections and strings.** There is no inefficient string building. Hex and base64 work on byte
   slices. The weak spots come from the interface: redundant length parameters next to slices, status-code
   returns, out-parameters and underscore-named parameters that are actually used.
@@ -241,7 +245,7 @@ example below is replaced by the nearest case, a borrow-checker error, and label
   store: the zero vector normalises to `[0, NaN]`. Our ruling for C bugs that the tests do not exercise
   is to reproduce them when the C is well defined, so the iteration-1 code diverged from the C.
 - **Feedback.** No check failed: 4/4 tests, 0 clippy, 0 safety. The controller's iteration-2 prompt
-  reported the clean results and asked for a review against the C "for behaviour the tests do not cover,
+  reported the clean results and asked for a review against the C for "behaviour the tests do not cover,
   fix only real divergences" (P1 `iter_02/prompt.md` line 78).
 - **Repair.** Reading `satc.h`, the agent wrote "Two real divergences from the C surfaced in review, both
   from macro expansion" (P1 `iter_02/agent.stream.jsonl` line 135). It then rewrote both functions to
@@ -255,7 +259,7 @@ example below is replaced by the nearest case, a borrow-checker error, and label
 
 - **Generated.** The C's `char *dest` plus a trusted `dest_size` became a slice clamped to both the
   caller's size and the real buffer length: `let dest = &mut dest[..dest_size.min(dest.len())];`, in
-  `psbt_encode` and `psbt_decode` (P2 `iter_01/agent.stream.jsonl` line 589).
+  `psbt_encode_raw` and `psbt_decode` (P2 `iter_01/agent.stream.jsonl` line 589).
 - **Why it was incorrect.** The expression reads `dest.len()` while it takes a mutable reborrow of `dest`.
   The borrow checker rejects the overlapping shared and mutable borrows. This is a compile error, not a
   memory-safety bug, but it is Rust's aliasing rule doing the job the C's raw pointer left to the
@@ -296,7 +300,8 @@ example below is replaced by the nearest case, a borrow-checker error, and label
 - **Outcome.** Succeeded. The build, tests (3/4, unchanged) and clippy stayed clean (lines 182, 185, 188),
   and bad input now takes the normal error path. No test exercises it.
 
-A line-by-line timeline of every compiler, test and clippy message in each session is generated in
+A line-numbered timeline of every cargo call in each session, with the library errors and warnings it
+reported and its test totals, is generated in
 `MP4/results/repair_mining.md`.
 
 ## Reflection

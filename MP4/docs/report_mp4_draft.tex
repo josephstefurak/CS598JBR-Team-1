@@ -1,5 +1,5 @@
 % MP4 section of the CS598JBR progress report (Team 1). Paste into the Overleaf project.
-% Preamble needs: \usepackage{tikz} \usetikzlibrary{positioning,arrows.meta}; booktabs and graphicx (acmart loads both)
+% Preamble needs: \usepackage{tikz} \usetikzlibrary{positioning,arrows.meta,shapes.geometric}; booktabs and graphicx (acmart loads both)
 % Tables between GENERATED markers are written by `python3 -I MP4/src/summarize.py --report`; do not edit them.
 % Draft status: official unsafe metrics are PENDING (course tool not released); the safety table is the interim proxy.
 % Generated from report_mp4_draft.md; keep the two in step (summarize.py --check-report checks the tables).
@@ -17,7 +17,7 @@
 
 \begin{itemize}
   \item \emph{Inside a session}, the agent runs cargo itself and reads the compiler errors, test failures and clippy warnings directly. Most repairs happened here (see Translation and Repair Analysis).
-  \item \emph{Between sessions}, the controller's own measurements become the next prompt. \texttt{repair.md} carries a ``Feedback from the previous iteration'' section with one block each for build errors, failing tests (with the panic message), clippy warnings in the agent's code (harness warnings are excluded), safety findings, interface gaps and integrity violations, plus a history table of every earlier iteration. Safety feedback comes only through this channel: the agent cannot run the safety checker, so the controller runs it and reports the counts. When every check is already clean, the prompt asks the agent to review the translation against the C ``for behaviour the tests do not cover, fix only real divergences'' (P1 \texttt{iter\_02/prompt.md} line 78).
+  \item \emph{Between sessions}, the controller's own measurements become the next prompt. \texttt{repair.md} carries a ``Feedback from the previous iteration'' section with one block each for build errors, failing tests (with the panic message), clippy warnings in the agent's code (harness warnings are excluded), safety findings, interface gaps and integrity violations, plus a history table of every earlier iteration. Safety feedback comes only through this channel: the agent cannot run the safety checker, so the controller runs it and reports the counts. When every check is already clean, the prompt asks the agent to review the translation against the C for ``behaviour the tests do not cover, fix only real divergences'' (P1 \texttt{iter\_02/prompt.md} line 78).
 \end{itemize}
 
 \textbf{Stopping condition.} After each iteration the controller stops with \textbf{SUCCESS} when the crate builds, every benchmark test passes except a documented known-defective one (which must fail on its documented assertion), agent-attributable clippy warnings are 0 in all four groups, the safety metrics are 0, the interface is complete and unchanged, and there is no integrity violation, hard-coded test literal or lint suppression. SUCCESS can end the run from iteration 2 on, so a crate that is clean after one session still gets one review iteration. The run also stops with \textbf{ABORT} after integrity violations in two consecutive iterations, \textbf{NO\_PROGRESS} when the score (tests passed, then build errors, clippy warnings, unsafe findings and missing interface items) has not improved for 3 iterations, and \textbf{MAX\_ITERATIONS} after 8. A usage-limit rejection is not a stop: the run waits for the limit to reset and repeats the iteration.
@@ -77,7 +77,7 @@ libpsbt (CRUST-bench) & Yes & 3 & 4 & 75.0\% & 2 \\
 
 Both runs stopped at SUCCESS after the two iterations the stopping condition requires. satc passes all 4 benchmark tests. libpsbt passes 3 of 4. The failing test, \texttt{read\_test\_vector}, is defective: its callback re-declares its step counter on every call, so it asserts that every record has type 0 while the test vector contains records of other types. A faithful parser fails it (\texttt{src/bin/test.rs:126}, \texttt{left: 4}, \texttt{right: 0}). The agent saw this failure and did not change the library to pass it (P2 \texttt{iter\_01/agent.stream.jsonl} line 643). We report the test as failed and do not count it as passed anywhere. A ruling from the course staff on this test is PENDING.
 
-Correctness beyond the visible tests was checked by comparing each translation with the original C on inputs the tests do not use, after the runs and without changing anything. Floating-point results were compared bit for bit, with the C compiled with \texttt{-ffp-contract=off}, because clang's default fused multiply-add makes the C differ from itself, while Rust never fuses. satc matched on 52 of 52 values. libpsbt matched on 31 of 34 outputs; the other 3 are one C undefined-behaviour case (reading index 63 of a 63-entry base62 table), where the translation returns a defined value by design (source: \texttt{docs/programs/mp4/reviews/review-2.md} \S{}3).
+Correctness beyond the visible tests was checked by comparing each translation with the original C on inputs the tests do not use, after the runs and without changing anything. Floating-point results were compared bit for bit, with the C compiled with \texttt{-ffp-contract=off}, because clang's default fused multiply-add makes the C differ from itself, while Rust never fuses. satc matched on 52 of 52 values. libpsbt matched on 31 of 34 outputs; the other 3 are one C undefined-behaviour case (reading index 63 of a 63-entry base62 table), where the translation returns a defined value by design. This was a one-off manual comparison during our review, not part of the pipeline, and \texttt{--check-only} does not reproduce it; its method and outputs are recorded in \texttt{docs/programs/mp4/reviews/review-2.md} \S{}3.
 
 \subsection{Safety Analysis}
 \label{sec:mp4-safety-analysis}
@@ -114,7 +114,7 @@ libpsbt (CRUST-bench) & 0 & 0 & 0 & 0 \\
 \caption{Per-iteration measurements, satc. Clippy C/S/X/P = correctness/style/complexity/perf (agent code); safety = proxy total.}
 \label{tab:mp4-trend-project-1}
 \resizebox{\linewidth}{!}{%
-\begin{tabular}{lcccccccc}
+\begin{tabular}{lccccccc}
 \toprule
 Iteration & Compiles & Tests & Clippy C/S/X/P & Safety & Turns & Minutes & Lines +/- \\
 \midrule
@@ -131,7 +131,7 @@ iter\_02 & Yes & 4/4 & 0/0/0/0 & 0 & 17 & 3.5 & +13/-2 \\
 \caption{Per-iteration measurements, libpsbt (same columns).}
 \label{tab:mp4-trend-project-2}
 \resizebox{\linewidth}{!}{%
-\begin{tabular}{lcccccccc}
+\begin{tabular}{lccccccc}
 \toprule
 Iteration & Compiles & Tests & Clippy C/S/X/P & Safety & Turns & Minutes & Lines +/- \\
 \midrule
@@ -172,7 +172,7 @@ These are the rubric clippy command's warnings with a primary span in agent-writ
 \begin{itemize}
   \item \textbf{C-style loops.} satc has one index loop, \texttt{for i in 0..len} over a polygon's points (\texttt{translations/project\_1/src/satc.rs:550}). It needs \texttt{i} for the neighbouring points, but it keeps the C's shape. libpsbt has no \texttt{0..x.len()} loops, and its codecs use iterators (\texttt{chunks\_exact}, \texttt{zip}).
   \item \textbf{Unnecessary clones.} One: \texttt{cli.rs:45} clones a \texttt{PsbtScope} that could have derived \texttt{Copy}. satc has none, because \texttt{[f64; 2]} points are copied with \texttt{*p}.
-  \item \textbf{Overly complex expressions and control flow.} \texttt{psbt\_read} (\texttt{psbt.rs:200-293}) keeps the C's 94-line state-machine \texttt{while}/\texttt{match}, with seven early \texttt{return res;} sites, rather than an inner \texttt{Result} function.
+  \item \textbf{Overly complex expressions and control flow.} \texttt{psbt\_read} (\texttt{psbt.rs:200-293}) keeps the C's 94-line state-machine \texttt{while}/\texttt{match}, with three early \texttt{return res} exits inside it (\texttt{psbt.rs:204}, \texttt{:235}, \texttt{:264}) rather than an inner \texttt{Result} function. The same status-code pattern recurs in five other functions.
   \item \textbf{Collections and strings.} There is no inefficient string building. Hex and base64 work on byte slices. The weak spots come from the interface: redundant length parameters next to slices, status-code returns, out-parameters and underscore-named parameters that are actually used.
   \item \textbf{Casts.} libpsbt has 13 \texttt{as} casts, all range-guarded or widening apart from two \texttt{i32} conversions forced by the interface. satc has none.
 \end{itemize}
@@ -197,7 +197,7 @@ There was no memory-safety repair: \texttt{\#![forbid(unsafe\_code)]} meant the 
 \begin{itemize}
   \item \textbf{Generated.} In iteration 1 the agent wrote \texttt{satc\_point\_project} as \texttt{point\_dot(p, q) / point\_len2(q)} and \texttt{satc\_point\_normalize} as \texttt{if d > 0.0 \{ [p[0] / d, p[1] / d] \} else \{ *p \}} (P1 \texttt{iter\_01/agent.stream.jsonl} line 100).
   \item \textbf{Why it was incorrect.} It treated the C's macros as functions. \texttt{satc\_point\_dot} and \texttt{satc\_point\_len2} are unparenthesised (\texttt{subjects/project\_1/c/satc.h:363}, \texttt{:370}), so the quotient expands to \texttt{p[0]*q[0] + p[1]*q[1] / q[0]*q[0] + q[1]*q[1]}. \texttt{satc\_point\_set\_xy} expands to two statements without braces (\texttt{satc.h:276-278}), so the \texttt{if (d > 0)} in normalize guards only the \texttt{x} store: the zero vector normalises to \texttt{[0, NaN]}. Our ruling for C bugs that the tests do not exercise is to reproduce them when the C is well defined, so the iteration-1 code diverged from the C.
-  \item \textbf{Feedback.} No check failed: 4/4 tests, 0 clippy, 0 safety. The controller's iteration-2 prompt reported the clean results and asked for a review against the C ``for behaviour the tests do not cover, fix only real divergences'' (P1 \texttt{iter\_02/prompt.md} line 78).
+  \item \textbf{Feedback.} No check failed: 4/4 tests, 0 clippy, 0 safety. The controller's iteration-2 prompt reported the clean results and asked for a review against the C for ``behaviour the tests do not cover, fix only real divergences'' (P1 \texttt{iter\_02/prompt.md} line 78).
   \item \textbf{Repair.} Reading \texttt{satc.h}, the agent wrote ``Two real divergences from the C surfaced in review, both from macro expansion'' (P1 \texttt{iter\_02/agent.stream.jsonl} line 135). It then rewrote both functions to follow the literal expansions, with doc comments that explain the C behaviour (line 142).
   \item \textbf{Outcome.} Succeeded. The build, 4/4 tests and clippy stayed clean (lines 148, 151, 153), and \texttt{iter\_02/changes.diff} holds the change. The comparison with the C later confirmed the behaviour, including \texttt{project} = (45, 60) and the NaN \texttt{y}. No benchmark test can see this repair. It shows what the forced review iteration adds.
 \end{itemize}
@@ -205,9 +205,9 @@ There was no memory-safety repair: \texttt{\#![forbid(unsafe\_code)]} meant the 
 \subsubsection{Example 2 (safety substitute: borrow checker): output-buffer slice in libpsbt}
 
 \begin{itemize}
-  \item \textbf{Generated.} The C's \texttt{char *dest} plus a trusted \texttt{dest\_size} became a slice clamped to both the caller's size and the real buffer length: \texttt{let dest = \&mut dest[..dest\_size.min(dest.len())];}, in \texttt{psbt\_encode} and \texttt{psbt\_decode} (P2 \texttt{iter\_01/agent.stream.jsonl} line 589).
+  \item \textbf{Generated.} The C's \texttt{char *dest} plus a trusted \texttt{dest\_size} became a slice clamped to both the caller's size and the real buffer length: \texttt{let dest = \&mut dest[..dest\_size.min(dest.len())];}, in \texttt{psbt\_encode\_raw} and \texttt{psbt\_decode} (P2 \texttt{iter\_01/agent.stream.jsonl} line 589).
   \item \textbf{Why it was incorrect.} The expression reads \texttt{dest.len()} while it takes a mutable reborrow of \texttt{dest}. The borrow checker rejects the overlapping shared and mutable borrows. This is a compile error, not a memory-safety bug, but it is Rust's aliasing rule doing the job the C's raw pointer left to the programmer.
-  \item \textbf{Feedback.} \texttt{cargo build} failed with exit code 101 and two errors: "cannot borrow \texttt{*dest} as immutable because it is also borrowed as mutable" (\texttt{error[E0502]} at \texttt{psbt.rs:322} and \texttt{:381}), with rustc's suggestion to store the length in a local first (line 633).
+  \item \textbf{Feedback.} \texttt{cargo build} failed with exit code 101 and two errors: ``cannot borrow \texttt{*dest} as immutable because it is also borrowed as mutable'' (\texttt{error[E0502]} at \texttt{psbt.rs:322} and \texttt{:381}), with rustc's suggestion to store the length in a local first (line 633).
   \item \textbf{Repair.} Two edits hoisted the length: \texttt{let capacity = dest\_size.min(dest.len()); let dest = \&mut dest[..capacity];} (lines 634, 636).
   \item \textbf{Outcome.} Succeeded. The next build finished without errors (line 639), the tests were back at 3/4 with only the known-defective test failing (line 643), and the behaviour did not change.
 \end{itemize}
@@ -232,7 +232,7 @@ There was no memory-safety repair: \texttt{\#![forbid(unsafe\_code)]} meant the 
   \item \textbf{Outcome.} Succeeded. The build, tests (3/4, unchanged) and clippy stayed clean (lines 182, 185, 188), and bad input now takes the normal error path. No test exercises it.
 \end{itemize}
 
-A line-by-line timeline of every compiler, test and clippy message in each session is generated in \texttt{MP4/results/repair\_mining.md}.
+A line-numbered timeline of every cargo call in each session, with the library errors and warnings it reported and its test totals, is generated in \texttt{MP4/results/repair\_mining.md}.
 
 \subsection{Reflection}
 \label{sec:mp4-reflection}

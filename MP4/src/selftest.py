@@ -222,6 +222,7 @@ def _run(tmp_root):
     _run_m6(tmp_root)
     _run_m8(tmp_root)
     _run_m10(tmp_root)
+    _run_m11(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -1434,10 +1435,12 @@ def _run_m10(tmp_root):
     expect("M10: miner keeps the command's line and the failure flag", (tl[1]["call_line"], tl[1]["failed"]),
            (3, True))
     expect("M10: miner escapes table pipes in agent text", tl[2]["detail"], "Fixing \\| the borrow.")
-    expect("M10: lint ledger first -> last for library codes only",
+    expect("M10: lint ledger first -> gone for library codes only (M11: per cargo command)",
            summarize.lint_ledger(tl),
-           {"E0502": {"first": 2, "first_line": 5, "last": 0, "last_line": 9},
-            "byte_char_slices": {"first": 1, "first_line": 5, "last": 0, "last_line": 9}})
+           {"E0502": {"first": 2, "first_line": 5, "cleared_line": 9, "last": 0, "last_line": 9,
+                      "kind": "cargo build"},
+            "byte_char_slices": {"first": 1, "first_line": 5, "cleared_line": 9, "last": 0, "last_line": 9,
+                                 "kind": "cargo build"}})
     expect_true("M10: cargo detail names the error code and its spans",
                 "E0502 x2 (src/psbt.rs:322, src/psbt.rs:381)" in summarize._cargo_detail(tl[1]))
     with open(os.path.join(sdir, "changes.diff"), "w", encoding="utf-8") as fh:
@@ -1460,7 +1463,7 @@ def _run_m10(tmp_root):
             json.dump({"iteration": 1, "attempt": 1, "compiles": True, "tests_passed": 3, "tests_total": 4,
                        "clippy_agent": {g: 0 for g in summarize.GROUPS}, "clippy_harness": {"style": 2},
                        "safety_total": 0, "integrity_violations": ["x"], "success": False}, fh)
-        rs = {"run_id": "R", "usage_limit_pauses": [{"cause": "rate_limit"}]}
+        rs = {"run_id": "R", "usage_limit_pauses": [{"cause": "usage_limit"}, {"cause": "overloaded"}]}
         t = summarize.iteration_trend("project_9", "P9", rs)
         r = t["rows"][0]
         expect("M10: trend row from iteration_summary + result event + diff",
@@ -1469,8 +1472,8 @@ def _run_m10(tmp_root):
         expect_true("M10: trend tex row", summarize.render_trend_tex(t).startswith(
             "iter\\_01 & Yes & 3/4 & 0/0/0/0 & 0 & 7 & 1.5 & +2/-1 \\\\"))
         u = summarize.usage_digest([{"label": "P9", "project": "project_9", "run_summary": rs}])
-        expect_true("M10: usage digest counts a rejection and a pause",
-                    "| P9 | 1 | rejected | five_hour | 1 | 1 |" in summarize.md_usage(u))
+        expect_true("M10: usage digest counts a rejection, a usage-limit pause and an outage pause (M11: split)",
+                    "| P9 | 1 | rejected | five_hour | 1 | 1 | 1 |" in summarize.md_usage(u))
     finally:
         summarize.mc.TRAJECTORIES_DIR = saved
 
@@ -1500,16 +1503,231 @@ def _run_m10(tmp_root):
             fh.write("<!-- BEGIN GENERATED: overall -->\n<!-- END GENERATED: overall -->\n")
         with open(summarize.REPORT_TEX, "w", encoding="utf-8") as fh:
             fh.write("% BEGIN GENERATED: overall\n% END GENERATED: overall\n")
-        blocks = {"overall": ("md table", "tex rows"), "usage": ("usage md", None)}
-        expect("M10: --check-report sees both drafts stale before --report", len(summarize.update_report(
-            {"overall": blocks["overall"]}, True)), 2)
-        summarize.update_report({"overall": blocks["overall"]}, False)
-        expect("M10: up to date after --report", summarize.update_report({"overall": blocks["overall"]}, True), [])
+        blocks = ({"overall": "md table"}, {"overall": "tex rows"})
+        expect("M10: --check-report sees both drafts stale before --report",
+               len(summarize.update_report(blocks, True)), 2)
+        summarize.update_report(blocks, False)
+        expect("M10: up to date after --report", summarize.update_report(blocks, True), [])
         _edit(summarize.REPORT_TEX, "tex rows", "tex rows edited by hand")
-        expect("M10: a hand edit inside a block is reported", len(summarize.update_report(
-            {"overall": blocks["overall"]}, True)), 1)
+        expect("M10: a hand edit inside a block is reported", len(summarize.update_report(blocks, True)), 1)
     finally:
         summarize.REPORT_MD, summarize.REPORT_TEX = saved_md, saved_tex
+
+
+def _m11_stream(path, evs):
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(json.dumps(e) for e in evs) + "\n")
+
+
+def _m11_use(i, name, inp):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": i, "name": name, "input": inp}]}}
+
+
+def _m11_res(i, text, err=False, **extra):
+    item = dict({"type": "tool_result", "tool_use_id": i, "content": text, "is_error": err}, **extra)
+    return {"type": "user", "message": {"content": [item]}}
+
+
+def _run_m11(tmp_root):
+    """M11 (review 3): one check per fixed finding in summarize.py's M10 code."""
+    sdir = os.path.join(tmp_root, "m11")
+    os.makedirs(sdir)
+    clippy_lint = "\n".join(["warning: can be more succinctly written as a byte str", "   --> src/psbt.rs:694:21",
+                             "    = help: for further information visit https://rust-lang.github.io/rust-clippy/"
+                             "master/index.html#byte_char_slices", ""])
+    # M1: a clippy lint is never "fixed" by a later cargo test, which cannot print clippy lints
+    st = os.path.join(sdir, "m1.jsonl")
+    _m11_stream(st, [_m11_use("a", "Bash", {"command": "cargo +nightly-2025-05-13 clippy --all-targets"}),
+                     _m11_res("a", clippy_lint),
+                     _m11_use("b", "Bash", {"command": "cargo +nightly-2025-05-13 test"}),
+                     _m11_res("b", "test result: ok. 4 passed; 0 failed")])
+    led = summarize.lint_ledger(summarize.mine_stream(st))
+    expect("M11 M1: a clippy lint is not cleared by a later cargo test",
+           (led["byte_char_slices"]["cleared_line"], led["byte_char_slices"]["last_line"],
+            led["byte_char_slices"]["kind"]), (None, 2, "cargo clippy"))
+    # M2: rustc's #[warn] note appears only on the first occurrence; later ones keep the lint via message shape
+    out1 = "\n".join(["warning: unused variable: `a`", " --> src/lib.rs:2:9",
+                      "  = note: `#[warn(unused_variables)]` on by default", "",
+                      "warning: unused variable: `b`", " --> src/lib.rs:3:9", ""])
+    out2 = "\n".join(["warning: unused variable: `b`", " --> src/lib.rs:3:9",
+                      "  = note: `#[warn(unused_variables)]` on by default", ""])
+    expect("M11 M2: a note-less repeat of a rustc lint is keyed by the lint",
+           [d["lint"] for d in summarize.parse_cargo_output(out1)[0]], ["unused_variables", "unused_variables"])
+    st = os.path.join(sdir, "m2.jsonl")
+    _m11_stream(st, [_m11_use("a", "Bash", {"command": "cargo +nightly-2025-05-13 build"}), _m11_res("a", out1),
+                     _m11_use("b", "Bash", {"command": "cargo +nightly-2025-05-13 build"}), _m11_res("b", out2)])
+    expect("M11 M2: fixing one of two warnings is 2 -> 1, not a false repair",
+           {k: (v["first"], v["last"]) for k, v in summarize.lint_ledger(summarize.mine_stream(st)).items()},
+           {"unused_variables": (2, 1)})
+    # M3: a cargo command the permission policy refused is not a cargo run
+    st = os.path.join(sdir, "m3.jsonl")
+    _m11_stream(st, [_m11_use("a", "Bash", {"command": "cargo +nightly-2025-05-13 clippy --all-targets"}),
+                     _m11_res("a", clippy_lint),
+                     _m11_use("b", "Bash", {"command": "cargo +nightly-2025-05-13 clippy 2>&1 | tail -5"}),
+                     {"type": "system", "subtype": "permission_denied", "tool_name": "Bash", "tool_use_id": "b",
+                      "message": "Permission to use Bash with command cargo ... has been denied."},
+                     _m11_res("b", "Permission to use Bash has been denied.", True,
+                              tool_result_meta=[{"non_execution_kind": "permission-rule"}])])
+    tl = summarize.mine_stream(st)
+    expect("M11 M3: a denied cargo call is recorded as denied, and the lint stays", (
+        [e["kind"] for e in tl], summarize.lint_ledger(tl)["byte_char_slices"]["cleared_line"]),
+        (["cargo clippy", "denied"], None))
+    # sweep G1: a failed or refused Write/Edit is not a file change, and an outside path is not cut to a basename
+    st = os.path.join(sdir, "g1.jsonl")
+    _m11_stream(st, [_m11_use("a", "Edit", {"file_path": "~/r/MP4/translations/project_2/src/psbt.rs"}),
+                     _m11_res("a", "String to replace not found in file.", True),
+                     _m11_use("b", "Write", {"file_path": "~/r/MP4/subjects/project_2/rust_skeleton/src/bin/test.rs"}),
+                     {"type": "system", "subtype": "permission_denied", "tool_name": "Write", "tool_use_id": "b",
+                      "message": "Permission to use Write has been denied."},
+                     _m11_res("b", "Permission to use Write has been denied.", True),
+                     _m11_use("c", "Edit", {"file_path": "~/r/MP4/translations/project_2/src/psbt.rs"}),
+                     _m11_res("c", "The file has been updated.")])
+    expect("M11 G1: failed and refused edits are marked, outside paths kept whole",
+           [(e["kind"], e.get("file")) for e in summarize.mine_stream(st)],
+           [("Edit (failed)", "src/psbt.rs"),
+            ("Write (denied)", "~/r/MP4/subjects/project_2/rust_skeleton/src/bin/test.rs"),
+            ("denied", None), ("Edit", "src/psbt.rs")])
+    # M4: two diagnostics with the same message on one line, at different columns, are two
+    two = "\n".join(["warning: unnecessary parentheses around assigned value", " --> src/lib.rs:1:29", "",
+                     "warning: unnecessary parentheses around assigned value", " --> src/lib.rs:1:42", ""])
+    expect("M11 M4: same message, same line, different columns -> 2", len(summarize.parse_cargo_output(two)[0]), 2)
+    # M7: a code-less message with a pipe stays inside its table cell
+    perr = "\n".join(["error: unexpected closure parameter list | here", " --> src/lib.rs:3:9", ""])
+    ev = {"diags": summarize.parse_cargo_output(perr)[0], "tests": []}
+    expect_true("M11 M7: pipes in a diagnostic key are escaped", "|" not in summarize._cargo_detail(ev).replace(
+        "\\|", ""))
+    # M10: wrongly typed stream fields do not crash the miner
+    st = os.path.join(sdir, "m10.jsonl")
+    _m11_stream(st, [_m11_use("a", "Write", ["not", "a", "dict"]), _m11_use("b", "Bash", "cargo build"),
+                     {"type": "system", "subtype": "permission_denied", "tool_name": 5, "message": {"x": 1}},
+                     {"type": "assistant", "message": {"content": [{"type": "text", "text": 7}]}},
+                     _m11_res("b", [{"type": "text", "text": None}])])
+    try:
+        expect("M11 M10: mistyped stream fields are tolerated", [e["kind"] for e in summarize.mine_stream(st)],
+               ["Write", "denied"])
+    except (AttributeError, TypeError) as exc:
+        expect("M11 M10: mistyped stream fields are tolerated", repr(exc), ["Write", "denied"])
+
+    # M5/M6/M9 and S5-S8: a run tree in the controller's layout
+    saved = mc.TRAJECTORIES_DIR
+    try:
+        summarize.mc.TRAJECTORIES_DIR = os.path.join(tmp_root, "m11_traj")
+        run_dir = os.path.join(summarize.mc.TRAJECTORIES_DIR, "project_9", "run_R")
+        for d in ("iter_01", "iter_01_attempt2", "iter_01_attempt10", "iter_02", "iter_01.bak"):
+            os.makedirs(os.path.join(run_dir, d))
+        expect("M11 M9: iteration dirs as the controller names them, in numeric order",
+               summarize.iter_dirs(run_dir), ["iter_01", "iter_01_attempt2", "iter_01_attempt10", "iter_02"])
+        for d in ("iter_01_attempt10", "iter_01.bak"):
+            shutil.rmtree(os.path.join(run_dir, d))
+        _m11_stream(os.path.join(run_dir, "iter_01", "agent.stream.jsonl"),   # paused: no checks were run
+                    [{"type": "result", "num_turns": 3, "duration_ms": 60000, "usage": {"output_tokens": 10}}])
+        for d, summary in (("iter_01_attempt2", {"compiles": False, "tests_passed": 0, "tests_total": 4,
+                                                 "clippy_agent": {}, "clippy_harness": {}, "safety_tool": "proxy"}),
+                           ("iter_02", {"compiles": True, "tests_passed": 4, "tests_total": 4, "success": True,
+                                        "clippy_agent": {g: 0 for g in summarize.GROUPS},
+                                        "clippy_harness": {"style": 2}, "safety_tool": "course"})):
+            with open(os.path.join(run_dir, d, "iteration_summary.json"), "w", encoding="utf-8") as fh:
+                json.dump(summary, fh)
+            _m11_stream(os.path.join(run_dir, d, "agent.stream.jsonl"), [{"type": "result", "num_turns": 1}])
+        t = summarize.iteration_trend("project_9", "P9", {"run_id": "R"})
+        md = summarize.md_trend(t)
+        expect_true("M11 M5: a paused attempt keeps its own row", "| iter_01 | paused | - |" in md)
+        expect_true("M11 M6: harness clippy is n/a when clippy did not run",
+                    "| iter_01_attempt2 | No | 0/4 | n/a/n/a/n/a/n/a | n/a |" in md)
+        mining = summarize.render_mining([{"label": "P9", "project": "project_9", "run_summary": {"run_id": "R"}}])
+        expect_true("M11 G2: mined paths are from the repository root",
+                    "`MP4/trajectories/project_9/run_R/iter_02/agent.stream.jsonl`" in mining)
+        expect_true("M11 M5: the miner does not cite a changes.diff a paused attempt never wrote",
+                    "No `changes.diff`: this attempt paused" in mining and "run_R/iter_01/changes.diff" not in mining)
+        expect_true("M11 S8: the trend safety label follows the measuring tool",
+                    "Safety (proxy)" in md and "official tool PENDING" in md)
+        for d in ("iter_01", "iter_01_attempt2"):
+            shutil.rmtree(os.path.join(run_dir, d))
+        md = summarize.md_trend(summarize.iteration_trend("project_9", "P9", {"run_id": "R"}))
+        expect_true("M11 S8: course-tool iterations are labelled so", "Safety (course tool)" in md and
+                    "PENDING" not in md)
+        for bad in ("R/../run_R", "R/../../project_1/run_X", "../R", "", None):   # the first one resolves
+            try:
+                summarize.final_run_dir("project_9", {"run_id": bad})
+                expect("M11 M9: run_id %r refused" % (bad,), "accepted", "ValueError")
+            except ValueError:
+                expect("M11 M9: run_id %r refused" % (bad,), "ValueError", "ValueError")
+        _m11_stream(os.path.join(run_dir, "iter_02", "agent.stream.jsonl"),
+                    [{"type": "rate_limit_event", "status": "allowed", "rateLimitType": "five_hour"}])
+        u = summarize.usage_digest([{"label": "P9", "project": "project_9", "run_summary": {
+            "run_id": "R", "usage_limit_pauses": [{"cause": "auth_error"}, {"cause": "connection_error"}]}}])
+        musage = summarize.md_usage(u)
+        expect_true("M11 S5/S6: a flat allowed record is not a rejection; outage/login pauses are not usage limits",
+                    "| P9 | 1 | allowed | five_hour | 0 | 0 | 2 |" in musage)
+        expect_true("M11 S7: the count command names the final run's path from the repository root",
+                    "MP4/trajectories/project_9/run_R/iter_*/agent.stream.jsonl" in musage)
+    finally:
+        summarize.mc.TRAJECTORIES_DIR = saved
+    import run_pipeline
+    expect("M11 M9: summarize's run-id rule is the controller's", summarize.RUN_ID_RE.pattern,
+           run_pipeline.RUN_ID_RE.pattern)
+
+    # S2/S4: block filling matches exact marker lines and refuses unknown, duplicate or unclosed blocks
+    md = "\n".join(["a", "<!-- BEGIN GENERATED: x -->", "<!-- END GENERATED: x -->", "keep me", "z"])
+    expect("M11 S2: an empty block is filled in place, text after it kept",
+           summarize.fill_blocks(md, {"x": "T"}, summarize.MD_MARKERS, "t"),
+           "\n".join(["a", "<!-- BEGIN GENERATED: x -->", "T", "<!-- END GENERATED: x -->", "keep me", "z"]))
+    for name, text in (("duplicate", md + "\n<!-- BEGIN GENERATED: x -->\nold\n<!-- END GENERATED: x -->"),
+                       ("unknown", md + "\n<!-- BEGIN GENERATED: y -->\nold\n<!-- END GENERATED: y -->"),
+                       ("unclosed", "<!-- BEGIN GENERATED: x -->\nold\n")):
+        try:
+            summarize.fill_blocks(text, {"x": "T"}, summarize.MD_MARKERS, "t")
+            expect("M11 S2/S4: %s block refused" % name, "accepted", "ValueError")
+        except ValueError:
+            expect("M11 S2/S4: %s block refused" % name, "ValueError", "ValueError")
+    tex = "% BEGIN GENERATED: trend_project_1\n% END GENERATED: trend_project_1\n% BEGIN GENERATED: " \
+          "trend_project_10\nold\n% END GENERATED: trend_project_10"
+    expect_true("M11 S2: a block name that prefixes another does not swallow it", "old" in summarize.fill_blocks(
+        tex, {"trend_project_1": "T", "trend_project_10": "old"}, summarize.TEX_MARKERS, "t"))
+
+    # S3: a broken .tex leaves the .md untouched, and main() names the file with exit 2, not a traceback
+    saved_md, saved_tex = summarize.REPORT_MD, summarize.REPORT_TEX
+    try:
+        summarize.REPORT_MD = os.path.join(sdir, "r.md")
+        summarize.REPORT_TEX = os.path.join(sdir, "r.tex")
+        with open(summarize.REPORT_MD, "w", encoding="utf-8") as fh:
+            fh.write("<!-- BEGIN GENERATED: overall -->\nstale\n<!-- END GENERATED: overall -->\n")
+        with open(summarize.REPORT_TEX, "w", encoding="utf-8") as fh:
+            fh.write("% BEGIN GENERATED: overal\n% END GENERATED: overal\n")
+        try:
+            summarize.update_report(({"overall": "new"}, {"overall": "rows"}), False)
+            expect("M11 S3: broken .tex refused", "accepted", "ValueError")
+        except ValueError as exc:
+            expect_true("M11 S3: the error names the .tex and its line", "report .tex line 1" in str(exc), str(exc))
+        with open(summarize.REPORT_MD, encoding="utf-8") as fh:
+            expect_true("M11 S3: the .md was not written", "stale" in fh.read())
+    finally:
+        summarize.REPORT_MD, summarize.REPORT_TEX = saved_md, saved_tex
+
+    # S1/S9: main() on the committed tree and on broken copies (read-only modes only)
+    expect("M11 S9: the committed report drafts are current (summarize.py --check-report)",
+           summarize.main(["--check-report"]), 0)
+    saved_traj, saved_res = mc.TRAJECTORIES_DIR, mc.RESULTS_DIR
+    try:
+        summarize.mc.TRAJECTORIES_DIR = os.path.join(tmp_root, "m11_main_traj")
+        summarize.mc.RESULTS_DIR = os.path.join(tmp_root, "m11_main_res")
+        for p in mc.PROJECTS:   # run summaries and check results, but no run directories
+            os.makedirs(os.path.join(summarize.mc.TRAJECTORIES_DIR, p))
+            shutil.copy(os.path.join(saved_traj, p, "run_summary.json"),
+                        os.path.join(summarize.mc.TRAJECTORIES_DIR, p, "run_summary.json"))
+        shutil.copytree(saved_res, summarize.mc.RESULTS_DIR)
+        expect("M11 S1: a missing final run directory is PENDING (exit 2), not a traceback",
+               summarize.main(["--check-report"]), 2)
+        chk = os.path.join(summarize.mc.RESULTS_DIR, "%s.check.json" % mc.PROJECTS[0])
+        with open(chk, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["summary"]["tests_passed"] -= 1
+        with open(chk, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        expect("M11 S1: a run_summary/check-only mismatch is reported first (exit 1)",
+               summarize.main(["--check-report"]), 1)
+    finally:
+        summarize.mc.TRAJECTORIES_DIR, summarize.mc.RESULTS_DIR = saved_traj, saved_res
 
 
 if __name__ == "__main__":
