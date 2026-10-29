@@ -59,7 +59,7 @@ the specific conflict rather than picking an alternative.*
 | M4 | Iteration loop, stop logic, resume drills, README draft | **done** | 2026-10-29 — 23c88b2 | selftest 88 → 120 (+32); drills A–H + D2, E2 all PASS (A SUCCESS@2, B MAX_ITERATIONS@1, C NO_PROGRESS@4, D restored, E attempt2, E2 exit 75, F 143→resume, G rerun identical, H tamper reverted); README 12/12 headings, generated sections current; no model calls |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **done** | 2026-10-29 — 1ac3cd4 | 50 findings (44 angles + 6 sweep): 32 fixed + security S1/S2, 6 to owner gates G1–G7 (asked at M6), 12 backlog/M8/M12; selftest 120 → 166 (+46); traps 7/7; interface fuzz 241 hangs + 92 crashes → 0; matrix 37 rows (6 verified, 22 pending-run, 2 proxy, 7 owner-blocked); fresh clone exit 0 before and after the fixes |
 | M6 | Full run: project_1 (satc) | **done** | 2026-10-29 — c8435d7 (step 1 f69ae8d) | G1–G7 applied, selftest 166 → 192 (+26); run `20261029T184931Z` SUCCESS after 2 iterations / 2 attempts in 7.6 min, no pauses; both iterations 4/4 tests, agent clippy 0/0/0/0, harness 0/0/0/0, proxy safety 0, interface 0/0, integrity 0, lint attrs 0; 29 turns, 39 971 output tokens; 0 leak markers; 2 denials (`ls -R`); check-only diff empty; provenance ok; D7 full run 1/1 for project_1 spent |
-| M7 | Full run: project_2 (libpsbt) | **not-started** | — | — |
+| M7 | Full run: project_2 (libpsbt) | **done** | 2026-10-29 — f09f89c | run `20261029T194929Z` SUCCESS after 2 iterations / 2 attempts in 22.1 min, no pauses; pipeline code and configs identical to M6 (diff empty); both iterations 3/4 tests with only `read_test_vector` failing as documented (D8, test.rs:126, left 4 right 0), agent clippy 0/0/0/0, harness style 2 + rustc 8 (M1 baseline), proxy safety 0, interface 52 items 0/0, integrity 0, lint attrs 0; 87 turns (iter 1: 56 of 60), 111 569 output tokens; 0 leak markers; 3 denials (`ls`/`wc`); check-only diff empty; provenance ok; D7 full run 1/1 for project_2 spent |
 | M8 | Review 2: translations and trajectories vs rubric | **not-started** | — | — |
 | M9 | Tuning rerun | **optional — owner-triggered** | — | Flipped to not-started by the M8 session only if the owner chooses a rerun at the M8 gate; otherwise set `dropped (owner accepted M6/M7 results)` |
 | M10 | Results, README final, report draft | **not-started** | — | — |
@@ -1032,6 +1032,130 @@ re-asking, per spec.
 **Queued for owner**: nothing new. O6 still applies for M7 (the session can wrap the run in `caffeinate` as it
 did here, but the machine must stay on and logged in). **O1 still deferred.** D8 remains the working assumption,
 and O1 must be resolved or consciously accepted before submission.
+
+### M7 — Full run: project_2 (libpsbt) (2026-10-29, f09f89c + this commit)
+
+**Shipped** (product terms): libpsbt is translated by the same pipeline, with the same code and prompts as satc.
+Only the project file differs. The crate builds and passes 3 of the 4 benchmark tests. The fourth,
+`read_test_vector`, fails for the documented reason (a defect in the benchmark test, D8) and nothing else: a
+faithful parser cannot pass it. The crate has no clippy warnings of its own, no unsafe code and no FFI, and
+implements all 52 interface items unchanged. The full trajectory of both agent sessions is committed, and the
+committed crate is exactly what the pipeline wrote.
+
+**Run announcement** (written to the ledger row before the run started, 19:49 UTC): same parameters as M6
+(opus, effort high, max_iterations 8, min_iterations 2, max_turns 60, 45-minute wall clock), estimated 2–4 h of
+subscription quota. D7 full run 1 of 1 for project_2. Started as `caffeinate -dims python3 -I
+MP4/src/run_pipeline.py --project project_2 --yes`. The Mac was on battery (100 %, about 9:53 remaining), and
+`caffeinate -i` blocks idle sleep on battery.
+
+**Deviations from spec**:
+- None in the pipeline: no parameter change, no prompt or config edit, no rerun of project_1.
+- The phase ran in the same Claude session as M6. The owner chose "Do it here" when offered a new session.
+- Cargo was run by hand in `translations/project_2/` for the spec's verification. The only side effect is the
+  gitignored `target/`, and provenance still passes.
+- Spec drift: none. As with satc, the run was far shorter than the estimate.
+
+**Owner gates**: none (D7 pre-authorizes the run; no parameter changed).
+
+**Verification** (real output):
+- **Pre-flight.**
+  - `project_2.yaml` has the D8 entry `read_test_vector` with `expected_assertion` "assertion `left == right`
+    failed", `expected_location` `src/bin/test.rs:126`, and the rulings D-CLIMAIN "Make it pub fn main" and
+    D-FAITHFUL "Faithful; define UB safely".
+  - `git diff c8435d7..HEAD --stat -- MP4/src MP4/configs` is empty, before the run and after it.
+  - `--dry-run --project project_2` exit 0, config_hash 7e0f3378….
+  - `claude auth status` True, claude.ai, max. `cargo 1.89.0-nightly (056f5f4f3 2025-05-09)`.
+  - `real_run_count` `{project_1: 1, project_2: 0}`, `spend_check` None, no open runs.
+- **Run `20261029T194929Z`.** Exit 0; `SUCCESS after 2 iteration(s)`; 19:49:30 → 20:11:35 UTC.
+  `final_iteration_dir` iter_02, `final_selection` last, `usage_limit_pauses` [], `workspace_tamper` [].
+
+  | Iter | Outcome | Turns | Agent s | Builds | Tests | Known-failing verified | Clippy agent c/s/cx/p | Harness | Safety (proxy) | Interface miss/chg | Integrity | Lint | Hard-coding | Score |
+  |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+  | 1 | ok | 56 | 1069.3 | yes | 3/4 | failed, assertion ✓, location ✓ | 0/0/0/0 | style 2 | 0/0/0/0 | 0/0 | 0 | 0 | 0 | [3,0,0,0,0] |
+  | 2 | ok | 31 | 245.6 | yes | 3/4 | failed, assertion ✓, location ✓ | 0/0/0/0 | style 2 | 0/0/0/0 | 0/0 | 0 | 0 | 0 | [3,0,0,0,0] |
+
+  - Tokens: input 120, output 111 569 (thinking 73 891), cache read 5 689 092, cache creation 257 763. Reported
+    `total_cost_usd` equivalent 8.21; subscription auth, so nothing billed in dollars.
+  - Tool calls:
+    - Iteration 1: Read 22, Glob 2, Write 5, Edit 15, cargo build 2 / test 3 / clippy 4, 1 `ls`,
+      StructuredOutput.
+    - Iteration 2: Read 21, Glob 2, Edit 1, cargo build/test/clippy 1 each, 1 `ls`, 1 `wc`, StructuredOutput.
+  - Permission denials: 1 in iteration 1 (`ls -la`), 2 in iteration 2 (`ls -la`, `wc -l`).
+  - Rate-limit events: one `allowed` five_hour per attempt.
+  - Leak markers `[]` for both attempts. Isolation init clean.
+- **Iteration 2 (review pass).** 16 diff lines. `cli::main` now reads `argv[1]` with `std::env::args_os()` and a
+  lossy conversion: a non-UTF-8 argument is a read error, as in the C, instead of a panic.
+- **M7 step-4 questions.**
+  - (a) `read_test_vector` is the only failure, and it fails for the expected reason. It panics at
+    `src/bin/test.rs:126:26` with `left: 4` / `right: 0`: the second record (type 4) meets the checker's
+    per-callback `step = 0` (H-L1). The controller verified it failed, the assertion matched and the location
+    matched, in both iterations.
+  - (b) The `test` bin built under `cargo test`. By hand, `cargo +nightly-2025-05-13 test --no-fail-fast` runs
+    it as both `unittests src/bin/test.rs` and `src/bin/test.rs`, each `3 passed; 1 failed`, with the H-L10
+    "multiple build targets" warning. `empty_input_test`'s result line is glued behind the program's stdout,
+    and it is parsed as `ok` on real output; M5 had shown that only on synthetic output.
+  - (c) Unsafe never appeared. The proxy metrics are 0 in both iterations, and no agent Write or Edit input
+    contains the word `unsafe`.
+  - (d) H-L5 callbacks follow the clean design H-L5 describes. The public API is the interface's
+    `PsbtElemHandler = fn(&mut PsbtElem, &mut dyn Any)`. `psbt_read` parses the unsigned transaction through a
+    private generic `parse_btc_tx<F: FnMut(PsbtTxElem)>` (`tx.rs:62`). That closure forwards each txelem to
+    the user handler and counts inputs and outputs. There are no raw pointers and no `Box<dyn Any>` smuggling.
+  - (e) H-L6 error string: a `thread_local!` `Cell<&'static str>` set through `set_errmsg`, with no `static
+    mut`. There are 28 call sites (psbt 25, compactsize 1, tx 2) against 29 `psbt_errmsg =` lines in the C (26,
+    1, 2). The thread-local is never read: the interface fixes `psbt_geterr()` to return the constant
+    `PSBT_ERRMSG`, and the agent's status says it kept that.
+- **Step 4.**
+  - `--check-only --project project_2` exit 0; the summary diff against `iter_02/check.json` is `{}`.
+  - `integrity.py --provenance project_2` → ok against `iter_02/src_after`.
+  - `scrub_secrets.py --check MP4/` → 0 hits. `find MP4/trajectories -size +50M` → nothing; the run dir is
+    3.1 MB.
+  - `diff` of `src/bin/test.rs`, `Cargo.toml`, `Cargo.lock` and `src/interfaces/` against `subjects/` → no
+    differences. No `.c`, `.h` or `build.rs` in `translations/project_2`.
+  - Interface 52 items, 0 missing, 0 changed. Every `iter_KK/` has all 17 files and a `result` line. No
+    `/Users/` or `claude-501` in the committed run, results or crate.
+- **By hand.** The rubric clippy command exits 0, with the same warning texts as `iter_02/clippy_rubric.log`.
+  Only cargo's per-target duplicate counts and the absolute path in the H-L10 warning differ (the log is
+  scrubbed). Every diagnostic points into `src/bin/test.rs`. `check.json` attributes them as clippy harness
+  style 2 and rustc harness 8 (`dead_code` 6, `unused_imports` 1, `unused_assignments` 1), agent 0: the M1
+  baseline exactly.
+- **Floor.** py_compile 0; selftest `192 PASS, 0 FAIL` (no delta: the pipeline is unchanged); scrub 0; `--help`
+  0; check-only and provenance 0 for both projects, and the rerun summaries equal the committed ones (`{}` for
+  each); `--check-readme` up to date. The secret grep over `MP4/` gives the 3 known self-quoting lines (M6
+  discovery). Tree clean after the commit.
+- **Docs-claims check.** This phase changed no code, names or constants. Grepped the traceability doc for
+  "Not yet measurable" on the P2 rows and updated R-T3-P2-COMPILE, -CORRECT and -IDIOM to `pending-review` and
+  -SAFETY to the proxy numbers (4 rows).
+- **Tooling pass.** The row's Tooling line is "none". No skill was used.
+
+**NOT demonstrated**:
+- Correctness beyond the 4 benchmark tests. `test_vector` and `encode_decode_test` exercise the main paths.
+  The C-behaviour rulings are the agent's claims: compact-size marker overwrite, base62 index 62/63 → NUL,
+  dead segwit branch, `base64_decode`'s assert-at-capacity defined as no abort, and the zero-fill reads past
+  the psbt. Only the dead segwit flag was spot-read. Checking them against the C is M8.
+- That `read_test_vector` could pass with a faithful parser under any reading. D8 is still the working
+  assumption, and O1 (the staff ruling) is still deferred.
+- The G4 cargo-flag denials were again not exercised (the agent never tried them). Pause, resume and ship-best
+  were again not exercised by a real run.
+- What `--max-turns 60` does at the cap: iteration 1 used 56 turns and ended `ok` with the structured status,
+  4 turns short.
+- Safety numbers are the interim proxy (M12).
+- Whether the 28-vs-29 error-site difference loses a C error message. M8 should diff the message strings.
+
+**Discoveries logged for later rows**:
+- (M8) The H-L6 thread-local is write-only: `psbt_geterr()` returns the constant the interface specifies, so
+  the 28 `set_errmsg` calls have no observable effect. Decide whether that is the faithful reading of the
+  interface, and say so in the README's interventions or idiom notes. Also check the 28-vs-29 site count.
+- (M8) The parameter `_src_size` in `psbt_read` is used despite its leading underscore (it mirrors the
+  interface name). Clippy's default groups do not flag it, but it is an idiom point for the manual read.
+- (M9 / report) Iteration 1 used 56 of 60 turns on libpsbt. A larger crate could hit the cap before the
+  structured status. This is evidence for the report's discussion of per-iteration budgets. It is not a reason
+  to retune, since both runs succeeded.
+- (M10) Both projects now have committed run summaries and check results. `summarize.py` (results.md and LaTeX)
+  was deliberately not run here; that is M10.
+
+**Queued for owner**: nothing new. M8 (review 2) is next and asks the M9 rerun question at its gate. **O1 still
+deferred.** D8 remains the working assumption, and O1 must be resolved or consciously accepted before
+submission.
 
 ## Owner-action queue (only the owner can clear these)
 
