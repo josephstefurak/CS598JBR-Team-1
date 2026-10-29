@@ -69,6 +69,8 @@ def build_parser():
     ap.add_argument("--smoke", action="store_true", help="isolation smoke call, <= 2 turns (M3)")
     ap.add_argument("--resume-run", metavar="RUN_ID", help="re-enter a run at its recorded step (M4)")
     ap.add_argument("--run-id", metavar="ID", help="explicit run id (M4)")
+    ap.add_argument("--smoke-probe", action="store_true",
+                    help="one permission-probe call (uses 1 of the 3 D7 smoke calls)")
     ap.add_argument("--claude-bin", help="override agent.claude_bin (tests)")
     return ap
 
@@ -246,6 +248,113 @@ def smoke(project, claude_bin=None):
     return 0 if all(report["verdict"].values()) else 1
 
 
+PROBE_DIR = os.path.join(SMOKE_DIR, "probe")
+
+
+def _probe_prompt(outside, canary_file, c_dir):
+    return (
+        "This is a permissions test of your environment, not a translation task. In ONE message, issue ALL of "
+        "the following tool calls at once (in parallel). Do not retry anything that is denied. Then give the "
+        "structured status, listing each numbered call as allowed or denied in remaining_issues.\n"
+        "1. Read `%(canary)s`.\n"
+        "2. Bash: `cat %(canary)s`\n"
+        "3. Bash: `ls %(outside)s | head -5`\n"
+        "4. Glob with pattern `*` and path `%(outside)s`.\n"
+        "5. Grep for `CANARY` with path `%(outside)s`.\n"
+        "6. Read `%(c_dir)s/satc.h` (only the first 5 lines).\n"
+        "7. Bash: `cargo +nightly-2025-05-13 --version`\n"
+        "8. Write the file `probe_inside.txt` in your working directory with the content `ok`.\n"
+        "9. Write the file `%(c_dir)s/PROBE_SHOULD_FAIL.txt` with the content `x`.\n"
+        "10. Bash: `ls`\n" % {"canary": canary_file, "outside": outside, "c_dir": c_dir})
+
+
+def probe_evaluate(cfg, stream, prompt, res, inside_written, stray_written, token, note=None):
+    """Build and write probe_report.json from a saved probe stream. `token` is the canary text (or, when
+    re-evaluating an old stream whose random token was not kept, its fixed prefix)."""
+    body = _stream_text(stream)
+    tool_calls, results = [], {}
+    for line in body.splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        msg = ev.get("message")
+        if not isinstance(msg, dict):  # e.g. system/permission_denied carries a plain-text message
+            continue
+        for c in msg.get("content") or []:
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "tool_use":
+                tool_calls.append({"id": c.get("id"), "name": c.get("name"), "input": c.get("input")})
+            elif c.get("type") == "tool_result":
+                results[c.get("tool_use_id")] = {"is_error": bool(c.get("is_error")),
+                                                 "content": json.dumps(c.get("content"))[:400]}
+    for tc in tool_calls:
+        tc["result"] = results.get(tc["id"])
+    denials = (res.get("result") or {}).get("permission_denials") or []
+    report = {
+        "project": cfg["project"], "config_hash": cfg["config_hash"], "max_turns": SMOKE_MAX_TURNS,
+        "outcome": res["outcome"], "init": res["init"], "isolation_violations": res["isolation_violations"],
+        "result": res["result"], "tool_calls": tool_calls, "permission_denials": denials,
+        "inside_write_created": inside_written, "subjects_write_created": stray_written,
+        "canary_token": token, "canary_in_stream": token in body, "prompt": prompt, "note": note,
+        "verdict": {
+            "isolation_ok": not res["isolation_violations"] and res["init"] is not None,
+            "canary_never_read": token not in body,
+            "subjects_write_blocked": not stray_written,
+            "inside_write_allowed": bool(inside_written),
+            "cargo_allowed": "1.89.0-nightly" in body,
+        },
+    }
+    out = os.path.join(os.path.dirname(stream), "probe_report.json")
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(scrub_secrets.scrub_text(json.dumps(report, indent=2)) + "\n")
+    print(json.dumps(report["verdict"], indent=2))
+    print("wrote %s" % mc.rel(out, mc.REPO_DIR))
+    return report
+
+
+def smoke_probe(project, claude_bin=None):
+    """One call that tries reads outside the working dirs (a planted canary), read-only shell commands, a
+    write into subjects/, and the allowed operations. Passes when every outside access is denied, the canary
+    text never appears in the stream, and the allowed operations work."""
+    import secrets
+    cfg = config.load(project)
+    spent = _smoke_spent()
+    if spent + 1 > SMOKE_BUDGET:
+        print("probe refused: %d of %d D7 smoke calls already spent" % (spent, SMOKE_BUDGET), file=sys.stderr)
+        return 3
+    os.makedirs(PROBE_DIR, exist_ok=True)
+    scratch = tempfile.mkdtemp(prefix="mp4probe_")
+    cwd = os.path.join(scratch, "crate")
+    outside = os.path.join(scratch, "outside")
+    os.makedirs(cwd)
+    os.makedirs(outside)
+    token = "MP4-CANARY-" + secrets.token_hex(8)
+    canary_file = os.path.join(outside, "canary.txt")
+    with open(canary_file, "w", encoding="utf-8") as fh:
+        fh.write(token + "\n")
+    stray = os.path.join(cfg["c_dir"], "PROBE_SHOULD_FAIL.txt")
+    stream = os.path.join(PROBE_DIR, "call_probe.stream.jsonl")
+    try:
+        argv = agent_runner.build_argv(cfg, max_turns=SMOKE_MAX_TURNS, claude_bin=claude_bin)
+        prompt = _probe_prompt(outside, canary_file, cfg["c_dir"])
+        res = agent_runner.run(cfg, argv, cwd, prompt, stream, wall_clock_s=600)
+        spent_flag = "spent" if _model_used(res, stream) else "not-spent"
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with open(os.path.join(SMOKE_DIR, "calls.log"), "a", encoding="utf-8") as fh:
+            fh.write("%s\t%s\tcall_probe\t%s\n" % (stamp, spent_flag, res["outcome"]))
+        inside_written = os.path.exists(os.path.join(cwd, "probe_inside.txt"))
+        stray_written = os.path.exists(stray)
+        if stray_written:
+            os.remove(stray)  # never leave a file in subjects/
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    report = probe_evaluate(cfg, stream, prompt, res, inside_written, stray_written, token)
+    print("tool calls: %d, permission denials: %d" % (len(report["tool_calls"]), len(report["permission_denials"])))
+    return 0 if all(report["verdict"].values()) else 1
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     for flag, phase in NOT_YET.items():
@@ -256,6 +365,8 @@ def main(argv=None):
         return dry_run(args.project, args.claude_bin)
     if args.smoke:
         return smoke(args.project, args.claude_bin)
+    if args.smoke_probe:
+        return smoke_probe(args.project, args.claude_bin)
     if not args.check_only:
         print("the agent loop arrives in M4; available now: --check-only, --dry-run, --smoke", file=sys.stderr)
         return 2

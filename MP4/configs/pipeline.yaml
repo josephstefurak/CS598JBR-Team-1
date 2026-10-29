@@ -11,12 +11,13 @@ agent:                                  # agent B: Claude Code headless (D1)
   wall_clock_minutes: 45                # wrapper kill: SIGTERM, then SIGKILL (C7)
   permission_mode: dontAsk              # anything not allowed is denied, never prompts (C2)
   tools: [Read, Edit, Write, Glob, Grep, Bash]     # built-in tool set (C3); init must match exactly
+  # Reads (Read/Glob/Grep) inside the working directories (the crate and the --add-dir C dir) need no
+  # rule; with no unscoped Read allow, reads anywhere else are denied under dontAsk. Edits are scoped to
+  # the crate. (M3 smoke finding, 2026-10-29: unscoped Read/Glob/Grep and auto-approved read-only shell
+  # commands let the agent read outside its directories.)
   allowed_tools:                        # pre-approved; {toolchain} is substituted
-    - Read
-    - Edit
-    - Write
-    - Glob
-    - Grep
+    - Edit(./**)
+    - Write(./**)
     - Bash(cargo +{toolchain} --version)
     - Bash(cargo +{toolchain} build)
     - Bash(cargo +{toolchain} build *)
@@ -44,6 +45,40 @@ agent:                                  # agent B: Claude Code headless (D1)
     - WebSearch
     - Edit(/{subjects}/**)
     - Write(/{subjects}/**)
+    # read-only shell commands are auto-approved by Claude Code unless denied; the agent reads with
+    # Read/Glob/Grep instead
+    - Bash(ls)
+    - Bash(ls *)
+    - Bash(cat *)
+    - Bash(head *)
+    - Bash(tail *)
+    - Bash(less *)
+    - Bash(more *)
+    - Bash(find *)
+    - Bash(grep *)
+    - Bash(rg *)
+    - Bash(sed *)
+    - Bash(awk *)
+    - Bash(wc *)
+    - Bash(file *)
+    - Bash(stat *)
+    - Bash(tree *)
+    - Bash(du *)
+    - Bash(od *)
+    - Bash(xxd *)
+    - Bash(strings *)
+    - Bash(diff *)
+    - Bash(sort *)
+    - Bash(uniq *)
+    - Bash(cut *)
+    - Bash(echo *)
+    - Bash(printf *)
+    - Bash(pwd)
+    - Bash(env)
+    - Bash(env *)
+    - Bash(printenv)
+    - Bash(printenv *)
+    - Bash(which *)
   setting_sources: project              # no user settings, hooks or permissions (C4)
   settings_file: claude_settings.json
   system_prompt_file: agent_system_prompt.md      # appended, keeps default tool guidance (C5)
