@@ -35,10 +35,14 @@ STRUCTURED_OUTPUT_TOOL = "StructuredOutput"
 _LIMIT_RE = re.compile(r"limit|resets|rate_limit|429", re.I)
 _OVERLOAD_RE = re.compile(r"overloaded|529", re.I)
 _AUTH_RE = re.compile(r"Failed to authenticate|OAuth|not logged in|/login", re.I)
-# A dropped or refused connection to the API (G7). Matched on the result text, or on stderr when the CLI died
-# before writing a result line.
+# A dropped, refused or timed-out connection to the API, or an API server error (HTTP 5xx), all transient
+# (G7). Matched on the result text, or on stderr when the CLI died before writing a result line. The wordings
+# after "network error" are the CLI's own (Claude Code 2.1.235 maps SDK and socket errors to them; checked in
+# its binary at M8, review 2 C8). 5xx is deliberately transient: a server error is not the agent's iteration.
 _CONNECTION_RE = re.compile(r"Connection error|ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|"
-                            r"socket hang up|fetch failed|network error|API Error: 5\d\d", re.I)
+                            r"socket hang up|fetch failed|network error|Unable to connect to API|"
+                            r"Connection (?:dropped|refused|lost)|Can't reach the API server|No internet route|"
+                            r"Request timed out|API Error: 5\d\d", re.I)
 
 
 def _subst(items, values):
@@ -263,6 +267,6 @@ def run(cfg, argv, cwd, prompt, stream_path, wall_clock_s=None, env=None):
         "resets_at": resets_at,
         "result": None if result is None else {
             k: result.get(k) for k in ("subtype", "is_error", "num_turns", "duration_ms", "duration_api_ms",
-                                       "total_cost_usd",
+                                       "total_cost_usd", "terminal_reason", "api_error_status",
                                        "usage", "permission_denials", "structured_output", "result")},
     }

@@ -183,8 +183,8 @@ MP4/
 ## Infrastructure interventions
 
 No translated function was repaired by hand. Everything under `translations/` is produced by the
-agent, and `src/integrity.py --provenance` checks that it is byte-identical to the final iteration's
-snapshot. The controller performs these documented interventions:
+agent, and `src/integrity.py --provenance` checks that it is byte-identical to the snapshot of the
+iteration the run shipped (`run_summary.json` `final_iteration_dir`). The controller performs these documented interventions:
 
 - **`#![forbid(unsafe_code)]` injection.** When a run starts, the controller writes this line at the top
   of each crate's `src/lib.rs`, before the agent's first turn, so unsafe code cannot compile. Program
@@ -192,8 +192,19 @@ snapshot. The controller performs these documented interventions:
 - **Restoring protected files.** If the agent changes a test file, an interface file, `Cargo.toml`,
   `Cargo.lock` or `src/lib.rs`, the controller restores it after the iteration and records an integrity
   violation. That iteration cannot count as a success. The same applies to a hand edit of the crate
-  between iterations, which is reverted. Program logic affected: no (only immutable benchmark files and
-  unauthorised edits are reverted).
+  between iterations, or while a run waits on a pause, which is reverted. Program logic affected: no (only
+  immutable benchmark files and unauthorised edits are reverted).
+- **Removing files the agent may not create.** Any file the agent leaves outside `src/` that the benchmark
+  skeleton does not have (for example `.cargo/config.toml`, `clippy.toml`, `build.rs`, `tests/`), any
+  symlink, and any extra file under `.integrity/` is deleted and recorded as an integrity violation. The
+  check runs before the build and again after the controller's own measurement, because the agent's unit
+  tests run during that measurement and could plant such a file. Program logic affected: no (none of these
+  files is library code; the library is `src/`).
+- **Shipping the best iteration.** When a run stops at MAX_ITERATIONS or NO_PROGRESS without a successful
+  iteration, the controller copies the best iteration's own `src/` snapshot back into `translations/` (see
+  "Stopping condition"); provenance then checks against that snapshot. Program logic affected: no (it is
+  the agent's output from that iteration, unchanged). Neither committed run needed it: both stopped at
+  SUCCESS.
 - **Known-defective benchmark test (libpsbt `read_test_vector`).** The test's callback re-declares its
   step counter on every call, so it asserts that every record is of type 0, while the test vector
   contains records of other types. A faithful parser fails this test. The controller excludes it from the

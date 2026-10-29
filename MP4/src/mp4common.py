@@ -175,10 +175,12 @@ def copy_src_tree(src, dst):
 
 
 def copy_crate(src, dst_parent=None):
-    """Copy a crate directory (without target/ and .git/) to a fresh temp dir. Returns the copy path."""
+    """Copy a crate directory (without target/ and .git/) to a fresh temp dir. Returns the copy path. Symlinks are
+    copied as links, so a measurement of the copy sees them as the integrity check does on the original, and a
+    dangling link cannot crash the copy (review 2, S1)."""
     parent = dst_parent or tempfile.mkdtemp(prefix="mp4crate_")
     dst = os.path.join(parent, os.path.basename(os.path.normpath(src)) or "crate")
-    shutil.copytree(src, dst, ignore=shutil.ignore_patterns("target", ".git", "__pycache__"))
+    shutil.copytree(src, dst, symlinks=True, ignore=shutil.ignore_patterns("target", ".git", "__pycache__"))
     return dst
 
 

@@ -35,10 +35,16 @@ def _load(path):
 
 
 def compare(run_summary, check):
-    """Fields where the final run's shipped iteration and the --check-only result disagree."""
+    """Fields where the final run's shipped iteration and the --check-only result disagree. The guard counts
+    (integrity, lint attributes, hard-coding) are compared too: a crate that only check-only finds guard hits in
+    must not be tabulated (review 2, C23)."""
     final = run_summary.get("final") or {}
     s = check["summary"]
+    iv = final.get("integrity_violations")
     pairs = [("compiles", final.get("compiles"), s["compiles"]),
+             ("integrity_violations", len(iv) if isinstance(iv, list) else iv, s.get("integrity_violations")),
+             ("lint_attribute_hits", final.get("lint_attribute_hits"), s.get("lint_attribute_hits")),
+             ("hardcode_hits", final.get("hardcode_hits"), s.get("hardcode_hits")),
              ("tests_passed", final.get("tests_passed"), s["tests_passed"]),
              ("tests_total", final.get("tests_total"), s["tests_total"])]
     for g in GROUPS:
@@ -164,7 +170,7 @@ def generated_sections(pipeline):
         "stops if the agent's startup line is missing, shows any capability beyond the configured tools, or "
         "shows an API key instead of the subscription login (ABORT_ISOLATION). A usage-limit rejection is not "
         "a stop: the run %s. An API outage (overloaded, connection error) is handled the same way with a "
-        "%d-minute wait. A lost CLI login also pauses: the run exits with code 75 and continues with "
+        "%g-minute wait. A lost CLI login also pauses: the run exits with code 75 and continues with "
         "`--resume-run` after `claude auth login`." % (
             a["max_turns"], a["wall_clock_minutes"], pause, rl["fallback_minutes"]),
     ])

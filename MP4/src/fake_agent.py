@@ -83,7 +83,10 @@ def main():
                   "permission_denials": []})
             return 1
         elif kind == "write":
-            path = os.path.join(cwd, arg)
+            path = os.path.normpath(os.path.join(cwd, arg))
+            if os.path.isabs(arg) or not path.startswith(cwd + os.sep):
+                print("write: path must stay inside the workspace: %r" % arg, file=sys.stderr)
+                return 2
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("written by the fake agent\n")

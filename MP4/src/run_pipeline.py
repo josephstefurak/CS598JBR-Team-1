@@ -197,10 +197,10 @@ def _assistant_text(stream_path):
                 ev = json.loads(line)
             except ValueError:
                 continue
-            if ev.get("type") == "assistant":
-                for c in (ev.get("message") or {}).get("content") or []:
-                    if c.get("type") == "text":
-                        texts.append(c.get("text", ""))
+            if isinstance(ev, dict) and ev.get("type") == "assistant" and isinstance(ev.get("message"), dict):
+                for c in ev["message"].get("content") or []:
+                    if isinstance(c, dict) and c.get("type") == "text" and isinstance(c.get("text"), str):
+                        texts.append(c["text"])
     return "\n".join(texts)
 
 
@@ -220,13 +220,48 @@ def _model_used(res, stream_path):
     return bool(r.get("duration_api_ms") or usage.get("input_tokens") or usage.get("output_tokens"))
 
 
+def _agent_words(stream_path):
+    """Everything the agent wrote in one stream: text blocks, tool inputs (Write/Edit content, Bash commands, the
+    StructuredOutput status) and the result. Lines that are not JSON objects are skipped."""
+    parts = []
+    with open(stream_path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(ev, dict):
+                continue
+            if ev.get("type") == "assistant":
+                msg = ev.get("message")
+                content = msg.get("content") if isinstance(msg, dict) else None
+                for c in content if isinstance(content, list) else []:
+                    if isinstance(c, dict) and c.get("type") == "text" and isinstance(c.get("text"), str):
+                        parts.append(c["text"])
+                    elif isinstance(c, dict) and c.get("type") == "tool_use":
+                        parts.append(json.dumps(c.get("input")))
+            elif ev.get("type") == "result":
+                parts.append(json.dumps([ev.get("result"), ev.get("structured_output")]))
+    return "\n".join(parts)
+
+
 def leak_scan(stream_path):
-    """LEAK_MARKERS found in the agent's own text of one stream (C4, C9; owner gate G4)."""
+    """LEAK_MARKERS in the agent's own words in one stream (C4, C9; owner gate G4). None when the stream cannot be
+    read: unknown, never a clean result (review 2, C16)."""
     try:
-        text = _assistant_text(stream_path).lower()
+        text = _agent_words(stream_path).lower()
     except OSError:
-        return []
+        return None
     return [m for m in LEAK_MARKERS if m.lower() in text]
+
+
+def _record_leak_scan(run, k, n, res, stream):
+    res["leak_markers_found"] = leak_scan(stream)
+    if res["leak_markers_found"] is None:
+        run.log("iteration %d attempt %d: leak scan could not read the agent stream" % (k, n))
+    elif res["leak_markers_found"]:
+        run.log("iteration %d attempt %d: LEAK MARKERS in the agent's words: %s" % (
+            k, n, ", ".join(res["leak_markers_found"])))
 
 
 def _stream_text(path):
@@ -495,6 +530,11 @@ def evaluate(check, proj):
             "safety_total": safety_total, "score": score}
 
 
+def iter_name(k, n):
+    """Directory name of iteration k, attempt n."""
+    return "iter_%02d" % k if n == 1 else "iter_%02d_attempt%d" % (k, n)
+
+
 class Run:
     """One pipeline run: paths, state persistence, logging."""
 
@@ -523,8 +563,7 @@ class Run:
         _write_json(self.state_path, self.state)
 
     def iter_dir(self, k, n):
-        name = "iter_%02d" % k if n == 1 else "iter_%02d_attempt%d" % (k, n)
-        return os.path.join(self.dir, name)
+        return os.path.join(self.dir, iter_name(k, n))
 
     def acquire_lock(self):
         if os.path.exists(self.lock_path):
@@ -677,22 +716,34 @@ def write_manifest(run):
         "argv_iteration_1": [x for x in argv],
         "env_isolation": dict(a["env"]),
         "model": a["model"], "effort": a["effort"], "max_turns": a["max_turns"],
-        "max_iterations": run.p["loop"]["max_iterations"], "no_progress_rounds": run.p["loop"]["no_progress_rounds"],
+        "max_iterations": run.p["loop"]["max_iterations"], "min_iterations": run.p["loop"]["min_iterations"],
+        "no_progress_rounds": run.p["loop"]["no_progress_rounds"],
         "wall_clock_minutes": a["wall_clock_minutes"], "rate_limit": run.p["rate_limit"],
     })
 
 
-def tamper_check(run, k):
-    """Workspace src/ must equal the previous iteration's src_after/ (why.md Z7: no hand edits between iterations)."""
-    snap = run.state.get("last_snapshot")
+def restore_src(run, snap_dir):
+    """Replace the workspace's src/ with a snapshot (fresh mtimes, so cargo rebuilds). A missing src/ (an
+    interrupted earlier restore) is simply recreated."""
+    src = os.path.join(run.workspace, "src")
+    if os.path.islink(src):
+        os.remove(src)
+    elif os.path.exists(src):
+        shutil.rmtree(src)
+    mc.copy_src_tree(snap_dir, src)
+
+
+def tamper_check(run, k, snap=None):
+    """Workspace src/ must equal a snapshot: the previous iteration's src_after/, or after a pause the workspace as
+    the paused attempt left it (why.md Z7: no hand edits between iterations or during a pause)."""
+    snap = snap or run.state.get("last_snapshot")
     if not snap:
         return None
     snap_dir = os.path.join(run.dir, snap)
     d = integrity.check_workspace(run.workspace, snap_dir)
     if d["clean"]:
         return None
-    shutil.rmtree(os.path.join(run.workspace, "src"))
-    mc.copy_src_tree(snap_dir, os.path.join(run.workspace, "src"))   # fresh mtimes: cargo rebuilds
+    restore_src(run, snap_dir)
     record = {"iteration": k, "against": snap, "added": d["added"], "removed": d["removed"],
               "modified": d["modified"], "reverted": True}
     run.state.setdefault("workspace_tamper", []).append(record)
@@ -746,6 +797,15 @@ def do_checks(run, k, n, agent_outcome):
         violations = integrity.verify(run.workspace, run.skeleton, restore=True)
         _write_json(integ_path, {"violations": violations})
     check = measure_crate(run.workspace, run.skeleton, it, run.proj["allow_attributes"])
+    integ = _read_json(integ_path)
+    if "after_measurement" not in integ:
+        # measuring ran agent code (cargo test): anything it planted (a .cargo/config.toml lint cap, an attribute
+        # in src/lib.rs) is found, recorded and removed here, so it neither passes as a clean measurement nor
+        # stays in the workspace (review 2, C2)
+        integ["after_measurement"] = [dict(v, after_measurement=True) for v in integrity.verify(
+            run.workspace, run.skeleton, restore=True)]
+        _write_json(integ_path, integ)
+    violations = violations + integ["after_measurement"]
     in_repo = os.path.abspath(run.workspace).startswith(mc.REPO_DIR + os.sep)
     _scrub_logs(it, run.workspace, MEASURE_LOGS + tuple("clippy_%s.json" % g for g in mc.CLIPPY_GROUPS),
                 crate_label=mc.rel(run.workspace, mc.REPO_DIR) if in_repo else "<crate>")
@@ -795,7 +855,7 @@ def decide_stop(run, summary):
              "tests_total": summary["tests_total"], "clippy_agent_total": summary["clippy_agent_total"],
              "safety_total": summary["safety_total"], "interface_missing": summary["interface_missing"],
              "integrity_violations": len(summary["integrity_violations"]), "success": summary["success"],
-             "score": summary["score"]}
+             "guard_clean": guard_clean(summary), "score": summary["score"]}
     st["history"] = hist + [entry]
     if summary["success"] and k >= run.p["loop"]["min_iterations"]:
         return STOP_SUCCESS
@@ -818,15 +878,26 @@ def decide_stop(run, summary):
 SHIP_BEST_REASONS = (STOP_MAX_ITERATIONS, STOP_NO_PROGRESS)   # owner gate G6
 
 
+def guard_clean(summary):
+    """No guard blocker: no lint attribute, hard-coding hit or integrity violation, and every known-failing test
+    fails as documented. The progress score does not see these, and each of them can only raise it (a lint cap
+    hides clippy warnings, a hard-coded output or a gamed known-failing test passes a test)."""
+    return not (summary.get("lint_attribute_hits") or summary.get("hardcode_hits")
+                or summary.get("integrity_violations")
+                or any(not all(v.values()) for v in (summary.get("known_failing") or {}).values()))
+
+
 def best_iteration(run):
-    """The closed iteration to ship: successful before unsuccessful, then the highest score tuple; on a tie the
-    later iteration (the one the agent refined with more feedback). Returns its directory name or None."""
+    """The closed iteration to ship: successful before unsuccessful, then guard-clean before guard-blocked (review
+    2, C1: a blocked iteration must not win on a score the blocked behaviour inflated), then the highest score
+    tuple; on a tie the later iteration (the one the agent refined with more feedback). Returns its directory
+    name or None."""
     best, key = None, None
     for h in run.state["history"]:
         d = os.path.basename(run.iter_dir(h["iteration"], h.get("attempt", 1)))
         if not os.path.isdir(os.path.join(run.dir, d, "src_after")):
             continue
-        k = (bool(h["success"]), list(h["score"]))
+        k = (bool(h["success"]), bool(h.get("guard_clean", True)), list(h["score"]))
         if key is None or k >= key:
             best, key = d, k
     return best
@@ -840,20 +911,21 @@ def ship_best(run):
     best = best_iteration(run)
     if not best or not last or best == os.path.dirname(last):
         return last
-    src = os.path.join(run.workspace, "src")
-    shutil.rmtree(src)
-    mc.copy_src_tree(os.path.join(run.dir, best, "src_after"), src)   # fresh mtimes: a later cargo run rebuilds
+    restore_src(run, os.path.join(run.dir, best, "src_after"))
     run.log("shipping the best iteration %s instead of the last (%s)" % (best, os.path.dirname(last)))
     return best + "/iteration_summary.json"
 
 
 def finalize(run, reason):
+    """Close the run. Callers persist run_state.pending_stop first, so an interrupted finalize is finished by
+    --resume-run instead of starting another iteration (review 2, C3); ship_best is safe to repeat."""
     st = run.state
     shipped = st.get("last_summary")
     if reason in SHIP_BEST_REASONS:
         shipped = ship_best(run)
-        st["shipped_summary"] = shipped
+    st["shipped_summary"] = shipped
     st.update({"status": "stopped", "stop_reason": reason, "step": "closed", "finished": _now()})
+    st.pop("pending_stop", None)
     run.save()
     final = None
     if shipped:
@@ -890,6 +962,10 @@ def write_index(traj):
             continue
         st, man = _read_json(sp), (_read_json(mp) if os.path.exists(mp) else {})
         last = st["history"][-1] if st.get("history") else {}
+        shipped_dir = os.path.dirname(st.get("shipped_summary") or "")
+        for h in st.get("history", []):   # the iteration that shipped (G6 may ship an earlier one than the last)
+            if iter_name(h["iteration"], h.get("attempt", 1)) == shipped_dir:
+                last = h
         rows.append("| `%s` | %s | %s | %s | %s | %d | %s | %s |" % (
             d, man.get("agent_kind", "?"), st.get("created"), st.get("status"), st.get("stop_reason") or "-",
             len(st.get("history", [])),
@@ -1009,9 +1085,17 @@ def _resume_cmd(run):
     return "python3 -I MP4/src/run_pipeline.py --project %s --resume-run %s" % (run.cfg["project"], run.run_id)
 
 
+def _finish(run, reason):
+    finalize(run, reason)
+    return 0 if reason in (STOP_SUCCESS, STOP_MAX_ITERATIONS, STOP_NO_PROGRESS) else 1
+
+
 def _drive(run, between_iterations):
     st = run.state
     rl = run.p["rate_limit"]
+    if st.get("pending_stop"):          # interrupted while stopping: finish that stop
+        run.log("resume: finishing the recorded stop %s" % st["pending_stop"])
+        return _finish(run, st["pending_stop"])
     while True:
         if st["step"] not in ("prompt", "agent", "checks", "closed"):
             raise RuntimeError("run state has step %r, which the loop cannot continue from" % st["step"])
@@ -1028,6 +1112,11 @@ def _drive(run, between_iterations):
             os.makedirs(it, exist_ok=True)
             if n == 1:
                 tamper_check(run, k)
+            elif st.get("pause_snapshot"):
+                # after a pause (usage limit, outage, lost login) the workspace must be as the paused attempt left
+                # it: a person may have edited it while waiting (review 2, C10)
+                tamper_check(run, k, st["pause_snapshot"])
+            st.pop("pause_snapshot", None)
             with open(os.path.join(it, "prompt.md"), "w", encoding="utf-8") as fh:
                 fh.write(scrub_secrets.scrub_text(build_prompt(run, k)))
             st["step"] = "agent"
@@ -1042,6 +1131,7 @@ def _drive(run, between_iterations):
             elif st.get("agent_started") == [k, n]:
                 # resumed after the process died mid-agent: the attempt is over, its edits stand, check them
                 res = {"outcome": "aborted_interrupted", "note": "agent step interrupted; checks run on resume"}
+                _record_leak_scan(run, k, n, res, os.path.join(it, "agent.stream.jsonl"))
                 _write_json(res_path, res)
                 run.log("iteration %d attempt %d: agent step was interrupted; marked %s" % (k, n, res["outcome"]))
             else:
@@ -1056,19 +1146,17 @@ def _drive(run, between_iterations):
                 res["argv"] = argv   # the exact command of this attempt, session id included (scrubbed on write)
                 # owner gate G4: the agent keeps the caller's environment, so every attempt's own words are
                 # scanned for the owner's instruction files and memory (recorded and logged, not a stop)
-                res["leak_markers_found"] = leak_scan(stream)
+                _record_leak_scan(run, k, n, res, stream)
                 _write_json(res_path, res)
                 run.log("iteration %d attempt %d: agent %s after %.1f s" % (k, n, res["outcome"], res["elapsed_s"]))
-                if res["leak_markers_found"]:
-                    run.log("iteration %d attempt %d: LEAK MARKERS in the agent's text: %s" % (
-                        k, n, ", ".join(res["leak_markers_found"])))
             outcome = res["outcome"]
             if outcome in PAUSE_OUTCOMES:
                 # usage limit, an outage (G7) or a lost login (G2): redo the iteration as the next attempt
                 return _usage_limit(run, res, rl)
             if outcome == "isolation_violation":
-                finalize(run, STOP_ABORT_ISOLATION)
-                return 1
+                st["pending_stop"] = STOP_ABORT_ISOLATION
+                run.save()
+                return _finish(run, STOP_ABORT_ISOLATION)
             st["step"] = "checks"
             st["agent_outcome"] = outcome
             run.save()
@@ -1085,10 +1173,11 @@ def _drive(run, between_iterations):
                                             summary["safety_total"], summary["interface_missing"],
                                             len(summary["integrity_violations"]), reason or "continue"))
             st["step"] = "closed"
+            if reason:
+                st["pending_stop"] = reason   # saved with the step: a resume finishes this stop, never runs k+1
             run.save()
             if reason:
-                finalize(run, reason)
-                return 0 if reason in (STOP_SUCCESS, STOP_MAX_ITERATIONS, STOP_NO_PROGRESS) else 1
+                return _finish(run, reason)
             if between_iterations:
                 between_iterations(run)
             st.update({"iteration": k + 1, "attempt": 1, "step": "prompt"})
@@ -1117,6 +1206,11 @@ def _usage_limit(run, res, rl):
     wait = min(wait, rl["max_wait_hours"] * 3600)
     st.setdefault("pauses", []).append({"iteration": k, "attempt": n, "resets_at": resets, "wait_s": round(wait),
                                         "at": _now(), "mode": rl["mode"], "cause": cause})
+    snap = os.path.join(run.iter_dir(k, n), "src_at_pause")
+    if os.path.exists(snap):
+        shutil.rmtree(snap)
+    mc.copy_src_tree(os.path.join(run.workspace, "src"), snap)
+    st["pause_snapshot"] = mc.rel(snap, run.dir)
     st.update({"attempt": n + 1, "step": "prompt", "agent_started": None})
     st["pause_until"] = now + wait
     run.save()
@@ -1126,7 +1220,9 @@ def _usage_limit(run, res, rl):
         run.log("the agent could not authenticate: run `claude auth login`, then resume with: %s" % _resume_cmd(run))
         print(_resume_cmd(run))
         return EXIT_USAGE_LIMIT
-    if rl["mode"] == "exit" or n >= MAX_LIMIT_ATTEMPTS:
+    # the cap counts unattended waits only: a lost login always went to a person already (review 2, S3)
+    waited = sum(1 for p in st["pauses"] if p["iteration"] == k and p.get("cause") != "auth_error")
+    if rl["mode"] == "exit" or waited >= MAX_LIMIT_ATTEMPTS:
         # mode exit, or the same iteration was refused MAX_LIMIT_ATTEMPTS times in a row (a weekly limit, or an
         # error the text match mistakes for a limit): hand back to a person instead of retrying unattended
         run.log("usage limit: resume with: %s" % _resume_cmd(run))

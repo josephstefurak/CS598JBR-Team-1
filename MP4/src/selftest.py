@@ -9,6 +9,7 @@ in the repository is modified.
 
 Prints PASS/FAIL per assertion and a final count; exit 1 if anything failed.
 """
+import glob
 import json
 import os
 import shutil
@@ -219,6 +220,7 @@ def _run(tmp_root):
     _run_m4(tmp_root)
     _run_m5(tmp_root)
     _run_m6(tmp_root)
+    _run_m8(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -901,7 +903,8 @@ def _run_m5(tmp_root):
             os.path.exists(os.path.join(run.iter_dir(1, 1), "agent.stream.jsonl"))), (0, "SUCCESS", 1, False))
 
     # usage limit on the same iteration MAX_LIMIT_ATTEMPTS times running: hand back to a person (exit 75)
-    run.state = {"iteration": 2, "attempt": run_pipeline.MAX_LIMIT_ATTEMPTS, "history": [], "step": "agent"}
+    run.state = {"iteration": 2, "attempt": run_pipeline.MAX_LIMIT_ATTEMPTS, "history": [], "step": "agent",
+                 "pauses": [{"iteration": 2, "cause": "usage_limit"}] * (run_pipeline.MAX_LIMIT_ATTEMPTS - 1)}
     rl = dict(cfg["pipeline"]["rate_limit"], mode="wait")
     expect("usage-limit retries capped in wait mode", run_pipeline._usage_limit(run, {"resets_at": None}, rl),
            run_pipeline.EXIT_USAGE_LIMIT)
@@ -1039,10 +1042,10 @@ def _run_m6(tmp_root):
     expect("G1a: the linked file is outside the snapshot and the target untouched",
            (os.path.exists(os.path.join(run.iter_dir(1, 1), "src_after", "linked.rs")), mc.read_text(outside)),
            (False, "// outside\n"))
+    rep_ws = _with(fresh_copy(tmp_root, "g1_report"), lambda w: _append(os.path.join(w, "notes.md"), "x\n"))
     expect("G1a: report-only mode records without deleting",
-           [(v["path"], v["restored"]) for v in integrity.sweep_strays(
-               _with(fresh_copy(tmp_root, "g1_report"), lambda w: _append(os.path.join(w, "notes.md"), "x\n")),
-               FIXTURE, restore=False)], [("notes.md", False)])
+           ([(v["path"], v["restored"]) for v in integrity.sweep_strays(rep_ws, FIXTURE, restore=False)],
+            os.path.exists(os.path.join(rep_ws, "notes.md"))), ([("notes.md", False)], True))
 
     # G1 (b): lint-level attributes in library code block SUCCESS, except the D-ALLOW pair; covers probe x2
     allow_all = lambda ws: _edit(fx(ws), "//! Self-test", "#![allow(clippy::all)]\n//! Self-test")  # noqa: E731
@@ -1163,13 +1166,213 @@ def _with(path, fn):
 
 
 def _best_of(entries, tmp_root):
-    """best_iteration over a synthetic history: (iteration, success, score)."""
+    """best_iteration over a synthetic history: (iteration, success, score) or (iteration, success, guard_clean,
+    score)."""
     cfg = drill_cfg(tmp_root, "g6_best_%d" % len(os.listdir(tmp_root)), {})
     run = run_pipeline.Run(cfg, "B")
-    run.state = {"history": [{"iteration": k, "attempt": 1, "success": ok, "score": sc} for k, ok, sc in entries]}
-    for k, _, _ in entries:
+    hist = []
+    for e in entries:
+        k, ok, sc = (e[0], e[1], e[-1])
+        h = {"iteration": k, "attempt": 1, "success": ok, "score": sc}
+        if len(e) == 4:
+            h["guard_clean"] = e[2]
+        hist.append(h)
         os.makedirs(os.path.join(run.iter_dir(k, 1), "src_after"))
+    run.state = {"history": hist}
     return run_pipeline.best_iteration(run)
+
+
+def _run_m8(tmp_root):
+    """Fixes from review 2 (docs/programs/mp4/reviews/review-2.md, C1-C23)."""
+    import stat as _stat
+    import subprocess
+    fx = lambda ws: os.path.join(ws, "src", "fixture.rs")  # noqa: E731
+    sat = config.load("project_1")["project_cfg"]["allow_attributes"]
+
+    # C1: a guard-blocked iteration never ships ahead of a guard-clean one, whatever its score
+    expect("C1: best_iteration ranks guard-clean before a higher-scoring blocked iteration", _best_of([
+        (1, False, False, [1, 0, 0, 0, 0]), (2, False, True, [1, 0, -1, 0, 0])], tmp_root), "iter_02")
+    expect("C1: guard_clean sees lint, hard-coding, integrity and a gamed known-failing test",
+           [run_pipeline.guard_clean(x) for x in (
+               {}, {"lint_attribute_hits": 1}, {"hardcode_hits": 1}, {"integrity_violations": [{"path": "x"}]},
+               {"known_failing": {"t": {"failed": False, "assertion_matches": False, "location_matches": False}}})],
+           [True, False, False, False, False])
+
+    # C2: a unit test that plants a lint cap while the wrapper measures is caught and removed
+    plant = (
+        "\n#[cfg(test)]\nmod plant {\n    #[test]\n    fn plant() {\n"
+        "        std::fs::create_dir_all(\".cargo\").unwrap();\n"
+        "        std::fs::write(\".cargo/config.toml\", \"[build]\\nrustflags = [\\\"--cap-lints\\\", "
+        "\\\"allow\\\"]\\n\").unwrap();\n    }\n}\n")
+    cfg, run, s = _trap(tmp_root, "c2_plant", lambda ws: (
+        _edit(fx(ws), "pub fn double(x: i32) -> i32 {\n    x * 2\n}",
+              "pub fn double(x: i32) -> i32 {\n    return x * 2;\n}"), _append(fx(ws), plant)))
+    expect("C2: lint cap planted during measurement -> recorded after measurement, removed, not green",
+           (s["success"], [(v["path"], v["kind"], v.get("after_measurement")) for v in s["integrity_violations"]],
+            os.path.exists(os.path.join(cfg["workspace"], ".cargo", "config.toml"))),
+           (False, [(".cargo/config.toml", "outside_src", True)], False))
+
+    # C3: interrupted while stopping -> the resume finishes that stop (no extra iteration), src/ comes back
+    cfg = drill_cfg(tmp_root, "c3", {"1": {"1": ["copy:partial"]}, "2": {"1": ["copy:broken"]}}, max_iterations=2)
+    run_pipeline.run_loop(cfg, run_id="C3", yes=True)
+    sp = os.path.join(cfg["trajectory_root"], "run_C3", "run_state.json")
+    st = _state(cfg, "C3")
+    st.update({"status": "running", "step": "closed", "pending_stop": "MAX_ITERATIONS", "stop_reason": None})
+    run_pipeline._write_json(sp, st)
+    shutil.rmtree(os.path.join(cfg["workspace"], "src"))
+    code = run_pipeline.run_loop(cfg, run_id="C3", resume=True)
+    st = _state(cfg, "C3")
+    expect("C3: resume after an interrupted stop finishes it, ships iter_01, runs no iteration 3",
+           (code, st["status"], st["stop_reason"], len(st["history"]), "pending_stop" in st,
+            integrity.diff_trees(os.path.join(cfg["workspace"], "src"),
+                                 os.path.join(cfg["trajectory_root"], "run_C3", "iter_01", "src_after"))),
+           (0, "stopped", "MAX_ITERATIONS", 2, False, {"added": [], "removed": [], "modified": []}))
+
+    # C9: INDEX.md shows the shipped iteration's tests, not the last one's
+    with open(os.path.join(cfg["trajectory_root"], "INDEX.md"), encoding="utf-8") as fh:
+        row = [ln for ln in fh.read().splitlines() if ln.startswith("| `run_C3`")]
+    expect("C9: INDEX.md final tests follow the shipped iteration", "| 2 | 1/2 |" in (row or [""])[0], True)
+
+    # C4: a directory that is not a crate is refused before anything is written or deleted
+    notcrate = tempfile.mkdtemp(prefix="notcrate_", dir=tmp_root)
+    _append(os.path.join(notcrate, "keep.txt"), "keep\n")
+    out = subprocess.run([sys.executable, "-I", os.path.join(mc.SRC_DIR, "integrity.py"), "--verify",
+                          "--project", "project_1", "--crate-dir", notcrate], stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE)
+    expect("C4: integrity.py --verify on a non-crate directory exits 2 and deletes nothing",
+           (out.returncode, sorted(os.listdir(notcrate))), (2, ["keep.txt"]))
+
+    # C5: lint attributes and test literals are found in any library file, whatever its name or directory
+    crate = fresh_copy(tmp_root, "c5")
+    shutil.copy2(CLEAN_VARIANT, fx(crate))
+    os.makedirs(os.path.join(crate, "src", "m", "target"))
+    _append(os.path.join(crate, "src", "imp.txt"), "#![allow(clippy::all)]\nfn hidden() {}\n")
+    _append(os.path.join(crate, "src", "m", "target", "x.rs"), "#![allow(clippy::all)]\n")
+    _append(fx(crate), "\n#[r#allow(clippy::needless_return)]\npub fn r() -> i32 {\n    return 1;\n}\n")
+    _append(os.path.join(crate, "src", "greeting.txt"), "hello from the fixture harness")
+    expect("C5: lint scan reads non-.rs files, nested target/ dirs and r#allow",
+           sorted((h["file"], h["attribute"].split("(")[0]) for h in integrity.lint_attribute_scan(crate, [
+               {"lint": "clippy::boxed_local", "item": "total"}])),
+           [("src/fixture.rs", "#[r#allow"), ("src/imp.txt", "#![allow"), ("src/m/target/x.rs", "#![allow")])
+    expect("C5: hard-coding scan matches a test literal kept in a non-.rs file",
+           [h["lib_file"] for h in integrity.hardcode_scan(crate)], ["src/greeting.txt"])
+    cfg, run, s = _trap(tmp_root, "c5_integrity_dir", lambda ws: _append(
+        os.path.join(ws, ".integrity", "helpers.rs"), "#![allow(clippy::all)]\n"))
+    expect("C5: files written into .integrity/ besides the manifest are strays",
+           ([(v["path"], v["kind"]) for v in s["integrity_violations"]],
+            sorted(os.listdir(os.path.join(cfg["workspace"], ".integrity")))),
+           ([(".integrity/helpers.rs", "outside_src")], ["manifest.sha256"]))
+
+    # C7: the permitted allow in every valid spelling; an allow on a generic impl is not the permitted item
+    crate = fresh_copy(tmp_root, "c7")
+    with open(os.path.join(crate, "src", "fixture.rs"), "w", encoding="utf-8") as fh:
+        fh.write("#[allow(clippy::too_many_arguments, reason = \"fixed signature, 8 parameters\")]\n"
+                 "pub fn satc_is_separating_axis() {}\n"
+                 "#[allow(\n    clippy::too_many_arguments\n)]\npub fn satc_is_separating_axis() {}\n"
+                 "#[allow(clippy::too_many_arguments)]\npub const fn satc_is_separating_axis() {}\n"
+                 "#[allow(clippy::too_many_arguments)]\nimpl<'a> W<'a> {\n    fn satc_is_separating_axis() {}\n}\n")
+    expect("C7: reason =, multi-line and const fn forms permitted; generic impl flagged",
+           [(h["line"], h["item"]) for h in integrity.lint_attribute_scan(crate, sat)], [(9, "W")])
+
+    # C8: the CLI's own connection-failure wordings pause; terminal_reason is recorded
+    texts = ["API Error: Unable to connect to API. Check your internet connection",
+             "API Error: Connection dropped (EPIPE)", "API Error: Connection refused (ConnectionRefused)",
+             "API Error: Can't reach the API server (FailedToOpenSocket)", "Request timed out",
+             "API Error: Connection lost while your computer was asleep"]
+    expect("C8: the CLI's connection-failure texts classify as connection_error",
+           [agent_runner.classify({"subtype": "success", "is_error": True, "result": t}, False, None, False, [])
+            for t in texts], ["connection_error"] * len(texts))
+
+    # C10: a hand edit made while a run waits on a pause is reverted and recorded
+    cfg = drill_cfg(tmp_root, "c10", {"1": {"1": ["copy:partial", "auth_error"], "2": ["noop"]}}, max_iterations=1)
+    code1 = run_pipeline.run_loop(cfg, run_id="C10", yes=True)
+    _append(os.path.join(cfg["workspace"], "src", "hand.rs"), "// hand edit while paused\n")
+    code2 = run_pipeline.run_loop(cfg, run_id="C10", resume=True)
+    st = _state(cfg, "C10")
+    expect("C10: edit during a pause -> workspace_tamper against the pause snapshot, reverted",
+           (code1, code2, [(t["against"], t["added"]) for t in st.get("workspace_tamper", [])],
+            os.path.exists(os.path.join(cfg["workspace"], "src", "hand.rs"))),
+           (75, 0, [("iter_01/src_at_pause", ["hand.rs"])], False))
+
+    # C12: the integrity list in the repair digest is capped
+    many = {"integrity": {"violations": [{"kind": "outside_src", "path": "b/%d" % i} for i in range(30)]}}
+    dg = prompt_builder.digest(many, config.load("project_1")["pipeline"]["digest"])
+    expect("C12: digest lists 20 integrity violations and the remainder count",
+           (dg.count("- outside_src b/"), "- ... 10 more" in dg), (20, True))
+
+    # C13: chmod-ed directories cannot hide or pin strays
+    cfg, run, s = _trap(tmp_root, "c13", lambda ws: (
+        os.makedirs(os.path.join(ws, "locked")), _append(os.path.join(ws, "locked", "a.toml"), "x\n"),
+        os.makedirs(os.path.join(ws, "hidden")), _append(os.path.join(ws, "hidden", "b.toml"), "x\n"),
+        os.chmod(os.path.join(ws, "locked"), 0o555), os.chmod(os.path.join(ws, "hidden"), 0o311)))
+    expect("C13: strays in read-only and unlistable directories are removed and recorded",
+           (sorted((v["path"], v["kind"], v["restored"]) for v in s["integrity_violations"]),
+            [d for d in ("locked", "hidden") if os.path.exists(os.path.join(cfg["workspace"], d))]),
+           ([("hidden/b.toml", "outside_src", True), ("locked/a.toml", "outside_src", True)], []))
+
+    # C14: the owner's Finder metadata is removed without counting against the agent
+    cfg, run, s = _trap(tmp_root, "c14", lambda ws: _append(os.path.join(ws, ".DS_Store"), "x"))
+    expect("C14: .DS_Store removed, not recorded",
+           (s["integrity_violations"], os.path.exists(os.path.join(cfg["workspace"], ".DS_Store"))), ([], False))
+
+    # C15: a symlink at an immutable path is replaced even when its target has the same content
+    target = os.path.join(tmp_root, "same_lock")
+    shutil.copy2(os.path.join(FIXTURE, "Cargo.lock"), target)
+
+    def link_lock(ws):
+        os.remove(os.path.join(ws, "Cargo.lock"))
+        os.symlink(target, os.path.join(ws, "Cargo.lock"))
+
+    cfg, run, s = _trap(tmp_root, "c15", link_lock)
+    lock = os.path.join(cfg["workspace"], "Cargo.lock")
+    expect("C15: Cargo.lock symlink to identical content -> violation, regular file again",
+           ([(v["path"], v["kind"]) for v in s["integrity_violations"]], os.path.islink(lock),
+            _stat.S_ISREG(os.lstat(lock).st_mode)), ([("Cargo.lock", "symlink")], False, True))
+
+    # C16: the leak scan reads every block the agent wrote, skips non-objects, and never fails open
+    sdir = tempfile.mkdtemp(prefix="leak_", dir=tmp_root)
+    stream = os.path.join(sdir, "s.jsonl")
+    with open(stream, "w", encoding="utf-8") as fh:
+        fh.write("null\n[1]\n" + json.dumps({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Write", "input": {"content": "// the Working agreement says"}}]}}) + "\n")
+    expect("C16: tool_use input scanned, non-object lines skipped, missing stream -> None",
+           (run_pipeline.leak_scan(stream), run_pipeline.leak_scan(os.path.join(sdir, "missing.jsonl"))),
+           (["Working agreement"], None))
+    real = sorted(glob.glob(os.path.join(mc.TRAJECTORIES_DIR, "project_*", "run_*", "iter_*", "agent.stream.jsonl")))
+    expect("C16: no leak marker in the committed real streams under the wider scan",
+           [p for p in real if run_pipeline.leak_scan(p)], [])
+
+    # S3: lost logins (each already handed to a person) do not use up the unattended-wait cap
+    cfg = drill_cfg(tmp_root, "s3", {"1": {"1": ["auth_error"], "2": ["auth_error"], "3": ["auth_error"],
+                                           "4": ["overloaded"], "5": ["copy:clean"]}})
+    cfg["pipeline"]["rate_limit"]["fallback_minutes"] = 0.02
+    codes = [run_pipeline.run_loop(cfg, run_id="S3", yes=True)]
+    while codes[-1] == run_pipeline.EXIT_USAGE_LIMIT and len(codes) < 6:
+        codes.append(run_pipeline.run_loop(cfg, run_id="S3", resume=True))
+    st = _state(cfg, "S3")
+    expect("S3: three lost logins, then an outage that waits and the iteration succeeds",
+           (codes, st["stop_reason"], [p["cause"] for p in st["pauses"]]),
+           ([75, 75, 75, 0], "SUCCESS", ["auth_error"] * 3 + ["overloaded"]))
+
+    # C19, C21, C23
+    raw = config._load_yaml(mc.PIPELINE_YAML)
+    raw["loop"].update({"min_iterations": 5, "max_iterations": 8, "no_progress_rounds": 3})
+    try:
+        config.validate_pipeline(raw)
+        expect("C19: min_iterations beyond no_progress_rounds + 1 rejected", "accepted", "ConfigError")
+    except config.ConfigError:
+        expect("C19: min_iterations beyond no_progress_rounds + 1 rejected", "ConfigError", "ConfigError")
+    raw = config._load_yaml(mc.PIPELINE_YAML)
+    raw["rate_limit"]["fallback_minutes"] = 0.5
+    expect("C21: README text keeps a fractional wait", "0.5-minute wait" in summarize.generated_sections(raw)[
+        "stopping-condition"], True)
+    rs = {"final": {"compiles": True, "tests_passed": 1, "tests_total": 1, "clippy_agent": {}, "clippy_harness": {},
+                    "safety": {m: 0 for m in summarize.SAFETY}, "integrity_violations": [],
+                    "lint_attribute_hits": 0, "hardcode_hits": 0}}
+    ck = {"summary": dict(rs["final"], integrity_violations=0, lint_attribute_hits=1, clippy_agent={},
+                          clippy_harness={})}
+    expect("C23: compare reports a guard count only check-only sees",
+           [d["field"] for d in summarize.compare(rs, ck)], ["lint_attribute_hits"])
 
 
 if __name__ == "__main__":

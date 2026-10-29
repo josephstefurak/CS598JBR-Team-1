@@ -73,3 +73,32 @@ D-M5GATES. Each change has a selftest check (`_run_m6`).
 - **G7, outages pause.** Code: `overloaded` and the new `connection_error`
   outcomes pause for `rate_limit.fallback_minutes` and redo the iteration,
   under the same 3-attempt cap as a usage limit.
+
+## 2026-10-29 — review-2 orchestration fixes (program phase M8; no file under configs/ changed)
+
+Evidence: `docs/programs/mp4/reviews/review-2.md` § 6, the `/code-review max` of the G1–G7 changes
+(f69ae8d). No configuration value or prompt changed, but these fixes change how a future run (M9) is
+controlled, so they are recorded here next to the G1–G7 entry. Neither committed run is affected: both
+stopped at SUCCESS with no violation, pause or ship-best (review-2.md § 6, "Effect on the committed runs").
+
+- The G1 check also runs after the controller's own measurement. The agent's unit tests run during
+  `cargo test` and could plant a lint cap. Files under `.integrity/` other than the manifest are strays.
+  macOS `.DS_Store` files are removed without counting against the agent. A chmod-ed directory can no
+  longer hide or pin a stray. A symlink at a protected path is always replaced.
+- The lint-attribute and hard-coding scans read every file under `src/` (not just `*.rs`, and including
+  directories named `target`), recognise `#[r#allow]`, and accept the permitted D-ALLOW attribute in
+  every valid spelling (`reason = "..."`, across lines, on a `const fn`).
+- G6 ranks a guard-blocked iteration (lint attribute, hard-coding, integrity violation, or a known-failing
+  test that no longer fails as documented) below every guard-clean one, so a blocked iteration is never
+  shipped on a score its blocked behaviour raised.
+- A stop decision is saved before the run is finalised, so an interrupted finalise is finished by
+  `--resume-run` instead of starting another iteration.
+- After any pause, the workspace is checked against a snapshot taken when the pause began.
+- `connection_error` now also matches the CLI's own connection-failure wordings: Unable to connect,
+  Connection dropped/refused/lost, Can't reach the API server, No internet route, Request timed out.
+  HTTP 5xx results stay classified as `connection_error`; this is a decision now recorded. A server error
+  is transient and not the agent's iteration, and the 3-attempt cap still hands a persistent one to a
+  person. `terminal_reason` and `api_error_status` are recorded in `agent_result.json`.
+- The leak scan reads every block the agent wrote, including Write/Edit/Bash inputs and the final status.
+  It records `null` (unknown) when the stream cannot be read, and also scans interrupted attempts.
+- `loop.min_iterations` may not exceed `loop.no_progress_rounds + 1`.

@@ -90,6 +90,9 @@ def validate_pipeline(cfg):
         raise ConfigError("loop.max_iterations is outside the D7 envelope (1..%d)" % D7_MAX_ITERATIONS)
     if not 1 <= cfg["loop"]["min_iterations"] <= cfg["loop"]["max_iterations"]:
         raise ConfigError("loop.min_iterations must be between 1 and loop.max_iterations")
+    if cfg["loop"]["min_iterations"] > cfg["loop"]["no_progress_rounds"] + 1:
+        # successes before min_iterations count as no progress: NO_PROGRESS would end the run before SUCCESS may
+        raise ConfigError("loop.min_iterations must be at most loop.no_progress_rounds + 1")
     if a["kind"] not in ("claude", "fake"):
         raise ConfigError("agent.kind must be claude or fake")
     if a["resume_session"]:

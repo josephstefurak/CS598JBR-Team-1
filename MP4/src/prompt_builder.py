@@ -122,7 +122,9 @@ def digest(check, caps):
     v = (check.get("integrity") or {}).get("violations") or []
     if v:
         out += ["", "### Integrity violations (restored by the wrapper; this iteration cannot succeed)"]
-        out += ["- %s %s" % (x["kind"], x["path"]) for x in v]
+        out += ["- %s %s" % (x["kind"], x["path"]) for x in v[:20]]
+        if len(v) > 20:   # a stray directory can hold hundreds of files (review 2, C12)
+            out.append("- ... %d more" % (len(v) - 20))
     la = check.get("lint_attributes") or []
     if la:
         out += ["", "### Lint attributes in your code (not permitted; fix the code instead)"]

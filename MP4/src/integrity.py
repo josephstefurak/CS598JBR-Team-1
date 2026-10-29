@@ -19,6 +19,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -83,9 +84,12 @@ def verify(workspace, source, restore=True):
     """Compare immutable files and src/lib.rs with the skeleton.
 
     Returns a list of violations {path, kind, restored}. kind is modified,
-    missing, added (new file in src/bin or src/interfaces), lib_rs or symlink.
-    With restore=True every violation is undone in the workspace.
+    missing, added (new file in src/bin or src/interfaces), lib_rs, symlink,
+    outside_src or unreadable (see sweep_strays). With restore=True every
+    violation is undone in the workspace. Refuses (ValueError) a directory that
+    is not a crate workspace, so a mistyped --crate-dir deletes nothing.
     """
+    require_crate_workspace(workspace)
     violations = []
     # A linked src/, src/bin or src/interfaces would turn every restore below into writes and deletions in the
     # directory it points to (code the agent runs through cargo could create one): remove the link first.
@@ -99,7 +103,9 @@ def verify(workspace, source, restore=True):
         want = os.path.join(source, r)
         have = os.path.join(workspace, r)
         kind = None
-        if not os.path.exists(have):
+        if os.path.islink(have):           # even a link to identical content: it is committed as a link
+            kind = "symlink"
+        elif not os.path.exists(have):
             kind = "missing"
         elif sha256(have) != sha256(want):
             kind = "modified"
@@ -135,8 +141,29 @@ def verify(workspace, source, restore=True):
     return violations
 
 
-# Top-level workspace entries that are the wrapper's or cargo's, never the agent's
-_WRAPPER_DIRS = frozenset({"target", ".integrity"})
+# Workspace entries that are cargo's or the wrapper's, never the agent's. target/ is cargo's (gitignored);
+# of .integrity/ only the wrapper's manifest is exempt, anything else written there is a stray.
+_WRAPPER_DIRS = frozenset({"target"})
+_KEPT_DIRS = frozenset({"target", ".integrity", "src"})
+# Written by the owner's own machine (Finder), not by the agent: removed without a record
+_PLATFORM_FILES = frozenset({".DS_Store"})
+
+
+def require_crate_workspace(workspace):
+    """A crate workspace has Cargo.toml and src/. verify() and sweep_strays() write and delete under it."""
+    if not (os.path.isfile(os.path.join(workspace, "Cargo.toml"))
+            and os.path.isdir(os.path.join(workspace, "src"))):
+        raise ValueError("not a crate workspace (no Cargo.toml and src/): %s" % workspace)
+
+
+def _owner_rwx(path):
+    """Give the owner rwx on a directory (code the agent ran may have chmod-ed it to hide or pin files)."""
+    try:
+        st = os.lstat(path)
+        if stat.S_ISDIR(st.st_mode) and (st.st_mode & 0o700) != 0o700:
+            os.chmod(path, st.st_mode | 0o700)
+    except OSError:
+        pass
 
 
 def sweep_strays(workspace, source, restore=True):
@@ -144,54 +171,88 @@ def sweep_strays(workspace, source, restore=True):
     workspace, is removed (restore=True) and recorded. Files outside src/ reach the build and the graders' own
     clippy run without being library code (.cargo/config.toml lint caps or a test runner, clippy.toml,
     build.rs, tests/, .claude/settings.json), and a symlink can carry content from outside the crate.
-    Immutable files and src/lib.rs are left to verify(), which restores them; src/bin and src/interfaces are
-    already covered there too. Returns violations {path, kind (outside_src | symlink), restored}."""
-    covered = set(immutable_files(source)) | {"src/lib.rs"}
+    Immutable files, src/lib.rs and the files under src/bin and src/interfaces are left to verify(), which
+    restores them and records additions there. A directory that cannot be listed is recorded as unreadable,
+    and a file that cannot be removed is recorded with restored False; neither raises.
+    Returns violations {path, kind (outside_src | symlink | unreadable), restored}."""
+    require_crate_workspace(workspace)
+    covered = set(immutable_files(source)) | {"src/lib.rs", MANIFEST_REL}
     violations = []
-    for dirpath, dirnames, filenames in os.walk(workspace):
+    errors = []
+
+    def record(r, kind, done):
+        violations.append({"path": r, "kind": kind, "restored": done})
+
+    def remove(path, r, kind):
+        done = False
+        if restore:
+            try:
+                os.remove(path)
+                done = True
+            except OSError:
+                pass
+        record(r, kind, done)
+
+    if restore:
+        _owner_rwx(workspace)
+    for dirpath, dirnames, filenames in os.walk(workspace, onerror=errors.append):
         rel_dir = mc.rel(dirpath, workspace) if dirpath != workspace else ""
         in_src = rel_dir == "src" or rel_dir.startswith("src/")
-        for name in sorted(dirnames):
+        dirnames.sort()                      # in place: os.walk descends in this order (deterministic records)
+        for name in list(dirnames):
             p = os.path.join(dirpath, name)
             r = mc.rel(p, workspace)
             if os.path.islink(p):            # never descended into (os.walk does not follow links)
                 if r not in ("src",) + tuple(mc.INFRA_DIRS):   # those verify() already removed or recorded
-                    if restore:
-                        os.remove(p)
-                    violations.append({"path": r, "kind": "symlink", "restored": restore})
+                    remove(p, r, "symlink")
                 dirnames.remove(name)
             elif not rel_dir and name in _WRAPPER_DIRS:
                 dirnames.remove(name)
+            elif restore:
+                _owner_rwx(p)                # before os.walk lists it
         for name in sorted(filenames):
             p = os.path.join(dirpath, name)
             r = mc.rel(p, workspace)
             if r in covered or any(r.startswith(d + "/") for d in mc.INFRA_DIRS):
                 continue                     # verify() restores these, and records files added there
             if os.path.islink(p):
-                kind = "symlink"
+                remove(p, r, "symlink")
             elif in_src:
                 continue
+            elif name in _PLATFORM_FILES:
+                if restore:
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
             else:
-                kind = "outside_src"
-            if restore:
-                os.remove(p)
-            violations.append({"path": r, "kind": kind, "restored": restore})
+                remove(p, r, "outside_src")
+    for e in errors:
+        record(mc.rel(e.filename, workspace) if e.filename else "?", "unreadable", False)
     if restore:   # directories the agent created outside src/ (now empty of files): remove, bottom-up
         for dirpath, dirnames, filenames in os.walk(workspace, topdown=False):
             r = mc.rel(dirpath, workspace) if dirpath != workspace else ""
             top = r.split("/", 1)[0]
-            if not r or top in _WRAPPER_DIRS or top == "src" or os.path.isdir(os.path.join(source, r)):
+            if not r or top in _KEPT_DIRS or os.path.isdir(os.path.join(source, r)):
                 continue
-            if not os.listdir(dirpath):
-                os.rmdir(dirpath)
+            try:
+                if not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+            except OSError:
+                pass
     return violations
 
 
 # Lint-level attributes (owner gate G1 (b)). In library code they block SUCCESS, except the D-ALLOW pairs the
-# project config lists: they silence the graders' own clippy run, or turn its warnings into errors.
-_LINT_ATTR_RE = re.compile(r"#\s*(!)?\s*\[\s*(allow|expect|warn|deny|forbid|cfg_attr)\s*\(")
-_LINT_WORD_RE = re.compile(r"\b(allow|expect|warn|deny|forbid)\s*\(")
-_ITEM_RE = re.compile(r"\b(?:fn|struct|enum|union|trait|type|const|static|mod|impl)\s+([A-Za-z_][A-Za-z0-9_]*)")
+# project config lists: they silence the graders' own clippy run, or turn its warnings into errors. `r#allow` is
+# the raw-identifier spelling of the same attribute.
+_LINT_ATTR_RE = re.compile(r"#\s*(!)?\s*\[\s*(?:r#)?(allow|expect|warn|deny|forbid|cfg_attr)\s*\(")
+_LINT_WORD_RE = re.compile(r"\b(?:r#)?(allow|expect|warn|deny|forbid)\s*\(")
+# The item an outer attribute is attached to: the name after the item keyword, skipping qualifiers
+# (`const fn x` -> x, `static mut X` -> X); for an impl block, its type name (never a permitted fn).
+_ITEM_RE = re.compile(r"\b(?:fn|struct|enum|union|trait|type|const|static|mod)\s+(?:mut\s+)?"
+                      r"(?!(?:fn|unsafe|async|extern|const)\b)([A-Za-z_][A-Za-z0-9_]*)"
+                      r"|\bimpl\b\s*(?:<[^{;]*?>)?\s*([A-Za-z_][A-Za-z0-9_]*)")
 
 
 def _paren_body(code, open_idx):
@@ -207,17 +268,41 @@ def _paren_body(code, open_idx):
     return None, len(code)
 
 
+def _lint_names(body):
+    """Lint paths of an attribute body, whitespace removed; the optional `reason = "..."` is not a lint."""
+    names = [re.sub(r"\s+", "", x) for x in body.split(",")]
+    return [x for x in names if x and not x.startswith("reason=")]
+
+
+def library_files(crate):
+    """Every regular file under src/ except src/bin and src/interfaces, whatever its name or directory:
+    include!, include_str! and #[path] compile any of them into the library, while mc.library_sources keeps
+    only *.rs and skips nested target/.git/__pycache__/.integrity directories."""
+    out = []
+    src = os.path.join(crate, "src")
+    for dirpath, dirnames, filenames in os.walk(src):
+        dirnames[:] = sorted(d for d in dirnames if not os.path.islink(os.path.join(dirpath, d)))
+        for name in sorted(filenames):
+            p = os.path.join(dirpath, name)
+            r = mc.rel(p, crate)
+            if os.path.islink(p) or any(r.startswith(d + "/") for d in mc.INFRA_DIRS):
+                continue
+            out.append(p)
+    return out
+
+
 def lint_attribute_scan(crate, allowed=()):
-    """Every allow/expect/warn/deny/forbid attribute (and cfg_attr carrying one) in library code, except an
-    outer #[allow(...)] whose lints are all permitted for the item it is attached to. allowed is the project's
-    allow_attributes list ({lint, item}). src/lib.rs is skipped: integrity restores it to the wrapper's own
-    text (the injected #![forbid(unsafe_code)] plus the skeleton). Returns [{file, line, attribute, item}]."""
-    pairs = {(a["lint"].replace(" ", ""), a["item"]) for a in allowed}
+    """Every allow/expect/warn/deny/forbid attribute (and cfg_attr carrying one) in library files, except an
+    outer #[allow(...)] whose lints are all permitted for the item it is attached to, and the wrapper's own
+    first line of src/lib.rs (D-FORBID). allowed is the project's allow_attributes list ({lint, item}).
+    Returns [{file, line, attribute, item}]."""
+    pairs = {(re.sub(r"\s+", "", a["lint"]), a["item"]) for a in allowed}
     hits = []
-    for p in mc.library_sources(crate):
-        if mc.rel(p, crate) == "src/lib.rs":
-            continue
-        code = rustlex.strip(mc.read_text(p))
+    for p in library_files(crate):
+        text = mc.read_text(p)
+        if mc.rel(p, crate) == "src/lib.rs" and text.startswith(mc.FORBID_LINE + "\n"):
+            text = " " * len(mc.FORBID_LINE) + text[len(mc.FORBID_LINE):]   # same length: line numbers hold
+        code = rustlex.strip(text)
         for m in _LINT_ATTR_RE.finditer(code):
             inner, kind = bool(m.group(1)), m.group(2)
             body, close = _paren_body(code, m.end() - 1)
@@ -228,8 +313,8 @@ def lint_attribute_scan(crate, allowed=()):
             item = None
             if not inner:
                 im = _ITEM_RE.search(code, close)
-                item = im.group(1) if im else None
-            lints = [x.replace(" ", "") for x in body.split(",") if x.strip()]
+                item = (im.group(1) or im.group(2)) if im else None
+            lints = _lint_names(body)
             if kind == "allow" and not inner and lints and all((lt, item) in pairs for lt in lints):
                 continue
             hits.append({"file": mc.rel(p, crate), "line": rustlex.line_of(code, m.start()),
@@ -260,7 +345,8 @@ def check_workspace(workspace, snapshot_dir):
 
 
 def final_snapshot(project):
-    """src_after/ of the last iteration of the final run, per trajectories/project_N/run_summary.json."""
+    """src_after/ of the iteration the final run shipped (run_summary.json final_iteration_dir: the last one,
+    or the best one at MAX_ITERATIONS / NO_PROGRESS, owner gate G6); without that field, the last one."""
     traj = os.path.join(mc.TRAJECTORIES_DIR, project)
     summary = os.path.join(traj, "run_summary.json")
     if not os.path.exists(summary):
@@ -273,7 +359,7 @@ def final_snapshot(project):
     run_dir = os.path.join(traj, "run_%s" % run_id)
     final_dir = data.get("final_iteration_dir")
     if final_dir is not None:
-        # the attempt the run's last check measured, e.g. iter_03_attempt2 after a usage-limit retry
+        # the attempt that shipped, e.g. iter_03_attempt2 after a usage-limit retry
         if not isinstance(final_dir, str) or not _ITER_DIR_RE.match(final_dir):
             return None, "run_summary.json has an invalid final_iteration_dir"
         snap = os.path.join(run_dir, final_dir, "src_after")
@@ -297,7 +383,7 @@ def _iter_key(name):
 
 
 def provenance(project):
-    """translations/project_N/src must equal the final run's last src_after/ byte for byte (why.md Z7)."""
+    """translations/project_N/src must equal the shipped iteration's src_after/ byte for byte (why.md Z7)."""
     snap, err = final_snapshot(project)
     if err:
         return {"ok": False, "error": err}
@@ -308,10 +394,12 @@ def provenance(project):
 
 
 def hardcode_scan(crate, min_len=mc.HARDCODE_MIN_LITERAL):
-    """Every string literal >= min_len chars in a test file that also appears in library code (why.md Z2)."""
+    """Every string literal >= min_len chars in a test file that also appears in library code (why.md Z2).
+    Library code is every file library_files() lists: in a .rs file the literal must sit inside a string
+    literal; any other file (pulled in with include_str! or include!) is matched as raw text."""
     test_files = [p for p in mc.walk_files(os.path.join(crate, "src", "bin")) if p.endswith(".rs")] \
         if os.path.isdir(os.path.join(crate, "src", "bin")) else []
-    libs = {p: mc.read_text(p) for p in mc.library_sources(crate)}
+    libs = {p: mc.read_text(p) for p in library_files(crate)}
     hits = []
     seen = set()
     for tf in test_files:
@@ -320,11 +408,14 @@ def hardcode_scan(crate, min_len=mc.HARDCODE_MIN_LITERAL):
                 continue
             seen.add(value)
             for lp, text in libs.items():
-                for lit, lline in rustlex.string_literals(text):
-                    if value in lit:
-                        hits.append({"literal_prefix": value[:40], "length": len(value),
-                                     "test_file": mc.rel(tf, crate), "test_line": line,
-                                     "lib_file": mc.rel(lp, crate), "lib_line": lline})
+                if lp.endswith(".rs"):
+                    found = [lline for lit, lline in rustlex.string_literals(text) if value in lit]
+                else:
+                    found = [rustlex.line_of(text, text.index(value))] if value in text else []
+                for lline in found:
+                    hits.append({"literal_prefix": value[:40], "length": len(value),
+                                 "test_file": mc.rel(tf, crate), "test_line": line,
+                                 "lib_file": mc.rel(lp, crate), "lib_line": lline})
     return hits
 
 
@@ -413,7 +504,11 @@ def main(argv=None):
         print(write_manifest(crate, source))
         return 0
     if args.verify:
-        v = verify(crate, source, restore=not args.no_restore)
+        try:
+            v = verify(crate, source, restore=not args.no_restore)
+        except ValueError as exc:   # e.g. --crate-dir pointing at MP4/translations instead of a crate
+            print(str(exc), file=sys.stderr)
+            return 2
         print(json.dumps({"ok": not v, "violations": v}, indent=2))
         return 0 if not v else 1
     if args.check_workspace:
