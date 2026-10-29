@@ -55,7 +55,7 @@ the specific conflict rather than picking an alternative.*
 |---|---|---|---|---|
 | M1 | MP4 layout, subjects, toolchain, baselines | **done** | 2026-10-28 — 0122f84 | 9/9 paths; checksums 13/13 + 28/28 OK; nightly = rustc 1.89.0-nightly 2025-05-12; Baseline A E0583 x1 (satc) / x5 (libpsbt); Baseline B 0/4 + 0/4 tests; harness clippy satc 0/0/0/0, libpsbt style 2; H-L10 answered; 10 why.md corrections |
 | M2 | Checks library, integrity guards, self-test | **done** | 2026-10-28 — a8994d9 | selftest 54 PASS / 0 FAIL (baseline null → 54); interface items satc 45, libpsbt 52; check-only on pristine satc: build.ok false, E0583, missing 45; course tool exit 2; check-only on M1 Baseline B copies reproduces M1 clippy split (libpsbt harness style 2) and 4 tests after dedupe |
-| M3 | Configs, prompts, agent runner, smoke run | **done** | 2026-10-29 — 2e0f3d2 | rulings: all 4 defaults + D-STRUCTOUT; selftest 54 → 88 (+34, incl. 5 runner scenarios); smoke 2/3 D7 calls spent: init tools 6+StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5; git denied; cargo 1.89.0-nightly; no leak markers; read-only Bash auto-approved (finding) |
+| M3 | Configs, prompts, agent runner, smoke run | **done** | 2026-10-29 — 2e0f3d2 | rulings: all 4 defaults + D-STRUCTOUT; selftest 54 → 88 (+34, incl. 5 runner scenarios); smoke 2/3 D7 calls spent: init tools 6+StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5; git denied; cargo 1.89.0-nightly; no leak markers; read-only Bash auto-approved (finding) → fixed same day, probe 5/5, D7 smoke calls now 3/3 spent |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **not-started** | — | — |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **not-started** | — | — |
 | M6 | Full run: project_1 (satc) | **not-started** | — | — |
@@ -517,6 +517,71 @@ phase or the owner: whether to spend the last D7 smoke call verifying a
 tightened tool policy (discovery 1), or to approve calls beyond D7 for
 it. **O1 still deferred.** D8 remains the working assumption, and O1
 must be resolved or consciously accepted before submission.
+
+### M3 addendum — tool policy tightened and probed (2026-10-29, 5cadf51)
+
+**Why**: M3 found that agent B could read outside its directories:
+unscoped Read/Glob/Grep allows, plus read-only shell commands that Claude
+Code auto-approves. The owner chose "Fix it now", using the last D7 smoke
+call to verify.
+
+**Shipped**: The agent can now read only its crate and the project's C
+directory, write only inside its crate, and run only the pinned cargo
+commands. Everything else is refused, including shell reads and any write
+into `subjects/`.
+
+**Spend**: 1 probe call (Opus, `--max-turns 2`, api 28.3 s, `num_turns`
+12). **D7 smoke calls spent: 3 of 3**, and the counter now refuses
+further smoke or probe calls (`probe refused: 3 of 3 D7 smoke calls
+already spent`, exit 3).
+
+**Changes**: `pipeline.yaml` tool policy (see `configs/CHANGELOG.md`).
+`run_pipeline.py --smoke-probe`: a one-call probe with a random canary
+file outside the working dirs, plus `probe_evaluate()`, which can rebuild
+the report from a saved stream. Real files were never probed, so no
+personal file content can enter the evidence.
+
+**Deviation**: the live probe's post-processing crashed on
+`system/permission_denied` events (their `message` is a string). The call
+was already complete and its stream saved, so the report was rebuilt from
+the stream with no new call. The random canary token was not persisted,
+so the check uses its fixed prefix `MP4-CANARY-`, which the prompt does
+not contain. The note is in `probe_report.json`. The parser is fixed and
+the token is now saved in the report.
+
+**Verification** (`evidence/smoke/probe/probe_report.json`): init tools
+= six + StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5. 11
+tool calls, 6 permission denials:
+- denied: Read of the canary; `cat` canary; `ls <outside> | head -5`;
+  Glob `*` in outside; Grep in outside; bare `ls`.
+- refused: Write `…/subjects/project_1/c/PROBE_SHOULD_FAIL.txt` ("File is
+  in a directory that is denied by your permission settings"). No file
+  on disk; `git status MP4/subjects` empty.
+- allowed: Read `…/c/satc.h` (5 lines returned); `cargo
+  +nightly-2025-05-13 --version` → `cargo 1.89.0-nightly (056f5f4f3
+  2025-05-09)`; Write `probe_inside.txt` in the crate.
+- `MP4-CANARY-` is absent from the stream. Verdict 5/5 true.
+
+Floor: py_compile, flake8 and pyflakes clean; selftest 88 PASS, 0 FAIL;
+dry-run exit 0 for both projects; check-only E0583 on the pristine
+skeleton; scrub 0 hits; secret grep empty.
+
+**NOT demonstrated**: Glob/Grep *inside* the working dirs under the new
+policy (only Read was probed inside). Edit (as opposed to Write) in the
+crate. Every denied read-only command except `cat`/`ls`. Whether
+read-only commands not on the deny list (e.g. `nl`, `fold`, `column`)
+are still auto-approved: the denylist is necessarily incomplete, and
+only the commands probed are proven blocked. The git denial and leak
+checks from attempt 3 ran under the previous policy; the new policy
+only removes permissions, so they should still hold, but they were not
+re-run. `--max-turns 2` gave `num_turns` 12, so the cap's meaning is
+still open for M4.
+
+**Discoveries logged for later rows**: (M4) record the canary-style
+probe as a reusable pre-run check, at a cost of one call, which needs
+an owner yes because the D7 smoke allowance is exhausted. (M4) The
+digest/trajectory parsers must accept string `message` fields. (M5)
+review the read-only denylist for gaps.
 
 ## Owner-action queue (only the owner can clear these)
 
