@@ -1,0 +1,72 @@
+{
+  "agent_outcome": "ok",
+  "agent_started": [
+    2,
+    1
+  ],
+  "attempt": 1,
+  "attempts_total": 2,
+  "best_score": [
+    4,
+    0,
+    0,
+    0,
+    0
+  ],
+  "config_hash": "bb12d9faf1f61e06ee2559a37b1f8831844171b8712f291d1bddaa828322c098",
+  "created": "2026-10-29T18:49:31Z",
+  "finished": "2026-10-29T18:57:06Z",
+  "history": [
+    {
+      "attempt": 1,
+      "clippy_agent_total": 0,
+      "compiles": true,
+      "integrity_violations": 0,
+      "interface_missing": 0,
+      "iteration": 1,
+      "outcome": "ok",
+      "safety_total": 0,
+      "score": [
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      "success": true,
+      "tests_passed": 4,
+      "tests_total": 4
+    },
+    {
+      "attempt": 1,
+      "clippy_agent_total": 0,
+      "compiles": true,
+      "integrity_violations": 0,
+      "interface_missing": 0,
+      "iteration": 2,
+      "outcome": "ok",
+      "safety_total": 0,
+      "score": [
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      "success": true,
+      "tests_passed": 4,
+      "tests_total": 4
+    }
+  ],
+  "iteration": 2,
+  "last_check": "iter_02/check.json",
+  "last_snapshot": "iter_02/src_after",
+  "last_summary": "iter_02/iteration_summary.json",
+  "no_progress_count": 0,
+  "project": "project_1",
+  "run_id": "20261029T184931Z",
+  "status": "stopped",
+  "step": "closed",
+  "stop_reason": "SUCCESS",
+  "updated": "2026-10-29T18:57:06Z"
+}

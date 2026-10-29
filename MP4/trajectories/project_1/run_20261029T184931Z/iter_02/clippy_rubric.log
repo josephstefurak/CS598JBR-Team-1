@@ -1,0 +1,22 @@
+$ cargo +nightly-2025-05-13 clippy --all-targets --all-features -- -W clippy::correctness -W clippy::style -W clippy::complexity -W clippy::perf
+    Checking satc v0.1.0 (MP4/translations/project_1)
+warning: unused import: `satc::satc`
+ --> src/bin/satc_test.rs:1:5
+  |
+1 | use satc::satc;
+  |     ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: function `satc_nearest_hundredth` is never used
+ --> src/bin/satc_test.rs:3:4
+  |
+3 | fn satc_nearest_hundredth(n: f64) -> f64 {
+  |    ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: `satc` (bin "satc_test") generated 2 warnings (run `cargo clippy --fix --bin "satc_test"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
+
+[exit 0]

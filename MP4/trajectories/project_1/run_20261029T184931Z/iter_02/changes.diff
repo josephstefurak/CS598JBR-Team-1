@@ -1,0 +1,30 @@
+--- a/src/satc.rs
++++ b/src/satc.rs
+@@ -278,14 +278,25 @@
+ }
+ 
+ /// Normalize a point into a unit vector.
++///
++/// The C `satc_point_set_xy` macro expands to two statements, so only the `x`
++/// assignment is guarded by the `if (d > 0)` of the C function; the `y`
++/// assignment runs unconditionally. That is reproduced here, so normalizing
++/// the zero point yields a NaN `y` as it does in the C.
+ pub fn satc_point_normalize(p: &[f64; 2]) -> [f64; 2] {
+     let d = point_len(p);
+-    if d > 0.0 { [p[0] / d, p[1] / d] } else { *p }
++    let x = if d > 0.0 { p[0] / d } else { p[0] };
++    [x, p[1] / d]
+ }
+ 
+ /// Project the point `q` onto `p`.
++///
++/// The C `satc_point_dot` and `satc_point_len2` macros are not parenthesized,
++/// so `satc_point_dot(p, q) / satc_point_len2(q)` expands to
++/// `p[0] * q[0] + p[1] * q[1] / q[0] * q[0] + q[1] * q[1]`. The expansion is
++/// reproduced exactly; Rust groups it the same way C does.
+ pub fn satc_point_project(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+-    let amt = point_dot(p, q) / point_len2(q);
++    let amt = p[0] * q[0] + p[1] * q[1] / q[0] * q[0] + q[1] * q[1];
+     [amt * p[0], amt * p[1]]
+ }
+ 

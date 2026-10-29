@@ -1,0 +1,267 @@
+{
+  "project": "project_1",
+  "crate": "MP4/translations/project_1",
+  "generated_at": "2026-10-29T18:57:21Z",
+  "toolchain": "cargo 1.89.0-nightly (056f5f4f3 2025-05-09)",
+  "subjects_checksums_ok": true,
+  "build": {
+    "ok": true,
+    "exit_code": 0,
+    "error_count": 0,
+    "error_codes": [],
+    "errors": [],
+    "first_error": "",
+    "log": "MP4/results/project_1.check.logs/build.log"
+  },
+  "test": {
+    "compiled": true,
+    "exit_code": 0,
+    "timed_out": false,
+    "passed": 4,
+    "failed": 0,
+    "ignored": 0,
+    "missing": 0,
+    "total": 4,
+    "passed_names": [
+      "satc_collision_test",
+      "satc_point_scale_xy_test",
+      "satc_point_test",
+      "satc_polygon_get_centroid_test"
+    ],
+    "failed_names": [],
+    "missing_names": [],
+    "extra_tests": {},
+    "tests": {
+      "satc_point_scale_xy_test": {
+        "status": "ok",
+        "executions": 1,
+        "panic": null
+      },
+      "satc_polygon_get_centroid_test": {
+        "status": "ok",
+        "executions": 1,
+        "panic": null
+      },
+      "satc_point_test": {
+        "status": "ok",
+        "executions": 1,
+        "panic": null
+      },
+      "satc_collision_test": {
+        "status": "ok",
+        "executions": 1,
+        "panic": null
+      }
+    },
+    "executables": [
+      "unittests src/lib.rs (target/debug/deps/satc-f3025dd73e2316b3)",
+      "unittests src/bin/satc_test.rs (target/debug/deps/satc_test-6718c6b847a619b3)"
+    ],
+    "first_error": "",
+    "log": "MP4/results/project_1.check.logs/test.log"
+  },
+  "clippy_rubric": {
+    "exit_code": 0,
+    "summary_lines": [
+      "warning: `satc` (bin \"satc_test\") generated 2 warnings (run `cargo clippy --fix --bin \"satc_test\"` to apply 1 suggestion)"
+    ],
+    "error_count": 0,
+    "log": "MP4/results/project_1.check.logs/clippy_rubric.log"
+  },
+  "clippy": {
+    "groups": {
+      "correctness": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_1.check.logs/clippy_correctness.json"
+      },
+      "style": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_1.check.logs/clippy_style.json"
+      },
+      "complexity": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_1.check.logs/clippy_complexity.json"
+      },
+      "perf": {
+        "exit_code": 0,
+        "agent": 0,
+        "harness": 0,
+        "external": 0,
+        "lints": {},
+        "sites": [],
+        "log": "MP4/results/project_1.check.logs/clippy_perf.json"
+      }
+    },
+    "rustc": {
+      "agent": 0,
+      "harness": 2,
+      "external": 0,
+      "lints": {
+        "unused_imports": {
+          "agent": 0,
+          "harness": 1,
+          "external": 0
+        },
+        "dead_code": {
+          "agent": 0,
+          "harness": 1,
+          "external": 0
+        }
+      },
+      "sites": [
+        {
+          "lint": "unused_imports",
+          "file": "src/bin/satc_test.rs",
+          "line": 1,
+          "column": 5,
+          "origin": "harness",
+          "message": "unused import: `satc::satc`"
+        },
+        {
+          "lint": "dead_code",
+          "file": "src/bin/satc_test.rs",
+          "line": 3,
+          "column": 4,
+          "origin": "harness",
+          "message": "function `satc_nearest_hundredth` is never used"
+        }
+      ]
+    },
+    "agent_total": 0,
+    "harness_total": 0,
+    "errors": 0,
+    "ok": true
+  },
+  "safety": {
+    "tool": "proxy",
+    "tool_version": "proxy-1",
+    "unsafe_lines": 0,
+    "unsafe_calls": 0,
+    "unsafe_casts": 0,
+    "pointer_arithmetic": 0,
+    "extra": {
+      "raw_pointer_types": 0,
+      "manual_alloc": 0,
+      "unsafe_impl": 0,
+      "static_mut": 0,
+      "unsafe_blocks": 0,
+      "unsafe_fns": 0,
+      "transmute": 0,
+      "forbid_unsafe_code_first_line": true,
+      "deny_unsafe_build": {
+        "ok": true,
+        "exit_code": 0,
+        "unsafe_code_errors": 0
+      },
+      "ffi": 0,
+      "build_rs": false,
+      "c_sources": 0,
+      "dependencies": [],
+      "extra_dependencies": [],
+      "per_file": {
+        "src/lib.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        },
+        "src/satc.rs": {
+          "unsafe_lines": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "pointer_arithmetic": 0,
+          "extra": {
+            "raw_pointer_types": 0,
+            "manual_alloc": 0,
+            "unsafe_impl": 0,
+            "static_mut": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "transmute": 0
+          }
+        }
+      }
+    },
+    "findings": [],
+    "raw_path": "MP4/results/project_1.check.logs/safety_proxy.json"
+  },
+  "interface": {
+    "modules": {
+      "satc": {
+        "file": "src/satc.rs",
+        "interface_items": 45,
+        "missing": [],
+        "changed": [],
+        "extra": [
+          "impl Default for SatcResponse"
+        ],
+        "parse_error": null
+      }
+    },
+    "interface_items": 45,
+    "missing": 0,
+    "changed": 0,
+    "extra": 1,
+    "ok": true
+  },
+  "integrity": {
+    "violations": []
+  },
+  "hardcode_hits": [],
+  "lint_attributes": [],
+  "summary": {
+    "compiles": true,
+    "build_error_codes": [],
+    "tests_passed": 4,
+    "tests_total": 4,
+    "clippy_agent": {
+      "correctness": 0,
+      "style": 0,
+      "complexity": 0,
+      "perf": 0
+    },
+    "clippy_harness": {
+      "correctness": 0,
+      "style": 0,
+      "complexity": 0,
+      "perf": 0
+    },
+    "clippy_agent_total": 0,
+    "safety": {
+      "unsafe_lines": 0,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "pointer_arithmetic": 0
+    },
+    "safety_tool": "proxy",
+    "interface_missing": 0,
+    "interface_changed": 0,
+    "integrity_violations": 0,
+    "hardcode_hits": 0,
+    "lint_attribute_hits": 0
+  }
+}

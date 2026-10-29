@@ -1,0 +1,21 @@
+$ cargo +nightly-2025-05-13 build --all-targets --locked
+warning: unused import: `satc::satc`
+ --> src/bin/satc_test.rs:1:5
+  |
+1 | use satc::satc;
+  |     ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: function `satc_nearest_hundredth` is never used
+ --> src/bin/satc_test.rs:3:4
+  |
+3 | fn satc_nearest_hundredth(n: f64) -> f64 {
+  |    ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: `satc` (bin "satc_test") generated 2 warnings (run `cargo fix --bin "satc_test"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.00s
+
+[exit 0]
