@@ -26,3 +26,16 @@ read-only shell commands (`ls`, `cat`, `head`, `tail`, `find`, `grep`, `sed`,
 
 Verified: `docs/programs/mp4/evidence/smoke/probe/probe_report.json`. One
 probe call, the last of D7's 3 smoke calls; all 5 verdicts true.
+
+## 2026-10-29 — loop settings (program phase M4, before any real run)
+
+No run evidence (no run has happened yet). These are new switches for the
+loop, not prompt or policy changes:
+
+- `agent.kind: claude` (`fake` is the scripted stand-in, used only by
+  selftest drills on a copy of the fixture), `agent.fake_scenario: null`, and
+  `agent.resume_session: false` (Claude-session reuse is not implemented;
+  `config.py` refuses true).
+- `rate_limit.mode` takes `wait` or `exit`. `exit` stops with code 75 and
+  prints the `--resume-run` command. It replaces the unused `stop` value.
+  Added `rate_limit.resume_margin_seconds: 60`.

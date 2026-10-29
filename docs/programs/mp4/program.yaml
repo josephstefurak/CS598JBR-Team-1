@@ -46,7 +46,15 @@ verification_floor:               # run every phase, in addition to the phase's 
 
 baselines:                        # recorded by the phase that creates each harness
   selftest_pass_count: 54         # M2 2026-10-28: `python3 -I MP4/src/selftest.py` -> 54 PASS, 0 FAIL
-  selftest_drills: null           # M4 records (A-H)
+  selftest_drills:                # M4 2026-10-29: all PASS (selftest 88 -> 120)
+    A: "SUCCESS at iteration 2, exit 0"
+    B: "MAX_ITERATIONS at 1, exit 0"
+    C: "NO_PROGRESS at 4, exit 0"
+    D: "violation recorded + restored, not green; SUCCESS at 2 (D2: two in a row -> ABORT, exit 1)"
+    E: "usage limit -> paused ~5 s -> iter_01_attempt2 -> SUCCESS (E2 mode exit: code 75, resume -> SUCCESS)"
+    F: "SIGTERM in agent step -> exit 143; resume -> aborted_interrupted, checks, SUCCESS"
+    G: "SIGKILL in checks -> resume (stale lock taken over) -> SUCCESS; rerun of checks byte-identical summary"
+    H: "hand edit between iterations -> workspace_tamper recorded and reverted"
   # M1 Baseline B, 2026-10-28: unique (lint, file, line) sites with primary span
   # under src/bin/, from the rubric clippy run. rustc = non-clippy warnings.
   # Evidence: MP4/trajectories/project_N/baseline/README.md + clippy.json.

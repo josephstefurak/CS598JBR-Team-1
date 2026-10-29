@@ -9,6 +9,7 @@ in the repository is modified.
 
 Prints PASS/FAIL per assertion and a final count; exit 1 if anything failed.
 """
+import json
 import os
 import shutil
 import sys
@@ -21,6 +22,8 @@ import check_interface  # noqa: E402
 import checks  # noqa: E402
 import config  # noqa: E402
 import prompt_builder  # noqa: E402
+import run_pipeline  # noqa: E402
+import summarize  # noqa: E402
 import integrity  # noqa: E402
 import mp4common as mc  # noqa: E402
 import rustlex  # noqa: E402
@@ -213,6 +216,7 @@ def _run(tmp_root):
                                                   "restored": True}]}
     fixture_check["hardcode_hits"] = integrity.hardcode_scan(FIXTURE)
     _run_m3(tmp_root, fixture_check)
+    _run_m4(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -304,6 +308,249 @@ def _run_m3(tmp_root, fixture_check):
     expect("templates/system prompt/cheatsheet: no satc_/psbt_ identifiers",
            {k: prompt_builder.PROJECT_IDENT_RE.findall(v) for k, v in texts.items()
             if prompt_builder.PROJECT_IDENT_RE.findall(v)}, {})
+
+
+# ------------------------------------------------------------------------------------------------
+# M4 loop drills A-H (fake agent against copies of selftest_fixture; no model quota)
+# ------------------------------------------------------------------------------------------------
+VARIANTS = os.path.join(mc.SRC_DIR, "selftest_fixture_variants")
+ITER_FILES = ["prompt.md", "agent.stream.jsonl", "agent_result.json", "integrity.json", "check.json",
+              "build.log", "test.log", "clippy_rubric.log", "clippy_correctness.json", "clippy_style.json",
+              "clippy_complexity.json", "clippy_perf.json", "safety_proxy.json", "src_after", "changes.diff",
+              "diagnostics.md", "iteration_summary.json"]
+
+
+def drill_cfg(tmp_root, name, scenario, max_iterations=8, mode="wait"):
+    import copy
+    root = os.path.join(tmp_root, "drill_" + name)
+    skeleton = os.path.join(root, "skeleton")
+    # a benchmark-shaped skeleton: no src/<module>.rs, so the agent has to provide it
+    shutil.copytree(FIXTURE, skeleton, ignore=shutil.ignore_patterns("target", "fixture.rs"))
+    shutil.copy2(os.path.join(FIXTURE, "src", "interfaces", "fixture.rs"),
+                 os.path.join(skeleton, "src", "interfaces", "fixture.rs"))
+    scen = dict(scenario)
+    scen["variants_dir"] = VARIANTS
+    scen_path = os.path.join(root, "scenario.json")
+    with open(scen_path, "w", encoding="utf-8") as fh:
+        json.dump(scen, fh)
+    cfg = copy.deepcopy(config.load("project_1"))
+    cfg["pipeline"]["agent"].update({"kind": "fake", "fake_scenario": scen_path, "wall_clock_minutes": 2})
+    cfg["pipeline"]["loop"]["max_iterations"] = max_iterations
+    cfg["pipeline"]["rate_limit"].update({"mode": mode, "resume_margin_seconds": 1})
+    cfg["project_cfg"] = {
+        "name": "project_1", "label": "selftest fixture", "crate": "fixture", "modules": ["fixture"],
+        "c_dir": "", "c_files": [], "test_file": "src/bin/fixture_test.rs", "interface_dir": "src/interfaces",
+        "expected_pub_items": 8,
+        "allow_attributes": [{"lint": "clippy::boxed_local", "item": "total", "reason": "fixture interface"}],
+        "known_failing_tests": [{"name": "fails", "reason": "planted failing test",
+                                 "expected_assertion": "planted failure",
+                                 "expected_location": "src/bin/fixture_test.rs:"}],
+        "notes": ["selftest fixture"], "rulings": {}, "c_behaviour": []}
+    cfg.update({"skeleton": skeleton, "workspace": os.path.join(root, "workspace"),
+                "trajectory_root": os.path.join(root, "traj"), "c_dir": skeleton, "quiet": True})
+    os.makedirs(cfg["trajectory_root"])
+    return cfg
+
+
+def _state(cfg, run_id):
+    with open(os.path.join(cfg["trajectory_root"], "run_" + run_id, "run_state.json"), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _fork_run(cfg, run_id, wait_step, sig, settle=1.0, timeout=180):
+    """Run the loop in a child process, signal it once it reaches wait_step, return its exit status."""
+    import time as _time
+    pid = os.fork()
+    if pid == 0:
+        try:
+            code = run_pipeline.run_loop(cfg, run_id=run_id, yes=True)
+        except BaseException:
+            code = 99
+        os._exit(code)
+    deadline = _time.time() + timeout
+    path = os.path.join(cfg["trajectory_root"], "run_" + run_id, "run_state.json")
+    while _time.time() < deadline:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                if json.load(fh).get("step") == wait_step:
+                    break
+        except (OSError, ValueError):
+            pass
+        _time.sleep(0.1)
+    _time.sleep(settle)
+    os.kill(pid, sig)
+    _, status = os.waitpid(pid, 0)
+    return os.WEXITSTATUS(status) if os.WIFEXITED(status) else -os.WTERMSIG(status)
+
+
+def _run_m4(tmp_root):
+    import signal as _signal
+
+    # A: success at iteration 2
+    cfg = drill_cfg(tmp_root, "A", {"1": {"1": ["copy:partial"]}, "2": {"1": ["copy:clean"]}})
+    code = run_pipeline.run_loop(cfg, run_id="A", yes=True)
+    st = _state(cfg, "A")
+    expect("drill A: success at iteration 2", (code, st["stop_reason"], len(st["history"])), (0, "SUCCESS", 2))
+    run_dir = os.path.join(cfg["trajectory_root"], "run_A")
+    for it in ("iter_01", "iter_02"):
+        expect("drill A: %s has every design-reference file" % it,
+               [f for f in ITER_FILES if not os.path.exists(os.path.join(run_dir, it, f))], [])
+    expect("drill A: run files",
+           [f for f in ("run_state.json", "run.log", "run_manifest.json") if not os.path.exists(
+               os.path.join(run_dir, f))] + [f for f in ("INDEX.md", "run_summary.json") if not os.path.exists(
+                   os.path.join(cfg["trajectory_root"], f))], [])
+    with open(os.path.join(run_dir, "iter_01", "iteration_summary.json"), encoding="utf-8") as fh:
+        s1 = json.load(fh)
+    expect("drill A: iteration 1 blockers (clippy + interface)",
+           [b.split(":")[0] for b in s1["blockers"]], ["agent clippy warnings", "interface missing 1, changed 0"])
+    expect("drill A: known-failing test verified (D8)", s1["known_failing"]["fails"],
+           {"failed": True, "assertion_matches": True, "location_matches": True})
+    with open(os.path.join(run_dir, "iter_02", "prompt.md"), encoding="utf-8") as fh:
+        p2 = fh.read()
+    expect("drill A: repair prompt carries iteration-1 feedback",
+           "needless_return" in p2 and "missing `fixture::fixture_missing`" in p2, True)
+    with open(os.path.join(run_dir, "run_manifest.json"), encoding="utf-8") as fh:
+        man = json.load(fh)
+    expect("drill A: manifest records versions and config hash",
+           [k for k in ("git_head", "rustc_version", "cargo_version", "config_hash", "argv_iteration_1",
+                        "env_isolation") if not man.get(k)], [])
+    with open(os.path.join(run_dir, "iter_02", "changes.diff"), encoding="utf-8") as fh:
+        expect("drill A: changes.diff shows the repair", "+    x * 2" in fh.read(), True)
+
+    # summarize.py on drill A output, against --check-only of the final workspace
+    chk = run_pipeline.measure_crate(mc.copy_crate(cfg["workspace"]), cfg["skeleton"],
+                                     os.path.join(tmp_root, "A_check_logs"))
+    with open(os.path.join(cfg["trajectory_root"], "run_summary.json"), encoding="utf-8") as fh:
+        rsum = json.load(fh)
+    out = summarize.write_results([{"label": "selftest fixture", "run_summary": rsum, "check": chk}],
+                                  os.path.join(tmp_root, "results"))
+    with open(out[0], encoding="utf-8") as fh:
+        md = fh.read()
+    expect("summarize: results.md row from drill A", "| selftest fixture | Yes | 1 | 2 | 50.0% | 2 | SUCCESS |" in md,
+           True)
+    bad = json.loads(json.dumps(rsum))
+    bad["final"]["tests_passed"] = 2
+    try:
+        summarize.build_rows([{"label": "x", "run_summary": bad, "check": chk}])
+        expect("summarize: mismatch with check-only refused", "accepted", "MismatchError")
+    except summarize.MismatchError:
+        expect("summarize: mismatch with check-only refused", "MismatchError", "MismatchError")
+
+    # B: max_iterations 1
+    cfg = drill_cfg(tmp_root, "B", {"1": {"1": ["copy:partial"]}}, max_iterations=1)
+    code = run_pipeline.run_loop(cfg, run_id="B", yes=True)
+    st = _state(cfg, "B")
+    expect("drill B: MAX_ITERATIONS at 1", (code, st["stop_reason"], len(st["history"])), (0, "MAX_ITERATIONS", 1))
+
+    # C: agent does nothing -> NO_PROGRESS at iteration 4
+    cfg = drill_cfg(tmp_root, "C", {})
+    code = run_pipeline.run_loop(cfg, run_id="C", yes=True)
+    st = _state(cfg, "C")
+    expect("drill C: NO_PROGRESS at iteration 4", (code, st["stop_reason"], len(st["history"])), (0, "NO_PROGRESS", 4))
+
+    # D: agent edits the test file -> violation recorded, restored, not green; clean next iteration succeeds
+    cfg = drill_cfg(tmp_root, "D", {"1": {"1": ["copy:clean", "edit_test"]}, "2": {"1": ["noop"]}})
+    code = run_pipeline.run_loop(cfg, run_id="D", yes=True)
+    st = _state(cfg, "D")
+    with open(os.path.join(cfg["trajectory_root"], "run_D", "iter_01", "iteration_summary.json"),
+              encoding="utf-8") as fh:
+        d1 = json.load(fh)
+    expect("drill D: violation recorded and restored",
+           [(v["path"], v["kind"], v["restored"]) for v in d1["integrity_violations"]],
+           [("src/bin/fixture_test.rs", "modified", True)])
+    expect("drill D: iteration with a violation is not green", d1["success"], False)
+    expect("drill D: test file restored in workspace",
+           integrity.sha256(os.path.join(cfg["workspace"], "src", "bin", "fixture_test.rs")),
+           integrity.sha256(os.path.join(cfg["skeleton"], "src", "bin", "fixture_test.rs")))
+    expect("drill D: next clean iteration succeeds", (code, st["stop_reason"], len(st["history"])),
+           (0, "SUCCESS", 2))
+    cfg = drill_cfg(tmp_root, "D2", {"1": {"1": ["copy:clean", "edit_test"]}, "2": {"1": ["edit_test"]}})
+    code = run_pipeline.run_loop(cfg, run_id="D2", yes=True)
+    expect("drill D2: violations twice running -> ABORT", (code, _state(cfg, "D2")["stop_reason"]), (1, "ABORT"))
+
+    # E: usage-limit rejection -> paused, redone as iter_01_attempt2 (mode wait)
+    cfg = drill_cfg(tmp_root, "E", {"1": {"1": ["rate_limit"], "2": ["copy:partial"]}, "2": {"1": ["copy:clean"]}})
+    code = run_pipeline.run_loop(cfg, run_id="E", yes=True)
+    st = _state(cfg, "E")
+    run_dir = os.path.join(cfg["trajectory_root"], "run_E")
+    expect("drill E: paused once and redone as iter_01_attempt2",
+           (code, st["stop_reason"], len(st.get("pauses", [])), sorted(
+               d for d in os.listdir(run_dir) if d.startswith("iter_"))),
+           (0, "SUCCESS", 1, ["iter_01", "iter_01_attempt2", "iter_02"]))
+    expect_true("drill E: waited until resets_at (+margin)", 3 <= st["pauses"][0]["wait_s"] <= 8,
+                "%ss" % st["pauses"][0]["wait_s"])
+    # E2: mode exit -> exit 75, then --resume-run redoes the attempt
+    cfg = drill_cfg(tmp_root, "E2", {"1": {"1": ["rate_limit"], "2": ["copy:clean"]}}, mode="exit")
+    code = run_pipeline.run_loop(cfg, run_id="E2", yes=True)
+    st = _state(cfg, "E2")
+    expect("drill E2: mode exit -> code 75, attempt 2 queued", (code, st["attempt"], st["step"]), (75, 2, "prompt"))
+    code = run_pipeline.run_loop(cfg, run_id="E2", resume=True)
+    expect("drill E2: resume redoes the iteration and succeeds", (code, _state(cfg, "E2")["stop_reason"]),
+           (0, "SUCCESS"))
+
+    # F: SIGTERM during the agent step -> resume marks aborted-interrupted, runs checks, continues
+    cfg = drill_cfg(tmp_root, "F", {"1": {"1": ["copy:partial", "sleep:60"]}, "2": {"1": ["copy:clean"]}})
+    code = _fork_run(cfg, "F", "agent", _signal.SIGTERM)
+    expect("drill F: SIGTERM during agent -> exit 143", code, 143)
+    st = _state(cfg, "F")
+    expect("drill F: state left at the agent step", (st["iteration"], st["step"]), (1, "agent"))
+    code = run_pipeline.run_loop(cfg, run_id="F", resume=True)
+    st = _state(cfg, "F")
+    with open(os.path.join(cfg["trajectory_root"], "run_F", "iter_01", "agent_result.json"), encoding="utf-8") as fh:
+        f_out = json.load(fh)["outcome"]
+    expect("drill F: resume -> aborted_interrupted, checked, continued to SUCCESS",
+           (code, f_out, st["history"][0]["outcome"], st["stop_reason"]),
+           (0, "aborted_interrupted", "aborted_interrupted", "SUCCESS"))
+
+    # G: kill during checks -> resume reruns checks idempotently
+    cfg = drill_cfg(tmp_root, "G", {"1": {"1": ["copy:clean"]}}, max_iterations=1)
+    code = _fork_run(cfg, "G", "checks", _signal.SIGKILL, settle=0.5)
+    expect("drill G: killed during checks", (code, _state(cfg, "G")["step"]), (-9, "checks"))
+    code = run_pipeline.run_loop(cfg, run_id="G", resume=True)
+    summ_path = os.path.join(cfg["trajectory_root"], "run_G", "iter_01", "iteration_summary.json")
+    with open(summ_path, encoding="utf-8") as fh:
+        g1 = fh.read()
+    run = run_pipeline.Run(cfg, "G")
+    run.state = _state(cfg, "G")
+    run.state["last_snapshot"] = None
+    run_pipeline.do_checks(run, 1, 1, run.state["history"][0]["outcome"])
+    with open(summ_path, encoding="utf-8") as fh:
+        g2 = fh.read()
+    expect("drill G: resume completes (stale lock taken over)", (code, _state(cfg, "G")["stop_reason"]),
+           (0, "SUCCESS"))
+    expect("drill G: rerun of checks gives an identical iteration_summary.json", g1 == g2, True)
+
+    # H: hand edit of workspace src between iterations -> workspace_tamper recorded and reverted
+    cfg = drill_cfg(tmp_root, "H", {"1": {"1": ["copy:partial"]}, "2": {"1": ["noop"]}}, max_iterations=2)
+
+    def hand_edit(run):
+        with open(os.path.join(run.workspace, "src", "fixture.rs"), "a", encoding="utf-8") as fh:
+            fh.write("\n// hand edit\n")
+
+    code = run_pipeline.run_loop(cfg, run_id="H", yes=True, between_iterations=hand_edit)
+    st = _state(cfg, "H")
+    with open(os.path.join(cfg["workspace"], "src", "fixture.rs"), encoding="utf-8") as fh:
+        ws_text = fh.read()
+    expect("drill H: workspace_tamper recorded and reverted",
+           (code, [(t["iteration"], t["modified"], t["reverted"]) for t in st.get("workspace_tamper", [])],
+            "// hand edit" in ws_text), (0, [(2, ["fixture.rs"], True)], False))
+
+    # README: required headings, generated sections equal pipeline.yaml
+    with open(summarize.README, encoding="utf-8") as fh:
+        readme = fh.read()
+    required = ["Agentic framework and version", "Model(s) and provider / runtime", "Inference settings",
+                "OS and runtime", "External tools available to the agent", "Dependency installation",
+                "How to run the pipeline", "Stopping condition", "API and usage limits that affected the experiment",
+                "Models, frameworks and tools used", "Repository layout", "Infrastructure interventions"]
+    expect("README: every required heading", [h for h in required if "\n## %s\n" % h not in readme], [])
+    pipeline = config.validate_pipeline(config._load_yaml(mc.PIPELINE_YAML))
+    expect("README: generated sections equal pipeline.yaml",
+           summarize.render_readme(readme, summarize.generated_sections(pipeline)) == readme, True)
+
+    # guards
+    cfg = drill_cfg(tmp_root, "guard", {})
+    cfg["workspace"] = os.path.join(mc.TRANSLATIONS_DIR, "project_1")
+    expect("guard: fake agent refused for MP4/translations", run_pipeline.run_loop(cfg, run_id="guard", yes=True), 2)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,8 @@ D7_MODEL = "opus"
 
 SCHEMA = {
     "agent": {
-        "claude_bin": str, "model": str, "effort": str, "max_turns": int, "max_budget_usd": (int, float),
+        "kind": str, "fake_scenario": (str, type(None)), "resume_session": bool, "claude_bin": str,
+        "model": str, "effort": str, "max_turns": int, "max_budget_usd": (int, float),
         "wall_clock_minutes": (int, float), "permission_mode": str, "tools": list, "allowed_tools": list,
         "disallowed_tools": list, "setting_sources": str, "settings_file": str, "system_prompt_file": str,
         "status_schema_file": str, "strict_mcp": bool, "disable_slash_commands": bool, "env": dict,
@@ -35,7 +36,8 @@ SCHEMA = {
     "checks": {"clippy_rubric_args": list, "clippy_groups": list, "forbid_unsafe_in_lib": bool,
                "forbid_line": str, "hardcode_min_literal": int},
     "safety": {"tool": str, "course_cmd": (str, list, type(None)), "course_version": (str, type(None))},
-    "rate_limit": {"mode": str, "fallback_minutes": (int, float), "max_wait_hours": (int, float)},
+    "rate_limit": {"mode": str, "fallback_minutes": (int, float), "max_wait_hours": (int, float),
+                   "resume_margin_seconds": (int, float)},
     "digest": {"max_build_errors": int, "max_failing_tests": int, "max_panic_chars": int,
                "max_clippy_sites": int, "max_chars": int},
     "prompts": {"initial": str, "repair": str, "cheatsheet": str},
@@ -86,6 +88,10 @@ def validate_pipeline(cfg):
         raise ConfigError("agent.max_turns %d is outside the D7 envelope (1..%d)" % (a["max_turns"], D7_MAX_TURNS))
     if not 1 <= cfg["loop"]["max_iterations"] <= D7_MAX_ITERATIONS:
         raise ConfigError("loop.max_iterations is outside the D7 envelope (1..%d)" % D7_MAX_ITERATIONS)
+    if a["kind"] not in ("claude", "fake"):
+        raise ConfigError("agent.kind must be claude or fake")
+    if a["resume_session"]:
+        raise ConfigError("agent.resume_session is not implemented; it must stay false")
     if a["effort"] not in EFFORTS:
         raise ConfigError("agent.effort must be one of %s" % sorted(EFFORTS))
     if a["permission_mode"] != "dontAsk":
@@ -101,8 +107,8 @@ def validate_pipeline(cfg):
         raise ConfigError("toolchain.name must be nightly-2025-05-13 (why.md Z15)")
     if cfg["safety"]["tool"] not in ("proxy", "course"):
         raise ConfigError("safety.tool must be proxy or course")
-    if cfg["rate_limit"]["mode"] not in ("wait", "stop"):
-        raise ConfigError("rate_limit.mode must be wait or stop")
+    if cfg["rate_limit"]["mode"] not in ("wait", "exit"):
+        raise ConfigError("rate_limit.mode must be wait or exit")
     return cfg
 
 
@@ -164,6 +170,7 @@ def load(project):
         "files": files,
         "c_dir": c_dir,
         "workspace": mc.translation_dir(project),
+        "trajectory_root": os.path.join(mc.TRAJECTORIES_DIR, project),
         "skeleton": mc.skeleton_dir(project),
         "config_hash": config_hash(files),
     }

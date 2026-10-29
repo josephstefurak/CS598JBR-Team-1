@@ -13,17 +13,29 @@ the crate it measures.
 total, counted in docs/programs/mp4/evidence/smoke/calls.log) and writes the
 evidence there.
 
-The agent loop (--yes, --resume-run, --run-id) is wired in M4; until then
-those flags exit with status 2.
+Without a mode flag it runs the iteration loop: workspace init, then per
+iteration prompt -> agent -> integrity/checks/safety/interface/hard-coding ->
+snapshot and summary -> stop or relaunch. Stop conditions: SUCCESS,
+MAX_ITERATIONS, NO_PROGRESS (score not improved for loop.no_progress_rounds
+iterations), ABORT (integrity violations in two consecutive iterations),
+ABORT_ISOLATION, AUTH_ERROR. A usage-limit rejection pauses until resets_at
+(rate_limit.mode wait) or exits 75 with the --resume-run command (exit), and
+redoes the iteration as iter_KK_attemptN. --resume-run re-enters at the step
+recorded in run_state.json. A real run asks for confirmation unless --yes.
 """
 import argparse
 import datetime
+import difflib
 import json
 import os
+import re
 import shlex
 import shutil
+import signal
+import subprocess
 import sys
 import tempfile
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,7 +49,6 @@ import prompt_builder  # noqa: E402
 import safety_check  # noqa: E402
 import scrub_secrets  # noqa: E402
 
-NOT_YET = {"yes": "M4", "resume_run": "M4", "run_id": "M4"}
 SMOKE_DIR = os.path.join(mc.REPO_DIR, "docs", "programs", "mp4", "evidence", "smoke")
 SMOKE_BUDGET = 3          # D7: at most 3 smoke calls in total
 SMOKE_MAX_TURNS = 2       # D7: --max-turns <= 2 per smoke call
@@ -64,13 +75,15 @@ def build_parser():
                          "MP4/results/<project>.check.json")
     ap.add_argument("--crate-dir", help="with --check-only: crate to measure (default MP4/translations/<project>)")
     ap.add_argument("--out", help="with --check-only: output JSON path (default MP4/results/<project>.check.json)")
-    ap.add_argument("--yes", action="store_true", help="skip the confirmation before spending quota (M4)")
-    ap.add_argument("--dry-run", action="store_true", help="print the claude argv and iteration-1 prompt (M3)")
-    ap.add_argument("--smoke", action="store_true", help="isolation smoke call, <= 2 turns (M3)")
-    ap.add_argument("--resume-run", metavar="RUN_ID", help="re-enter a run at its recorded step (M4)")
-    ap.add_argument("--run-id", metavar="ID", help="explicit run id (M4)")
+    ap.add_argument("--yes", action="store_true", help="start a real run without the confirmation prompt")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the agent command line and the iteration-1 prompt; no model call")
+    ap.add_argument("--smoke", action="store_true",
+                    help="two isolation smoke calls, at most 2 turns each (counted against the smoke budget)")
+    ap.add_argument("--resume-run", metavar="RUN_ID", help="continue an interrupted or paused run at its recorded step")
+    ap.add_argument("--run-id", metavar="ID", help="run id for a new run (default: UTC timestamp)")
     ap.add_argument("--smoke-probe", action="store_true",
-                    help="one permission-probe call (uses 1 of the 3 D7 smoke calls)")
+                    help="one permission-probe call (counted against the smoke budget)")
     ap.add_argument("--claude-bin", help="override agent.claude_bin (tests)")
     return ap
 
@@ -102,12 +115,7 @@ def check_only(project, crate, out_path):
             "toolchain": _toolchain_version(),
             "subjects_checksums_ok": not integrity.verify_subjects(source),
         }
-        res.update(checks.run_all(work, log_dir))
-        res["safety"] = safety_check.proxy(work, raw_path=os.path.join(log_dir, "safety_proxy.json"), source=source)
-        res["interface"] = check_interface.compare(os.path.join(source, "src", "interfaces"), work)
-        res["integrity"] = {"violations": integrity.verify(work, source, restore=False)}
-        res["hardcode_hits"] = integrity.hardcode_scan(work)
-        res["summary"] = summarize(res)
+        res.update(measure_crate(work, source, log_dir))
         text = _scrub_paths(json.dumps(res, indent=2), work)
         for name in os.listdir(log_dir):
             p = os.path.join(log_dir, name)
@@ -355,12 +363,601 @@ def smoke_probe(project, claude_bin=None):
     return 0 if all(report["verdict"].values()) else 1
 
 
+# ------------------------------------------------------------------------------------------------
+# The iteration loop (what.md design reference, steps 0-9)
+# ------------------------------------------------------------------------------------------------
+STEPS = ("init", "prompt", "agent", "checks", "closed")   # run_state.json step cursor
+EXIT_USAGE_LIMIT = 75
+EXIT_INTERRUPTED = 143
+RUN_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+STOP_SUCCESS = "SUCCESS"
+STOP_MAX_ITERATIONS = "MAX_ITERATIONS"
+STOP_NO_PROGRESS = "NO_PROGRESS"
+STOP_ABORT = "ABORT"
+STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
+STOP_AUTH_ERROR = "AUTH_ERROR"
+NO_CLIPPY = 10 ** 6   # clippy count used in the score when the build failed and clippy could not run
+
+
+class Interrupted(Exception):
+    pass
+
+
+def _on_signal(signum, _frame):
+    raise Interrupted(signum)
+
+
+def measure_crate(work, source, log_dir):
+    """Build, test, clippy, safety, interface, integrity (report-only) and hard-coding for one crate."""
+    res = dict(checks.run_all(work, log_dir))
+    res["safety"] = safety_check.proxy(work, raw_path=os.path.join(log_dir, "safety_proxy.json"), source=source)
+    res["interface"] = check_interface.compare(os.path.join(source, "src", "interfaces"), work)
+    res["integrity"] = {"violations": integrity.verify(work, source, restore=False)}
+    res["hardcode_hits"] = integrity.hardcode_scan(work)
+    res["summary"] = summarize(res)
+    return res
+
+
+def evaluate(check, proj):
+    """Success predicate (what.md stop rule SUCCESS, D8) and the progress score tuple for one iteration."""
+    s = summarize(check)
+    t = check["test"]
+    failed = set(t["failed_names"])
+    known = {k["name"]: k for k in proj["known_failing_tests"]}
+    known_failing = {}
+    for name, k in known.items():
+        panic = ((t["tests"].get(name) or {}).get("panic")) or ""
+        known_failing[name] = {"failed": name in failed,
+                               "assertion_matches": k["expected_assertion"] in panic,
+                               "location_matches": k["expected_location"] in panic}
+    blockers = []
+    if not s["compiles"]:
+        blockers.append("build fails")
+    unexpected = sorted(failed - set(known))
+    if unexpected:
+        blockers.append("failing tests: %s" % ", ".join(unexpected))
+    for name, v in known_failing.items():
+        if not all(v.values()):
+            blockers.append("known-failing test %s does not fail as documented" % name)
+    if s["compiles"] and t["total"] == 0:
+        blockers.append("no tests ran")
+    clippy_total = s["clippy_agent_total"]
+    if clippy_total is None or clippy_total > 0:
+        blockers.append("agent clippy warnings: %s" % clippy_total)
+    safety_total = sum(v for v in s["safety"].values())
+    if safety_total:
+        blockers.append("unsafe metrics: %d" % safety_total)
+    for f in check["safety"]["findings"]:
+        if f["kind"] in ("forbid_missing", "deny_unsafe_build_failed", "extern_c", "link_attr", "libc",
+                         "cc_crate", "build_rs", "c_source", "new_dependency"):
+            blockers.append("safety finding: %s" % f["kind"])
+    if s["interface_missing"] or s["interface_changed"]:
+        blockers.append("interface missing %d, changed %d" % (s["interface_missing"], s["interface_changed"]))
+    if s["integrity_violations"]:
+        blockers.append("integrity violations: %d" % s["integrity_violations"])
+    if s["hardcode_hits"]:
+        blockers.append("hard-coding hits: %d" % s["hardcode_hits"])
+    score = [s["tests_passed"], -len(check["build"]["errors"]),
+             -(clippy_total if clippy_total is not None else NO_CLIPPY), -safety_total,
+             -(s["interface_missing"] + s["interface_changed"])]
+    return {"success": not blockers, "blockers": blockers, "known_failing": known_failing,
+            "safety_total": safety_total, "score": score}
+
+
+class Run:
+    """One pipeline run: paths, state persistence, logging."""
+
+    def __init__(self, cfg, run_id):
+        self.cfg = cfg
+        self.p = cfg["pipeline"]
+        self.proj = cfg["project_cfg"]
+        self.traj = cfg["trajectory_root"]
+        self.workspace = cfg["workspace"]
+        self.skeleton = cfg["skeleton"]
+        self.run_id = run_id
+        self.dir = os.path.join(self.traj, "run_%s" % run_id)
+        self.state_path = os.path.join(self.dir, "run_state.json")
+        self.lock_path = os.path.join(self.dir, "run.lock")
+        self.state = None
+
+    def log(self, msg):
+        line = "%s %s" % (_now(), msg)
+        if not self.cfg.get("quiet"):
+            print(line)
+        with open(os.path.join(self.dir, "run.log"), "a", encoding="utf-8") as fh:
+            fh.write(scrub_secrets.scrub_text(line) + "\n")
+
+    def save(self):
+        self.state["updated"] = _now()
+        _write_json(self.state_path, self.state)
+
+    def iter_dir(self, k, n):
+        name = "iter_%02d" % k if n == 1 else "iter_%02d_attempt%d" % (k, n)
+        return os.path.join(self.dir, name)
+
+    def acquire_lock(self):
+        if os.path.exists(self.lock_path):
+            with open(self.lock_path, encoding="utf-8") as fh:
+                try:
+                    pid = int(fh.read().strip() or 0)
+                except ValueError:
+                    pid = 0
+            if pid and pid != os.getpid() and _pid_alive(pid):
+                raise SystemExit("run %s is locked by live process %d" % (self.run_id, pid))
+        with open(self.lock_path, "w", encoding="utf-8") as fh:
+            fh.write(str(os.getpid()))
+
+    def release_lock(self):
+        try:
+            os.remove(self.lock_path)
+        except FileNotFoundError:
+            pass
+
+
+def _now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _write_json(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(scrub_secrets.scrub_text(json.dumps(data, indent=2, sort_keys=True)) + "\n")
+    os.replace(tmp, path)
+
+
+def _read_json(path):
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _cmd_version(argv):
+    try:
+        out = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=mc.cargo_env(),
+                             timeout=60, check=False).stdout.decode("utf-8", "replace").strip()
+        return out.splitlines()[0] if out else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def real_run_count():
+    """{project: number of real (kind claude) runs recorded under trajectories/}."""
+    counts = {}
+    for project in mc.PROJECTS:
+        traj = os.path.join(mc.TRAJECTORIES_DIR, project)
+        n = 0
+        if os.path.isdir(traj):
+            for d in os.listdir(traj):
+                man = os.path.join(traj, d, "run_manifest.json")
+                if d.startswith("run_") and os.path.exists(man) and _read_json(man).get("agent_kind") == "claude":
+                    n += 1
+        counts[project] = n
+    return counts
+
+
+def spend_check(project):
+    """D7 envelope: per project one full run, plus at most 2 tuning reruns in total. Returns an error or None."""
+    counts = real_run_count()
+    tuning = sum(max(0, c - 1) for c in counts.values())
+    if counts[project] >= 1 and tuning >= 2:
+        return ("outside the D7 envelope: %s already has %d real run(s) and %d tuning rerun(s) are used; "
+                "another run is an owner gate" % (project, counts[project], tuning))
+    return None
+
+
+def auth_check(claude_bin):
+    try:
+        out = subprocess.run([claude_bin, "auth", "status"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             timeout=60, check=False).stdout.decode("utf-8", "replace")
+        if json.loads(out).get("loggedIn") is True:
+            return None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    return "the claude CLI is not logged in: run `claude auth login` in your own terminal, then retry"
+
+
+def _agent_argv(run, k, n):
+    a = run.p["agent"]
+    if a["kind"] == "fake":
+        return [sys.executable, "-I", os.path.join(mc.SRC_DIR, "fake_agent.py"), "--scenario", a["fake_scenario"],
+                "--iteration", str(k), "--attempt", str(n), "--tools", ",".join(a["tools"]),
+                "--permission-mode", a["permission_mode"], "--model", a["model"]]
+    return agent_runner.build_argv(run.cfg, add_dirs=[run.cfg["c_dir"]])
+
+
+def init_workspace(run):
+    """Step 0: fresh workspace from the skeleton, forbid(unsafe_code) injected (D-FORBID), integrity manifest."""
+    if os.path.exists(run.workspace):
+        shutil.rmtree(run.workspace)
+    shutil.copytree(run.skeleton, run.workspace)
+    lib = os.path.join(run.workspace, "src", "lib.rs")
+    with open(lib, "w", encoding="utf-8") as fh:
+        fh.write(integrity.expected_lib_rs(run.skeleton))
+    integrity.write_manifest(run.workspace, run.skeleton)
+    shutil.copytree(os.path.join(run.workspace, "src"), os.path.join(run.dir, "init_src"))
+
+
+def write_manifest(run):
+    a = run.p["agent"]
+    argv = _agent_argv(run, 1, 1)
+    git_head = _cmd_version(["git", "-C", mc.REPO_DIR, "rev-parse", "HEAD"])
+    _write_json(os.path.join(run.dir, "run_manifest.json"), {
+        "run_id": run.run_id, "project": run.cfg["project"], "agent_kind": a["kind"], "started": _now(),
+        "git_head": git_head,
+        "claude_version": _cmd_version([a["claude_bin"], "--version"]) if a["kind"] == "claude" else "fake",
+        "rustc_version": _cmd_version(["rustc", "+" + mc.TOOLCHAIN, "--version"]),
+        "cargo_version": _cmd_version(["cargo", "+" + mc.TOOLCHAIN, "--version"]),
+        "config_hash": run.cfg["config_hash"],
+        "config_files": {k: {"path": mc.rel(v, mc.MP4_DIR), "sha256": integrity.sha256(v)}
+                         for k, v in sorted(run.cfg["files"].items())},
+        "argv_iteration_1": [x for x in argv],
+        "env_isolation": dict(a["env"]),
+        "model": a["model"], "effort": a["effort"], "max_turns": a["max_turns"],
+        "max_iterations": run.p["loop"]["max_iterations"], "no_progress_rounds": run.p["loop"]["no_progress_rounds"],
+        "wall_clock_minutes": a["wall_clock_minutes"], "rate_limit": run.p["rate_limit"],
+    })
+
+
+def tamper_check(run, k):
+    """Workspace src/ must equal the previous iteration's src_after/ (why.md Z7: no hand edits between iterations)."""
+    snap = run.state.get("last_snapshot")
+    if not snap:
+        return None
+    snap_dir = os.path.join(run.dir, snap)
+    d = integrity.check_workspace(run.workspace, snap_dir)
+    if d["clean"]:
+        return None
+    shutil.rmtree(os.path.join(run.workspace, "src"))
+    shutil.copytree(snap_dir, os.path.join(run.workspace, "src"))
+    record = {"iteration": k, "against": snap, "added": d["added"], "removed": d["removed"],
+              "modified": d["modified"], "reverted": True}
+    run.state.setdefault("workspace_tamper", []).append(record)
+    run.log("workspace_tamper before iteration %d: %s (reverted to %s)" % (
+        k, ", ".join(d["added"] + d["removed"] + d["modified"]), snap))
+    return record
+
+
+def build_prompt(run, k):
+    if k == 1:
+        return prompt_builder.build_initial(run.cfg, 1)
+    prev = run.state["last_check"]
+    check = _read_json(os.path.join(run.dir, prev))
+    return prompt_builder.build_repair(run.cfg, k, check, run.state["history"])
+
+
+def _diff(old_root, new_root):
+    old = {mc.rel(p, old_root): p for p in mc.walk_files(old_root)} if os.path.isdir(old_root) else {}
+    new = {mc.rel(p, new_root): p for p in mc.walk_files(new_root)}
+    out = []
+    for name in sorted(set(old) | set(new)):
+        a = mc.read_text(old[name]).splitlines(True) if name in old else []
+        b = mc.read_text(new[name]).splitlines(True) if name in new else []
+        if a != b:
+            out.extend(difflib.unified_diff(a, b, "a/src/" + name, "b/src/" + name))
+    return "".join(out)
+
+
+def do_checks(run, k, n, agent_outcome):
+    """Steps 3-8 for one attempt. Idempotent: a rerun after a crash reuses integrity.json and rewrites the
+    same check.json and iteration_summary.json."""
+    it = run.iter_dir(k, n)
+    integ_path = os.path.join(it, "integrity.json")
+    if os.path.exists(integ_path):
+        violations = _read_json(integ_path)["violations"]
+    else:
+        violations = integrity.verify(run.workspace, run.skeleton, restore=True)
+        _write_json(integ_path, {"violations": violations})
+    check = measure_crate(run.workspace, run.skeleton, it)
+    check["integrity"] = {"violations": violations}
+    check["summary"] = summarize(check)
+    check["known_failing_tests"] = [x["name"] for x in run.proj["known_failing_tests"]]
+    _write_json(os.path.join(it, "check.json"), check)
+    snap = os.path.join(it, "src_after")
+    if os.path.exists(snap):
+        shutil.rmtree(snap)
+    shutil.copytree(os.path.join(run.workspace, "src"), snap)
+    prev = os.path.join(run.dir, run.state["last_snapshot"]) if run.state.get("last_snapshot") else \
+        os.path.join(run.dir, "init_src")
+    with open(os.path.join(it, "changes.diff"), "w", encoding="utf-8") as fh:
+        fh.write(_diff(prev, snap))
+    with open(os.path.join(it, "diagnostics.md"), "w", encoding="utf-8") as fh:
+        fh.write(scrub_secrets.scrub_text(prompt_builder.digest(check, run.p["digest"])) + "\n")
+    ev = evaluate(check, run.proj)
+    s = check["summary"]
+    summary = {
+        "iteration": k, "attempt": n, "dir": os.path.basename(it), "agent_outcome": agent_outcome,
+        "compiles": s["compiles"], "build_errors": len(check["build"]["errors"]),
+        "build_error_codes": s["build_error_codes"],
+        "tests_passed": s["tests_passed"], "tests_total": s["tests_total"],
+        "failed_tests": check["test"]["failed_names"], "known_failing": ev["known_failing"],
+        "clippy_agent": s["clippy_agent"], "clippy_agent_total": s["clippy_agent_total"],
+        "clippy_harness": s["clippy_harness"], "safety": s["safety"], "safety_total": ev["safety_total"],
+        "safety_tool": s["safety_tool"], "interface_missing": s["interface_missing"],
+        "interface_changed": s["interface_changed"], "integrity_violations": violations,
+        "hardcode_hits": s["hardcode_hits"], "success": ev["success"], "blockers": ev["blockers"],
+        "score": ev["score"],
+    }
+    _write_json(os.path.join(it, "iteration_summary.json"), summary)
+    return summary
+
+
+def decide_stop(run, summary):
+    """Stop rules in order: SUCCESS, ABORT (integrity twice running), NO_PROGRESS, MAX_ITERATIONS."""
+    st = run.state
+    k = summary["iteration"]
+    hist = [h for h in st["history"] if h["iteration"] != k]
+    entry = {"iteration": k, "attempt": summary["attempt"], "outcome": summary["agent_outcome"],
+             "compiles": summary["compiles"], "tests_passed": summary["tests_passed"],
+             "tests_total": summary["tests_total"], "clippy_agent_total": summary["clippy_agent_total"],
+             "safety_total": summary["safety_total"], "interface_missing": summary["interface_missing"],
+             "integrity_violations": len(summary["integrity_violations"]), "success": summary["success"],
+             "score": summary["score"]}
+    st["history"] = hist + [entry]
+    if summary["success"]:
+        return STOP_SUCCESS
+    prev = [h for h in hist if h["iteration"] == k - 1]
+    if entry["integrity_violations"] and prev and prev[0]["integrity_violations"]:
+        return STOP_ABORT
+    best = st.get("best_score")
+    if best is None or summary["score"] > best:
+        st["best_score"] = summary["score"]
+        st["no_progress_count"] = 0
+    else:
+        st["no_progress_count"] = st.get("no_progress_count", 0) + 1
+    if st["no_progress_count"] >= run.p["loop"]["no_progress_rounds"]:
+        return STOP_NO_PROGRESS
+    if k >= run.p["loop"]["max_iterations"]:
+        return STOP_MAX_ITERATIONS
+    return None
+
+
+def finalize(run, reason):
+    st = run.state
+    st.update({"status": "stopped", "stop_reason": reason, "step": "closed", "finished": _now()})
+    run.save()
+    final = None
+    if st.get("last_summary"):
+        final = _read_json(os.path.join(run.dir, st["last_summary"]))
+    _write_json(os.path.join(run.traj, "run_summary.json"), {
+        "run_id": run.run_id, "project": run.cfg["project"], "agent_kind": run.p["agent"]["kind"],
+        "stop_reason": reason, "iterations": len(st["history"]), "attempts": st.get("attempts_total", 0),
+        "final_iteration_dir": os.path.dirname(st["last_summary"]) if st.get("last_summary") else None,
+        "final": final, "config_hash": run.cfg["config_hash"],
+        "known_failing_tests": [x["name"] for x in run.proj["known_failing_tests"]],
+        "workspace_tamper": st.get("workspace_tamper", []), "usage_limit_pauses": st.get("pauses", []),
+        "finished": st["finished"]})
+    write_index(run.traj)
+    run.log("run stopped: %s after %d iteration(s)" % (reason, len(st["history"])))
+
+
+def write_index(traj):
+    final_id = None
+    summ = os.path.join(traj, "run_summary.json")
+    if os.path.exists(summ):
+        final_id = _read_json(summ).get("run_id")
+    rows = ["# Trajectories for %s" % os.path.basename(traj), "",
+            "Each `run_<id>/` holds `run_manifest.json`, `run_state.json`, `run.log` and one `iter_KK/` "
+            "directory per agent attempt (`prompt.md`, `agent.stream.jsonl`, `agent_result.json`, "
+            "`integrity.json`, `check.json` with its logs, `src_after/`, `changes.diff`, `diagnostics.md`, "
+            "`iteration_summary.json`). `baseline/` holds the pre-pipeline skeleton measurements.", "",
+            "| Run | Agent | Started | Status | Stop reason | Iterations | Final tests | Final run |",
+            "|---|---|---|---|---|---|---|---|"]
+    for d in sorted(x for x in os.listdir(traj) if x.startswith("run_")):
+        sp, mp = os.path.join(traj, d, "run_state.json"), os.path.join(traj, d, "run_manifest.json")
+        if not os.path.exists(sp):
+            continue
+        st, man = _read_json(sp), (_read_json(mp) if os.path.exists(mp) else {})
+        last = st["history"][-1] if st.get("history") else {}
+        rows.append("| `%s` | %s | %s | %s | %s | %d | %s | %s |" % (
+            d, man.get("agent_kind", "?"), st.get("created"), st.get("status"), st.get("stop_reason") or "-",
+            len(st.get("history", [])),
+            "%s/%s" % (last.get("tests_passed"), last.get("tests_total")) if last else "-",
+            "yes" if st.get("run_id") == final_id else ""))
+    with open(os.path.join(traj, "INDEX.md"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(rows) + "\n")
+
+
+def run_loop(cfg, run_id=None, resume=False, yes=False, between_iterations=None):
+    """Run (or resume) the pipeline. Returns the process exit code.
+
+    between_iterations(run) is a test seam (selftest drill H): called after an iteration closes and before
+    the next one starts.
+    """
+    a = cfg["pipeline"]["agent"]
+    if a["kind"] == "fake":
+        ws = os.path.abspath(cfg["workspace"])
+        if ws == mc.TRANSLATIONS_DIR or ws.startswith(mc.TRANSLATIONS_DIR + os.sep):
+            print("agent.kind fake is refused for MP4/translations/ (selftest fixture only)", file=sys.stderr)
+            return 2
+        if not a["fake_scenario"]:
+            print("agent.kind fake needs agent.fake_scenario", file=sys.stderr)
+            return 2
+    if resume:
+        if not run_id or not RUN_ID_RE.match(run_id):
+            print("--resume-run needs a valid run id", file=sys.stderr)
+            return 2
+        run = Run(cfg, run_id)
+        if not os.path.exists(run.state_path):
+            print("no run state at %s" % mc.rel(run.state_path, mc.REPO_DIR), file=sys.stderr)
+            return 2
+    else:
+        run_id = run_id or datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        if not RUN_ID_RE.match(run_id):
+            print("invalid run id %r" % run_id, file=sys.stderr)
+            return 2
+        run = Run(cfg, run_id)
+        if os.path.exists(run.dir):
+            print("run %s already exists; use --resume-run" % run_id, file=sys.stderr)
+            return 2
+        if a["kind"] == "claude":
+            for err in (spend_check(cfg["project"]), auth_check(a["claude_bin"])):
+                if err:
+                    print(err, file=sys.stderr)
+                    return 2
+            estimate = ("up to %d iterations x %d turns of %s (effort %s), subscription quota, %d-minute wall clock "
+                        "per iteration; replaces %s with a fresh skeleton" % (
+                            cfg["pipeline"]["loop"]["max_iterations"], a["max_turns"], a["model"], a["effort"],
+                            a["wall_clock_minutes"], mc.rel(cfg["workspace"], mc.REPO_DIR)))
+            print("About to start a real run: " + estimate)
+            if not yes:
+                if not sys.stdin.isatty():
+                    print("refusing without --yes (no terminal to confirm on)", file=sys.stderr)
+                    return 2
+                if input("Proceed? [y/N] ").strip().lower() != "y":
+                    print("cancelled")
+                    return 2
+    os.makedirs(run.dir, exist_ok=True)
+    run.acquire_lock()
+    old = {sig: signal.signal(sig, _on_signal) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        if resume:
+            run.state = _read_json(run.state_path)
+            run.log("resume at iteration %d attempt %d step %s" % (
+                run.state["iteration"], run.state["attempt"], run.state["step"]))
+            if run.state["status"] == "stopped":
+                run.log("run already stopped: %s" % run.state["stop_reason"])
+                return 0
+        else:
+            run.state = {"run_id": run.run_id, "project": cfg["project"], "config_hash": cfg["config_hash"],
+                         "created": _now(), "status": "running", "iteration": 1, "attempt": 1, "step": "init",
+                         "history": [], "attempts_total": 0, "stop_reason": None}
+            run.save()
+            run.log("new run %s (%s agent) for %s" % (run.run_id, a["kind"], cfg["project"]))
+            write_manifest(run)
+            init_workspace(run)
+            run.state["step"] = "prompt"
+            run.save()
+        return _drive(run, between_iterations)
+    except Interrupted as exc:
+        run.log("interrupted by signal %s at iteration %d step %s; resume with: %s" % (
+            exc.args[0], run.state["iteration"], run.state["step"], _resume_cmd(run)))
+        run.save()
+        return EXIT_INTERRUPTED
+    finally:
+        for sig, handler in old.items():
+            signal.signal(sig, handler)
+        run.release_lock()
+
+
+def _resume_cmd(run):
+    return "python3 -I MP4/src/run_pipeline.py --project %s --resume-run %s" % (run.cfg["project"], run.run_id)
+
+
+def _drive(run, between_iterations):
+    st = run.state
+    rl = run.p["rate_limit"]
+    while True:
+        k, n = st["iteration"], st["attempt"]
+        it = run.iter_dir(k, n)
+        if st.get("pause_until"):
+            wait = st["pause_until"] - time.time()
+            if wait > 0:
+                run.log("usage-limit pause: sleeping %.0f s before iteration %d attempt %d" % (wait, k, n))
+                time.sleep(wait)
+            st.pop("pause_until")
+            run.save()
+        if st["step"] == "prompt":
+            os.makedirs(it, exist_ok=True)
+            if n == 1:
+                tamper_check(run, k)
+            with open(os.path.join(it, "prompt.md"), "w", encoding="utf-8") as fh:
+                fh.write(scrub_secrets.scrub_text(build_prompt(run, k)))
+            st["step"] = "agent"
+            run.save()
+        if st["step"] == "agent":
+            res_path = os.path.join(it, "agent_result.json")
+            if st.get("agent_started") == [k, n] and not os.path.exists(res_path):
+                # resumed after the process died mid-agent: the attempt is over, its edits stand, check them
+                outcome = "aborted_interrupted"
+                _write_json(res_path, {"outcome": outcome, "note": "agent step interrupted; checks run on resume"})
+                run.log("iteration %d attempt %d: agent step was interrupted; marked %s" % (k, n, outcome))
+            else:
+                st["agent_started"] = [k, n]
+                st["attempts_total"] = st.get("attempts_total", 0) + 1
+                run.save()
+                with open(os.path.join(it, "prompt.md"), encoding="utf-8") as fh:
+                    prompt = fh.read()
+                run.log("iteration %d attempt %d: agent start" % (k, n))
+                res = agent_runner.run(run.cfg, _agent_argv(run, k, n), run.workspace, prompt,
+                                       os.path.join(it, "agent.stream.jsonl"))
+                _write_json(res_path, res)
+                outcome = res["outcome"]
+                run.log("iteration %d attempt %d: agent %s after %.1f s" % (k, n, outcome, res["elapsed_s"]))
+                if outcome == "usage_limit":
+                    return _usage_limit(run, res, rl)
+                if outcome == "isolation_violation":
+                    finalize(run, STOP_ABORT_ISOLATION)
+                    return 1
+                if outcome == "auth_error":
+                    run.log("agent could not authenticate: run `claude auth login`, then " + _resume_cmd(run))
+                    finalize(run, STOP_AUTH_ERROR)
+                    return 1
+            st["step"] = "checks"
+            st["agent_outcome"] = outcome
+            run.save()
+        if st["step"] == "checks":
+            summary = do_checks(run, k, n, st.get("agent_outcome"))
+            rel_it = os.path.basename(it)
+            st["last_snapshot"] = rel_it + "/src_after"
+            st["last_check"] = rel_it + "/check.json"
+            st["last_summary"] = rel_it + "/iteration_summary.json"
+            reason = decide_stop(run, summary)
+            run.log("iteration %d: compiles=%s tests %d/%d clippy(agent)=%s unsafe=%d interface missing=%d "
+                    "integrity=%d -> %s" % (k, summary["compiles"], summary["tests_passed"],
+                                            summary["tests_total"], summary["clippy_agent_total"],
+                                            summary["safety_total"], summary["interface_missing"],
+                                            len(summary["integrity_violations"]), reason or "continue"))
+            st["step"] = "closed"
+            run.save()
+            if reason:
+                finalize(run, reason)
+                return 0 if reason in (STOP_SUCCESS, STOP_MAX_ITERATIONS, STOP_NO_PROGRESS) else 1
+            if between_iterations:
+                between_iterations(run)
+            st.update({"iteration": k + 1, "attempt": 1, "step": "prompt"})
+            run.save()
+            continue
+        if st["step"] == "closed":
+            st.update({"iteration": k + 1, "attempt": 1, "step": "prompt"})
+            run.save()
+
+
+def _usage_limit(run, res, rl):
+    """C7/D7: redo the same iteration as attempt N+1, after waiting (mode wait) or after --resume-run (exit)."""
+    st = run.state
+    k, n = st["iteration"], st["attempt"]
+    resets = res.get("resets_at")
+    now = time.time()
+    if isinstance(resets, (int, float)) and resets > now:
+        wait = resets - now + rl["resume_margin_seconds"]
+    else:
+        wait = rl["fallback_minutes"] * 60
+    wait = min(wait, rl["max_wait_hours"] * 3600)
+    st.setdefault("pauses", []).append({"iteration": k, "attempt": n, "resets_at": resets, "wait_s": round(wait),
+                                        "at": _now(), "mode": rl["mode"]})
+    st.update({"attempt": n + 1, "step": "prompt", "agent_started": None})
+    st["pause_until"] = now + wait
+    run.save()
+    run.log("iteration %d attempt %d hit the usage limit (resets_at=%s); attempt %d after %.0f s" % (
+        k, n, resets, n + 1, wait))
+    if rl["mode"] == "exit":
+        run.log("rate_limit.mode exit: resume with: %s" % _resume_cmd(run))
+        print(_resume_cmd(run))
+        return EXIT_USAGE_LIMIT
+    return _drive(run, None)
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
-    for flag, phase in NOT_YET.items():
-        if getattr(args, flag):
-            print("--%s is not implemented yet (arrives in %s)" % (flag.replace("_", "-"), phase), file=sys.stderr)
-            return 2
     if args.dry_run:
         return dry_run(args.project, args.claude_bin)
     if args.smoke:
@@ -368,8 +965,12 @@ def main(argv=None):
     if args.smoke_probe:
         return smoke_probe(args.project, args.claude_bin)
     if not args.check_only:
-        print("the agent loop arrives in M4; available now: --check-only, --dry-run, --smoke", file=sys.stderr)
-        return 2
+        cfg = config.load(args.project)
+        if args.claude_bin:
+            cfg["pipeline"]["agent"]["claude_bin"] = args.claude_bin
+        if args.resume_run:
+            return run_loop(cfg, run_id=args.resume_run, resume=True, yes=True)
+        return run_loop(cfg, run_id=args.run_id, yes=args.yes)
     crate = os.path.abspath(args.crate_dir) if args.crate_dir else mc.translation_dir(args.project)
     if not os.path.exists(os.path.join(crate, "Cargo.toml")):
         print("no crate at %s (no translation yet? pass --crate-dir)" % mc.rel(crate, mc.REPO_DIR), file=sys.stderr)

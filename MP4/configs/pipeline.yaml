@@ -3,6 +3,9 @@
 # Changes after the first real run are logged in CHANGELOG.md with evidence.
 
 agent:                                  # agent B: Claude Code headless (D1)
+  kind: claude                          # claude | fake (fake = scripted stand-in, selftest fixture only)
+  fake_scenario: null                   # scenario JSON for kind: fake
+  resume_session: false                 # reuse the Claude session across iterations; not implemented, must stay false
   claude_bin: claude
   model: opus
   effort: high
@@ -116,6 +119,7 @@ rate_limit:
   mode: wait                            # D7: pause and resume the same iteration
   fallback_minutes: 60
   max_wait_hours: 6
+  resume_margin_seconds: 60             # sleep until resetsAt + this margin
 
 digest:                                 # caps on feedback fed into repair prompts
   max_build_errors: 20

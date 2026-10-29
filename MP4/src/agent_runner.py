@@ -8,8 +8,8 @@ permissionMode as configured, model as configured. A mismatch kills the
 process and the iteration is aborted. The wall clock is enforced on the whole
 process group (SIGTERM, then SIGKILL).
 
-Outcomes: ok | max_turns | budget | usage_limit | overloaded | error | timeout
-| isolation_violation.
+Outcomes: ok | max_turns | budget | usage_limit | overloaded | auth_error | error
+| timeout | isolation_violation.
 """
 import json
 import os
@@ -33,6 +33,7 @@ EMPTY_MCP = '{"mcpServers":{}}'
 STRUCTURED_OUTPUT_TOOL = "StructuredOutput"
 _LIMIT_RE = re.compile(r"limit|resets|rate_limit|429", re.I)
 _OVERLOAD_RE = re.compile(r"overloaded|529", re.I)
+_AUTH_RE = re.compile(r"Failed to authenticate|OAuth|not logged in|/login", re.I)
 
 
 def _subst(items, values):
@@ -121,6 +122,8 @@ def classify(result, rate_rejected, resets_at, killed_for_timeout, violation):
         return "max_turns"
     if sub == "error_max_budget_usd":
         return "budget"
+    if result.get("is_error") and _AUTH_RE.search(text):
+        return "auth_error"
     if rate_rejected or (result.get("is_error") and _LIMIT_RE.search(text)):
         return "usage_limit"
     if result.get("is_error") and _OVERLOAD_RE.search(text):
@@ -173,42 +176,47 @@ def run(cfg, argv, cwd, prompt, stream_path, wall_clock_s=None, env=None):
     open_streams = 2
     stderr_text = []
     n_lines = 0
-    with open(stream_path, "w", encoding="utf-8") as out:
-        while open_streams:
-            remaining = wall - (time.time() - started)
-            if remaining <= 0 and not killed_for_timeout:
-                killed_for_timeout = True
-                _kill(proc)
-            try:
-                tag, line = lines.get(timeout=max(0.1, min(remaining, 1.0)) if remaining > 0 else 1.0)
-            except queue.Empty:
-                continue
-            if line is None:
-                open_streams -= 1
-                continue
-            if tag == "err":
-                stderr_text.append(line)
-                continue
-            out.write(scrub_secrets.scrub_text(line))
-            out.flush()
-            n_lines += 1
-            try:
-                ev = json.loads(line)
-            except ValueError:
-                continue
-            etype = ev.get("type")
-            if etype == "system" and ev.get("subtype") == "init" and init is None:
-                init = ev
-                violation = check_init(ev, cfg)
-                if violation:
+    try:
+        with open(stream_path, "w", encoding="utf-8") as out:
+            while open_streams:
+                remaining = wall - (time.time() - started)
+                if remaining <= 0 and not killed_for_timeout:
+                    killed_for_timeout = True
                     _kill(proc)
-            elif etype == "rate_limit_event":
-                status, resets, kind = _rate_limit_info(ev)
-                rate_events.append({"status": status, "resets_at": resets, "type": kind})
-                if status == "rejected":
-                    rate_rejected, resets_at = True, resets
-            elif etype == "result":
-                result = ev
+                try:
+                    tag, line = lines.get(timeout=max(0.1, min(remaining, 1.0)) if remaining > 0 else 1.0)
+                except queue.Empty:
+                    continue
+                if line is None:
+                    open_streams -= 1
+                    continue
+                if tag == "err":
+                    stderr_text.append(line)
+                    continue
+                out.write(scrub_secrets.scrub_text(line))
+                out.flush()
+                n_lines += 1
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                etype = ev.get("type")
+                if etype == "system" and ev.get("subtype") == "init" and init is None:
+                    init = ev
+                    violation = check_init(ev, cfg)
+                    if violation:
+                        _kill(proc)
+                elif etype == "rate_limit_event":
+                    status, resets, kind = _rate_limit_info(ev)
+                    rate_events.append({"status": status, "resets_at": resets, "type": kind})
+                    if status == "rejected":
+                        rate_rejected, resets_at = True, resets
+                elif etype == "result":
+                    result = ev
+    except BaseException:
+        # interrupted (SIGTERM/SIGINT in the caller, or any error): never leave agent B running
+        _kill(proc)
+        raise
     try:
         proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
