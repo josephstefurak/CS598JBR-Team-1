@@ -4,7 +4,9 @@ Group 1 translates two CRUST-bench projects into safe, idiomatic Rust: `satc` (p
 (project_2). The translation agent is Claude Code running headless. A Python controller (`src/`) drives it
 in a loop: inspect C, write Rust, compile, test, clippy, safety and interface checks, feedback, repair,
 repeat until a stopping condition. Results tables are generated from committed artifacts by
-`src/summarize.py` into `results/results.md`. Numbers not yet produced are marked PENDING.
+`src/summarize.py` into `results/results.md`. Numbers not yet produced are marked PENDING. The only
+PENDING numbers are the official unsafe metrics: the course's tool has not been released, so the safety
+numbers come from an interim proxy and are labelled as such everywhere.
 
 ## Agentic framework and version
 
@@ -73,6 +75,13 @@ also refuses FFI, `build.rs` and C sources, and every reported number can be re-
 not been released yet. Until it is, the controller runs an interim proxy (`src/safety_check.py`) and
 feeds its results back to the agent. The agent does not call it directly.
 
+Cross-check against the trajectories: the tool names the agent actually called in both runs are exactly the
+seven in the table above, no more and no fewer:
+
+```bash
+grep -oh '"name":"[A-Za-z]*"' MP4/trajectories/project_*/run_*/iter_*/agent.stream.jsonl | sort -u
+```
+
 ## Dependency installation
 
 1. Rust, with the pinned toolchain and clippy:
@@ -120,8 +129,43 @@ writes `results/project_N.check.json`:
 ```bash
 python3 -I MP4/src/run_pipeline.py --project project_1 --check-only
 python3 -I MP4/src/summarize.py                      # results/results.md and LaTeX table fragments
+python3 -I MP4/src/summarize.py --check-report       # the report draft's tables equal the generated ones
+python3 -I MP4/src/integrity.py --provenance project_1   # translations/ is the agent's output, unchanged
 python3 -I MP4/src/selftest.py                       # the controller's own test suite (no model calls)
 ```
+
+`summarize.py` refuses to write anything if a number in the run's `run_summary.json` differs from the
+`--check-only` re-measurement. It also writes the per-iteration trend tables, the usage-limit digest and
+`results/repair_mining.md`, a line-numbered timeline of every compiler, test and clippy message the agent
+saw, which the report's repair examples cite.
+
+Running the agent itself (`--project` without `--check-only`) needs the Claude Code CLI logged in with a
+Claude subscription (`claude auth login`). An interrupted or paused run continues with
+`--resume-run <run_id>`; the run id is printed at the start and is the `run_<id>` directory name.
+
+## Pipeline diagram
+
+Source: `docs/pipeline_diagram.mmd` (the report draft carries the same diagram in TikZ).
+
+```mermaid
+flowchart TD
+    SK["CRUST-bench skeleton<br/>subjects/project_N/rust_skeleton"] --> INIT["Init workspace (once per run)<br/>copy skeleton, add forbid(unsafe_code),<br/>checksum the protected files"]
+    INIT --> PB["prompt_builder.py<br/>initial.md (iteration 1) or repair.md (later)<br/>+ feedback digest + iteration history"]
+    PB --> AG["Agent: claude -p, Claude Opus, one fresh session<br/>Read / Glob / Grep the C and the crate<br/>Edit / Write src/ only<br/>Bash: cargo build / check / test / clippy only"]
+    AG -->|"compiler, test and clippy output<br/>inside the session"| AG
+    AG --> IG["integrity.py<br/>restore protected files, remove strays,<br/>record violations"]
+    IG --> CK["checks.py<br/>build, per-test results, rubric clippy<br/>(agent vs harness warnings)"]
+    CK --> SA["safety_check.py<br/>(interim proxy; course tool later)"]
+    SA --> IF["check_interface.py,<br/>hard-coding and lint-attribute scans"]
+    IF --> DG["diagnostics.md, iteration_summary.json,<br/>changes.diff, src_after/"]
+    DG --> ST{"Stop?<br/>SUCCESS, ABORT,<br/>NO_PROGRESS, MAX_ITERATIONS"}
+    ST -->|"no: feedback goes into the next prompt"| PB
+    ST -->|yes| OUT["translations/project_N<br/>run_summary.json"]
+    OUT --> RM["run_pipeline.py --check-only re-measures,<br/>summarize.py writes results/"]
+```
+
+One agent and one model do all the work. The controller is plain Python: it never writes Rust, it only
+measures the crate and turns the measurements into the next prompt.
 
 ## Stopping condition
 
@@ -140,8 +184,21 @@ Each iteration is one fresh agent session capped at 60 turns and a 45-minute wal
 
 ## API and usage limits that affected the experiment
 
-PENDING: filled in from the trajectories after the runs. Every usage-limit pause is recorded in
-`run_state.json` and `run_summary.json` (`usage_limit_pauses`), and in `run.log`.
+**None observed.** No request in either committed run was rejected for a usage limit, and neither run
+paused. Every `rate_limit_event` record in the four agent streams reports status `allowed` on the
+five-hour window, and both `run_summary.json` files have an empty `usage_limit_pauses` list. The counts
+are in the "API and usage limits" table of `results/results.md`, and these commands show them:
+
+```bash
+grep -h '"type":"rate_limit_event"' MP4/trajectories/project_*/run_*/iter_*/agent.stream.jsonl | grep -c '"status":"allowed"'
+grep -h '"type":"rate_limit_event"' MP4/trajectories/project_*/run_*/iter_*/agent.stream.jsonl | grep -vc '"status":"allowed"'
+grep -h '"usage_limit_pauses"' MP4/trajectories/project_*/run_summary.json
+```
+
+What the limits did shape was the experiment's size, decided before any run: one full run per project,
+at most eight iterations of at most sixty turns each. The per-iteration turns, output tokens and minutes
+are in the trend tables of `results/results.md`. Every usage-limit pause, had there been one, would be
+recorded in `run_state.json`, `run_summary.json` (`usage_limit_pauses`) and `run.log`.
 
 How limits are handled: the subscription has rolling 5-hour and weekly limits. A rejected request is
 detected from the event stream. The run then waits until the reported reset time, or exits with code 75
@@ -176,8 +233,9 @@ MP4/
 ├── translations/   project_1/, project_2/: the final generated Rust crates
 ├── subjects/       project_1/, project_2/: original C (c/) and CRUST-bench Rust skeleton (rust_skeleton/),
 │                   with CHECKSUMS.sha256 and SOURCE.md
-├── results/        check.json per project, results.md, LaTeX table fragments (generated)
-└── docs/           environment.md
+├── results/        check.json per project, results.md, LaTeX table fragments, repair_mining.md (generated)
+└── docs/           environment.md, rubric_traceability.md, pipeline_diagram.mmd,
+                    report_mp4_draft.md and .tex (the MP4 section of the progress report)
 ```
 
 ## Infrastructure interventions
@@ -215,6 +273,29 @@ iteration the run shipped (`run_summary.json` `final_iteration_dir`). The contro
   reproduce them exactly when the C is well defined, and to choose defined, non-panicking behaviour when
   it is undefined. The cases are listed in `configs/projects/*.yaml`. One clippy suppression is
   permitted: `too_many_arguments` on satc's fixed 8-parameter `satc_is_separating_axis` signature.
+  Program logic affected: no (these are instructions the agent received before it wrote any code; no
+  code was changed afterwards).
+- **libpsbt `psbt_geterr` keeps the benchmark's pre-filled body.** The interface file ships
+  `psbt_geterr()` already implemented, returning the constant `PSBT_ERRMSG` ("psbt error"). Our project
+  note told the agent to keep the behaviour of pre-filled interface bodies, so it did. The C returns the
+  last error message instead, so the Rust CLI prints "psbt error" where the C prints the specific
+  message. The translation still records each message internally, the way the C assigns
+  `psbt_errmsg`. This is a deliberate reading of a pre-filled interface body, not a repair. Program logic
+  affected: no.
+- **Scrubbing the trajectories.** As trajectory files are written, the controller replaces the home
+  directory with `~` and removes anything that looks like an API key, token or e-mail address
+  (`src/scrub_secrets.py`). `scrub_secrets.py --check MP4/` reports 0 hits on the committed tree. Program
+  logic affected: no (only the logs are rewritten, never the crate).
 - **Tool-policy change before the first run.** On 2026-10-29 the agent's tool permissions were tightened
   after a smoke test showed it could read files outside its directories (`configs/CHANGELOG.md`). No
-  translation run had happened yet.
+  translation run had happened yet. Program logic affected: no.
+
+## Academic integrity
+
+All Rust under `translations/` was written by the agent described above, inside the logged sessions in
+`trajectories/`. No person edited a translated function, and `src/integrity.py --provenance` checks this
+against the snapshots in the trajectories. The controller in `src/`, the configurations and prompts in
+`configs/` and this README were written by the team with the help of an AI coding assistant, and are our
+own work for this course. The benchmark C code, Rust interfaces and tests come unchanged from
+CRUST-bench (see `subjects/*/SOURCE.md`). The prompts contain no function implementations and no
+expected test outputs.

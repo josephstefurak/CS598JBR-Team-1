@@ -120,7 +120,12 @@ If either has not arrived by 2026-11-15, tell a session to mark the row
 ## Stage 4 — after M10
 
 **O5 — Overleaf.** Paste `MP4/docs/report_mp4_draft.tex` (and the TikZ
-diagram block) into the team's Overleaf project as the MP4 section. Compile.
+diagram block) into the team's Overleaf project as the MP4 section. Its
+first lines name what the preamble needs: `\usepackage{tikz}` and
+`\usetikzlibrary{positioning,arrows.meta}`. acmart already loads booktabs and
+graphicx. The draft was never compiled locally (M10: no LaTeX engine on the
+machine), so this is its first compile; fix any LaTeX error in the draft's
+`.md` and `.tex` together, never in the generated table blocks. Compile.
 Export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored). Flip
 M14 to `not-started`. Then `/mp4-phase`. Jacob and Ross polish prose after
 M14 confirms the numbers match.

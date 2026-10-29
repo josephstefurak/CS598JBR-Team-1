@@ -221,6 +221,7 @@ def _run(tmp_root):
     _run_m5(tmp_root)
     _run_m6(tmp_root)
     _run_m8(tmp_root)
+    _run_m10(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -1373,6 +1374,142 @@ def _run_m8(tmp_root):
                           clippy_harness={})}
     expect("C23: compare reports a guard count only check-only sees",
            [d["field"] for d in summarize.compare(rs, ck)], ["lint_attribute_hits"])
+
+
+def _run_m10(tmp_root):
+    """M10: the repair-example miner, per-iteration trends, usage digest and report blocks."""
+    out = "\n".join([
+        "warning: file `x/src/bin/test.rs` found to be present in multiple build targets:",
+        "   Compiling libpsbt v0.1.0",
+        "error[E0502]: cannot borrow `*dest` as immutable because it is also borrowed as mutable",
+        "   --> src/psbt.rs:322:42", "",
+        "error[E0502]: cannot borrow `*dest` as immutable because it is also borrowed as mutable",
+        "   --> src/psbt.rs:381:42", "",
+        "warning: can be more succinctly written as a byte str", "   --> src/psbt.rs:694:21", "",
+        "warning: can be more succinctly written as a byte str", "   --> src/psbt.rs:694:21",
+        "    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html"
+        "#byte_char_slices", "",
+        "warning: unused import: `libpsbt::psbt::*`", " --> src/bin/test.rs:1:5",
+        "  = note: `#[warn(unused_imports)]` on by default", "",
+        "warning: `libpsbt` (lib) generated 1 warning (1 duplicate)",
+        "test result: FAILED. 3 passed; 1 failed; 0 ignored"])
+    diags, tests = summarize.parse_cargo_output(out)
+    expect("M10: cargo output parsed, duplicate spans collapsed (lint taken from the later copy), span-less dropped",
+           [(d["level"], d["code"], d["lint"], d["path"], d["line"]) for d in diags],
+           [("error", "E0502", None, "src/psbt.rs", 322), ("error", "E0502", None, "src/psbt.rs", 381),
+            ("warning", None, "byte_char_slices", "src/psbt.rs", 694),
+            ("warning", None, "unused_imports", "src/bin/test.rs", 1)])
+    expect("M10: test result line parsed", tests, [("FAILED", "3", "1")])
+    expect("M10: cargo kind from the command", [summarize._cargo_kind(c) for c in (
+        "cargo +nightly-2025-05-13 clippy --all-targets", "cargo +nightly-2025-05-13 test --no-fail-fast",
+        "cargo build", "ls src")], ["clippy", "test", "build", None])
+
+    # a synthetic stream: Write, failing build, Edit, clean build; lines are what the report cites
+    sdir = os.path.join(tmp_root, "m10_stream")
+    os.makedirs(sdir)
+    stream = os.path.join(sdir, "agent.stream.jsonl")
+
+    def use(i, name, inp):
+        item = {"type": "tool_use", "id": i, "name": name, "input": inp}
+        return {"type": "assistant", "message": {"content": [item]}}
+
+    def res(i, text, err=False):
+        item = {"type": "tool_result", "tool_use_id": i, "content": text, "is_error": err}
+        return {"type": "user", "message": {"content": [item]}}
+    evs = [{"type": "system", "subtype": "init"},
+           use("a", "Write", {"file_path": "~/r/MP4/translations/project_2/src/psbt.rs", "content": "x"}),
+           use("b", "Bash", {"command": "cargo +nightly-2025-05-13 build"}), res("b", out, True),
+           {"type": "assistant", "message": {"content": [{"type": "text", "text": "Fixing | the borrow."}]}},
+           use("c", "Edit", {"file_path": "~/r/MP4/translations/project_2/src/psbt.rs"}),
+           use("d", "Bash", {"command": "cargo +nightly-2025-05-13 build"}), res("d", "Finished `dev` profile"),
+           {"type": "system", "subtype": "permission_denied", "tool_name": "Bash", "message": "denied ls"},
+           {"type": "result", "num_turns": 7, "duration_ms": 90000, "usage": {"output_tokens": 1234}}]
+    with open(stream, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(json.dumps(e) for e in evs[:3]) + "\nnot json\n" +
+                 "\n".join(json.dumps(e) for e in evs[3:]) + "\n")
+    tl = summarize.mine_stream(stream)
+    expect("M10: miner timeline kinds and stream line numbers (non-JSON line still counted)",
+           [(e["line"], e["kind"]) for e in tl],
+           [(2, "Write"), (5, "cargo build"), (6, "text"), (7, "Edit"), (9, "cargo build"), (10, "denied")])
+    expect("M10: miner keeps the command's line and the failure flag", (tl[1]["call_line"], tl[1]["failed"]),
+           (3, True))
+    expect("M10: miner escapes table pipes in agent text", tl[2]["detail"], "Fixing \\| the borrow.")
+    expect("M10: lint ledger first -> last for library codes only",
+           summarize.lint_ledger(tl),
+           {"E0502": {"first": 2, "first_line": 5, "last": 0, "last_line": 9},
+            "byte_char_slices": {"first": 1, "first_line": 5, "last": 0, "last_line": 9}})
+    expect_true("M10: cargo detail names the error code and its spans",
+                "E0502 x2 (src/psbt.rs:322, src/psbt.rs:381)" in summarize._cargo_detail(tl[1]))
+    with open(os.path.join(sdir, "changes.diff"), "w", encoding="utf-8") as fh:
+        fh.write("--- a/src/cli.rs\n+++ b/src/cli.rs\n@@ -1,2 +1,3 @@\n-old\n+new\n+more\n ctx\n")
+    expect("M10: diff stats", summarize.diff_stats(os.path.join(sdir, "changes.diff")), {"src/cli.rs": [2, 1]})
+
+    # trend and usage read the final run named in run_summary.json
+    saved = mc.TRAJECTORIES_DIR
+    try:
+        summarize.mc.TRAJECTORIES_DIR = os.path.join(tmp_root, "m10_traj")
+        run_dir = os.path.join(summarize.mc.TRAJECTORIES_DIR, "project_9", "run_R")
+        os.makedirs(os.path.join(run_dir, "iter_01"))
+        os.makedirs(os.path.join(run_dir, "old_iter"))
+        shutil.copy(stream, os.path.join(run_dir, "iter_01", "agent.stream.jsonl"))
+        shutil.copy(os.path.join(sdir, "changes.diff"), os.path.join(run_dir, "iter_01", "changes.diff"))
+        with open(os.path.join(run_dir, "iter_01", "agent.stream.jsonl"), "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"type": "rate_limit_event", "rate_limit_info": {
+                "status": "rejected", "rateLimitType": "five_hour"}}) + "\n")
+        with open(os.path.join(run_dir, "iter_01", "iteration_summary.json"), "w", encoding="utf-8") as fh:
+            json.dump({"iteration": 1, "attempt": 1, "compiles": True, "tests_passed": 3, "tests_total": 4,
+                       "clippy_agent": {g: 0 for g in summarize.GROUPS}, "clippy_harness": {"style": 2},
+                       "safety_total": 0, "integrity_violations": ["x"], "success": False}, fh)
+        rs = {"run_id": "R", "usage_limit_pauses": [{"cause": "rate_limit"}]}
+        t = summarize.iteration_trend("project_9", "P9", rs)
+        r = t["rows"][0]
+        expect("M10: trend row from iteration_summary + result event + diff",
+               (len(t["rows"]), r["passed"], r["harness_total"], r["integrity"], r["turns"], r["output_tokens"],
+                r["minutes"], r["added"], r["removed"]), (1, 3, 2, 1, 7, 1234, 1.5, 2, 1))
+        expect_true("M10: trend tex row", summarize.render_trend_tex(t).startswith(
+            "iter\\_01 & Yes & 3/4 & 0/0/0/0 & 0 & 7 & 1.5 & +2/-1 \\\\"))
+        u = summarize.usage_digest([{"label": "P9", "project": "project_9", "run_summary": rs}])
+        expect_true("M10: usage digest counts a rejection and a pause",
+                    "| P9 | 1 | rejected | five_hour | 1 | 1 |" in summarize.md_usage(u))
+    finally:
+        summarize.mc.TRAJECTORIES_DIR = saved
+
+    # report blocks: fill, then detect a hand edit
+    tex = "x\n% BEGIN GENERATED: overall\nstale\n% END GENERATED: overall\ny\n"
+    expect("M10: tex block filled", summarize.render_tex_blocks(tex, {"overall": "a & b \\\\"}),
+           "x\n% BEGIN GENERATED: overall\na & b \\\\\n% END GENERATED: overall\ny\n")
+    try:
+        summarize.render_tex_blocks("no blocks", {"overall": "a"})
+        expect("M10: missing tex block refused", "accepted", "ValueError")
+    except ValueError:
+        expect("M10: missing tex block refused", "ValueError", "ValueError")
+    rows = [{"label": "P", "compiles": True, "passed": 1, "total": 2, "iterations": 2, "stop_reason": "SUCCESS",
+             "clippy": {g: 0 for g in summarize.GROUPS}, "harness": {g: 0 for g in summarize.GROUPS},
+             "safety": {m: 0 for m in summarize.SAFETY}, "safety_tool": "proxy", "known_failing": []}]
+    expect_true("M10: proxy safety table says the official tool is PENDING",
+                "official tool PENDING" in summarize.md_safety(rows) and "PENDING (tool not yet released)" in
+                summarize.md_safety(rows))
+    expect_true("M10: results.md tables are the report's blocks",
+                all(b in summarize.render_markdown(rows) for b in (
+                    summarize.md_overall(rows), summarize.md_safety(rows), summarize.md_idiom(rows))))
+    saved_md, saved_tex = summarize.REPORT_MD, summarize.REPORT_TEX
+    try:
+        summarize.REPORT_MD = os.path.join(tmp_root, "r.md")
+        summarize.REPORT_TEX = os.path.join(tmp_root, "r.tex")
+        with open(summarize.REPORT_MD, "w", encoding="utf-8") as fh:
+            fh.write("<!-- BEGIN GENERATED: overall -->\n<!-- END GENERATED: overall -->\n")
+        with open(summarize.REPORT_TEX, "w", encoding="utf-8") as fh:
+            fh.write("% BEGIN GENERATED: overall\n% END GENERATED: overall\n")
+        blocks = {"overall": ("md table", "tex rows"), "usage": ("usage md", None)}
+        expect("M10: --check-report sees both drafts stale before --report", len(summarize.update_report(
+            {"overall": blocks["overall"]}, True)), 2)
+        summarize.update_report({"overall": blocks["overall"]}, False)
+        expect("M10: up to date after --report", summarize.update_report({"overall": blocks["overall"]}, True), [])
+        _edit(summarize.REPORT_TEX, "tex rows", "tex rows edited by hand")
+        expect("M10: a hand edit inside a block is reported", len(summarize.update_report(
+            {"overall": blocks["overall"]}, True)), 1)
+    finally:
+        summarize.REPORT_MD, summarize.REPORT_TEX = saved_md, saved_tex
 
 
 if __name__ == "__main__":

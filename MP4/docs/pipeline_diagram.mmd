@@ -1,0 +1,14 @@
+flowchart TD
+    SK["CRUST-bench skeleton<br/>subjects/project_N/rust_skeleton"] --> INIT["Init workspace (once per run)<br/>copy skeleton, add forbid(unsafe_code),<br/>checksum the protected files"]
+    INIT --> PB["prompt_builder.py<br/>initial.md (iteration 1) or repair.md (later)<br/>+ feedback digest + iteration history"]
+    PB --> AG["Agent: claude -p, Claude Opus, one fresh session<br/>Read / Glob / Grep the C and the crate<br/>Edit / Write src/ only<br/>Bash: cargo build / check / test / clippy only"]
+    AG -->|"compiler, test and clippy output<br/>inside the session"| AG
+    AG --> IG["integrity.py<br/>restore protected files, remove strays,<br/>record violations"]
+    IG --> CK["checks.py<br/>build, per-test results, rubric clippy<br/>(agent vs harness warnings)"]
+    CK --> SA["safety_check.py<br/>(interim proxy; course tool later)"]
+    SA --> IF["check_interface.py,<br/>hard-coding and lint-attribute scans"]
+    IF --> DG["diagnostics.md, iteration_summary.json,<br/>changes.diff, src_after/"]
+    DG --> ST{"Stop?<br/>SUCCESS, ABORT,<br/>NO_PROGRESS, MAX_ITERATIONS"}
+    ST -->|"no: feedback goes into the next prompt"| PB
+    ST -->|yes| OUT["translations/project_N<br/>run_summary.json"]
+    OUT --> RM["run_pipeline.py --check-only re-measures,<br/>summarize.py writes results/"]
