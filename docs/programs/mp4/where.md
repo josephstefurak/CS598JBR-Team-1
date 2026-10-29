@@ -62,7 +62,7 @@ the specific conflict rather than picking an alternative.*
 | M7 | Full run: project_2 (libpsbt) | **done** | 2026-10-29 — f09f89c | run `20261029T194929Z` SUCCESS after 2 iterations / 2 attempts in 22.1 min, no pauses; pipeline code and configs identical to M6 (diff empty); both iterations 3/4 tests with only `read_test_vector` failing as documented (D8, test.rs:126, left 4 right 0), agent clippy 0/0/0/0, harness style 2 + rustc 8 (M1 baseline), proxy safety 0, interface 52 items 0/0, integrity 0, lint attrs 0; 87 turns (iter 1: 56 of 60), 111 569 output tokens; 0 leak markers; 3 denials (`ls`/`wc`); check-only diff empty; provenance ok; D7 full run 1/1 for project_2 spent |
 | M8 | Review 2: translations and trajectories vs rubric | **done** | 2026-10-29 — 18b3a74 (fixes) | fresh-clone re-measurement 0 mismatches (both projects, 11 fields); spot checks satc 52/52 bit-identical, libpsbt 31/34 (3 = ruled UB, base62 index 63); `/code-review max` of f69ae8d: 10 angles + sweep, 23 + 6 defects, 24 fixed, 4 to the owner (D-M8GATES), cleanup to backlog; committed runs unaffected; selftest 192 → 214 (+22), 14/14 mutation reverts caught; 27 traceability rows verified; owner: M9 "Neither" |
 | M9 | Tuning rerun | **dropped (owner accepted M6/M7 results)** | 2026-10-29 (M8 gate) | D-M8GATES: "Neither (Recommended)". The three approved orchestration changes went to `post-merge.md` |
-| M10 | Results, README final, report draft | **not-started** | — | — |
+| M10 | Results, README final, report draft | **done** | 2026-10-29 — 73be41e | `summarize.py` exit 0, results equal `--check-only` for both projects; satc 4/4 100.0% 2 iter, libpsbt 3/4 75.0% 2 iter, agent clippy 0/0/0/0 both, proxy safety 0 (labelled PENDING official); usage: 4 `rate_limit_event` all `allowed`, 0 pauses; README 14 headings, tool diff empty both ways; report draft 6 sections, 5 tex + 6 md blocks byte-identical to the generator, 4 examples / 22 cited lines all grep; `grep -c PENDING` .tex = 3; selftest 214 → 233 (+19), 5/5 mutations caught; .tex not compiled (no LaTeX engine) |
 | M11 | Review 3: fresh-clone rubric walk, consistency, submittable as-is | **not-started** | — | — |
 | M12 | Course unsafe-metrics tool: adapter, retroactive run, table swap | **blocked (course unsafe-metrics tool not yet released; owner drops it at the path named in the runbook and flips this row to not-started)** | — | Cut-off 2026-11-15 (D9) |
 | M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released; owner drops it at the path named in the runbook and flips this row to not-started)** | — | Cut-off 2026-11-15 (D9) |
@@ -1334,6 +1334,142 @@ PM1–PM3 in `post-merge.md`.
 **Queued for owner**: nothing new. M10 (results, README final, report draft) is next. **O1 still deferred.** D8
 remains the working assumption, and O1 must be resolved or consciously accepted before submission.
 
+### M10 — Results, README final, report draft (2026-10-29, 73be41e + this commit)
+
+**Shipped** (product terms): Every number the report needs is now generated from the committed runs and
+checked against an independent re-measurement before it is written. The README is complete. Its usage-limit
+section is filled from the trajectories: no limit was hit. Its tool list matches the tools the agent actually
+called, with no extras and none missing. It gains a pipeline diagram and an academic-integrity statement.
+The MP4 section of the progress report now exists in the repository, in Markdown and in LaTeX for Overleaf,
+with all six required parts. Its tables are written by the generator and checked for drift. There are four
+worked repair examples, each tied to exact lines of the agent's logs. The official unsafe metrics are
+marked PENDING rather than filled in.
+
+**Deviations from spec**:
+- **Workflow not used.** The Tooling line names `Workflow`. It needs explicit opt-in, which this session did
+  not have, so two plain `Agent` readers (sonnet) scored the 8 `repair-candidates.md` entries independently.
+  This session judged as the third reader. Both readers verified every quote and picked R3, R1 and R2. Both
+  found the same mis-citation in R4 (the `isxdigit` check is at `psbt.c:667`, not in `cli.c`), and the
+  report uses the corrected citation. The `repair-candidates.md` file itself was not edited, because it is
+  M8's record.
+- **Four examples, not three.** R4 (`args_os`, robustness) is included as a fourth, labelled example. The
+  safety slot holds R1, labelled as a borrow-checker substitute, as the spec allows when unsafe code never
+  appeared.
+- **Existing code changed, before → after:**
+  - `summarize.render_markdown` built its three tables inline. They are now `md_overall`, `md_safety` and
+    `md_idiom`, so that the report blocks and `results.md` come from one function each (this is how the
+    spec's byte-identity check holds by construction).
+  - The safety "Measured by" cell changed from "interim proxy (`safety_check.py --tool proxy`)" to the
+    same text plus "official tool PENDING", plus a PENDING line for the tool's additional metrics.
+  - `write_results` gained optional `trends`, `usage` and `mining` arguments. The selftest's fixture call
+    is unchanged.
+  - `main` gained `--report`/`--check-report`. Its entries now carry `project`, and it prints "results
+    equal --check-only".
+- **Runbook O5 amended** with the preamble requirement and the fact that the draft has never been
+  compiled. Owner queue O5 marked ready.
+- **The .tex is derived from the .md** by a scratch converter (not committed; it stays in this session's
+  scratchpad) plus the hand-written TikZ figure and usage sentence. Later edits must touch both files. M11's
+  consistency step should diff them.
+- **Prose numbers.** The spot-check figures (52/52, 31/34) come from `docs/programs/mp4/reviews/
+  review-2.md` §3, which the report cites. They are not reproducible by `--check-only`.
+
+**Owner gates**: none on this row. No question was asked.
+
+**Verification** (real output):
+- `python3 -I MP4/src/summarize.py` wrote `results.md`, `overall/safety/idiom.tex`, `trend_project_{1,2}.tex`
+  and `repair_mining.md`, then printed "results equal --check-only for 2 project(s)", exit 0.
+  `--check-readme`: "up to date", exit 0. `--check-report`: "up to date", exit 0.
+- **Overall:** satc Yes 4/4 100.0% 2 iterations SUCCESS; libpsbt Yes 3/4 75.0% 2 iterations SUCCESS.
+  Agent clippy 0/0/0/0 for both; harness libpsbt style 2. Proxy safety 0/0/0/0 for both.
+- **Trend:**
+  - satc: iter_01 12 turns, 22 801 output tokens, 4.0 min, +623/-0; iter_02 17 turns, 17 170 tokens,
+    3.5 min, +13/-2.
+  - libpsbt: iter_01 56 turns, 94 525 tokens, 17.8 min, +1515/-0; iter_02 31 turns, 17 044 tokens,
+    4.1 min, +4/-1.
+  - The sums equal the M6/M7 ledger: 29 and 87 turns, 39 971 and 111 569 output tokens.
+- **Usage:** 2 + 2 `rate_limit_event` records, all `allowed`, `five_hour`, 0 rejected; `usage_limit_pauses`
+  `[]` in both runs.
+- **README:** 14 `##` headings. The README tool list (`Bash Edit Glob Grep Read StructuredOutput Write`)
+  diffed against `grep -oh '"name":"[A-Za-z]*"' ...agent.stream.jsonl | sed | sort -u`: empty, exit 0.
+  `claude --version` = `2.1.235 (Claude Code)` = README; `model: opus`, `effort: high` = README.
+- **Report:**
+  - The .md has 6 `##` sections and the .tex 6 `\subsection`s.
+  - All 6 md blocks are substrings of `results.md`, and all 5 tex blocks equal their `results/*.tex` file
+    (script, all True).
+  - Every cited trajectory line was checked with `sed -n Lp | grep -F`: 22 OK, 0 BAD. The 11 C and Rust
+    line citations were checked by `sed`.
+  - `grep -c PENDING MP4/docs/report_mp4_draft.tex` → 3. The Mermaid source is in
+    `MP4/docs/pipeline_diagram.mmd` and embedded in the README.
+  - LaTeX structure: unescaped braces balanced, 20 `\begin`/20 `\end`, each environment paired.
+- **Selftest:**
+  - `python3 -I MP4/src/selftest.py` → `selftest: 233 PASS, 0 FAIL` (214 → 233, +19 in `_run_m10`).
+  - The new checks found a real bug before commit: cargo's per-target duplicate diagnostic without its
+    lint note was counted twice. The dedupe is now keyed on the message.
+  - **Mutation check.** 5 reverts in a scratch copy, with `_run_m10` only: lint merge, pipe escape,
+    report staleness, ledger harness filter, diff `b/` prefix.
+    - All 5 caught: 3 FAIL; report staleness and the harness filter raise.
+    - The lint-merge revert was not caught on the first try. The test input was reordered so that the copy
+      without the note comes first, and then it was caught.
+- **Floor:**
+  - `py_compile` 0; selftest 233/0; `scrub_secrets --check MP4/` 0 hits; `--help` 0.
+  - `--check-only` and provenance exit 0 for both projects, with summaries equal to the committed ones.
+    The rewritten `check.json` and logs differ only in timestamps and dict order, so they were restored
+    (M6 discovery).
+  - The secret grep gives the same known self-quoting lines as before: 3 in `MP4/docs/rubric_traceability.md`
+    (now at lines 27, 56 and 155) and 20 over `MP4/ docs/`, unchanged from the pre-phase run.
+  - `flake8 --max-line-length 120` and `pyflakes` on the two changed files: 0. Tree clean after the commits.
+- **Docs-claims check.** Grepped `PENDING: filled in|still pending|R-T1-TOOLLIST is still|deliberately not
+  run|No run yet|Report not written yet` over MP4/, CLAUDE.md and the program docs. The fixes:
+  - the README usage section;
+  - the traceability legend ("pending-run ... none remain since M10") and the T1/T4 rows;
+  - runbook O5.
+
+  The only other hit is a dated CHANGELOG entry, left as history. Two claims in the draft were found
+  wrong while it was written, and fixed:
+  - "we have raised the defect with the course staff" (O1 is still deferred);
+  - `void *user_data` "became a generic closure" (the interface makes it `&mut dyn Any`).
+- **Tooling pass.** Used: two `Agent` readers (sonnet) for repair-candidate scoring. Considered and
+  rejected:
+  - `Workflow` (no opt-in);
+  - `anthropic-skills:pdf` (pypdf extracted the handout and MP1–MP3 report text directly);
+  - `code-review` (M11's job).
+- **Spend.** No pipeline model call. The D7 envelope is untouched. The two readers used about 198 k tokens
+  of this session's subscription.
+
+**NOT demonstrated**:
+- The .tex has never been compiled: there is no LaTeX engine on this machine. The TikZ figure, `\resizebox`
+  tables and long `\texttt` spans may need fixes on the first Overleaf compile (O5).
+- The prose is not generated. Numbers typed into the prose (test counts, 56 of 60 turns, 52/52, 31/34, lint
+  names) were checked by hand against artifacts in this session, but no tool keeps them in step. M11's
+  three-way consistency table is the guard.
+- The .md and .tex prose are kept in step only by the scratch converter run here. Nothing checks that they
+  say the same thing.
+- The safety tables are the interim proxy. The official course-tool numbers and additional metrics are
+  absent (M12).
+- `repair_mining.md` parses cargo's human-readable output. A wording or format change in a future
+  toolchain could make it miss diagnostics. It was checked only against these four streams and the
+  selftest fixture.
+- The academic-integrity statement and the report's claims about the team's process are this session's
+  wording. The owner and teammates have not reviewed them (O5, D10).
+- The repair examples' "why wrong" analysis is this session's and two readers' reading. The model's
+  thinking is redacted, so the agent's own reasons are visible only where it wrote text.
+
+**Discoveries logged for later rows**:
+- (M11) `repair-candidates.md` R4 cites `cli.c L96-111` for the `isxdigit` check. It is `psbt.c:667`
+  (both readers). S2's "(d) L638/639 first build" is really L630/L633, which failed. The report uses the
+  correct citations. The M8 file still has the old ones.
+- (M11) Diff the .md and .tex prose of the report draft (the converter is not committed). Fold any
+  Overleaf compile fixes back into both.
+- (M11) The README "C behaviour rulings" bullet now says "Program logic affected: no". Check that M11's
+  rubric walk agrees that agent instructions are not an intervention on program logic.
+- (close-out) The floor's secret grep still matches 3 self-quoting lines in `rubric_traceability.md` (now
+  lines 27, 56, 155) plus 17 in `docs/`.
+
+**Queued for owner**: O5 is now actionable: paste the .tex into Overleaf, check its first compile, and
+review the README academic-integrity statement. **O1 still deferred.** D8 remains the working assumption.
+The report says the course staff's ruling is PENDING, and O1 must be resolved or consciously accepted
+before submission. M11 (review 3) is next.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -1346,7 +1482,7 @@ remains the working assumption, and O1 must be resolved or consciously accepted 
 | O2 | Approve the rustup + nightly-2025-05-13 install in the M1 session (commands shown first) | E2; invariant 4 | M1 | **done 2026-10-28** (approved in the M1 session; installed). Follow-on: owner puts `~/.cargo/bin` on PATH for the shell that launches Claude Code before M3 (runbook Stage 1) |
 | O3 | Supply the course unsafe-metrics tool at the path the runbook names, then flip M12 to not-started | R-T3-*-SAFETY official numbers, R-T4-SAFETY-ANALYSIS | M12 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
 | O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
-| O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | open |
+| O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | **open, ready since M10 (2026-10-29)**: the draft exists. Its preamble needs `tikz` + `positioning,arrows.meta` (runbook Stage 4). It has never been compiled; the first Overleaf compile is its first LaTeX check. Also review the README's academic-integrity statement (written by M10) |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
 | O8 | Log the `claude` CLI in (`claude auth login`) and keep it logged in for model runs (runbook Stage 2) | The CLI's login is separate from the desktop app's; it was logged out, so agent B failed with "OAuth session expired" (first diagnosed, wrongly, as a sandbox issue) | M3 smoke; M6, M7, M9 | **done 2026-10-29** (owner ran `claude auth login`; status loggedIn true, claude.ai, max) |
 | O9 | Answer the M6 gate batch G1–G7 (stop semantics and tool permissions), each with options and a recommendation in `docs/programs/mp4/reviews/review-1.md` § "Owner decisions for M6 step 1" | M5 found holes whose fixes change stop semantics or permissions; what.md M5/M6 route them to the owner at M6 step 1 | M6 | **answered 2026-10-29** (in the M5 session, at the owner's request): G1 "Both guards" (revert and record files outside src/ that are not in the skeleton, plus symlinks; and a lint-attribute scan that blocks SUCCESS except the D-ALLOW pair); G2 "Pause, resumable" (auth failure exits 75, resume after `claude auth login`); G3 "Require 2 iterations" (`loop.min_iterations: 2`); G4 "Keep env, deny flags" (keep the smoke-verified environment, M6 scans iteration 1 for leak markers, deny `--config` and `--manifest-path` on the allowed cargo commands); G5 "Add the project note" (keep every public item in `src/<module>.rs`); G6 "Ship the best" (restore the best-scoring snapshot into translations/ and name it in `final_iteration_dir`); G7 "Pause" (overloaded/connection failures pause like a usage limit, same 3-attempt cap). M6 step 1 applies them; it does not re-ask |
