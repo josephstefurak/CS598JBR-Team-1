@@ -56,7 +56,7 @@ the specific conflict rather than picking an alternative.*
 | M1 | MP4 layout, subjects, toolchain, baselines | **done** | 2026-10-28 — 0122f84 | 9/9 paths; checksums 13/13 + 28/28 OK; nightly = rustc 1.89.0-nightly 2025-05-12; Baseline A E0583 x1 (satc) / x5 (libpsbt); Baseline B 0/4 + 0/4 tests; harness clippy satc 0/0/0/0, libpsbt style 2; H-L10 answered; 10 why.md corrections |
 | M2 | Checks library, integrity guards, self-test | **done** | 2026-10-28 — a8994d9 | selftest 54 PASS / 0 FAIL (baseline null → 54); interface items satc 45, libpsbt 52; check-only on pristine satc: build.ok false, E0583, missing 45; course tool exit 2; check-only on M1 Baseline B copies reproduces M1 clippy split (libpsbt harness style 2) and 4 tests after dedupe |
 | M3 | Configs, prompts, agent runner, smoke run | **done** | 2026-10-29 — 2e0f3d2 | rulings: all 4 defaults + D-STRUCTOUT; selftest 54 → 88 (+34, incl. 5 runner scenarios); smoke 2/3 D7 calls spent: init tools 6+StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5; git denied; cargo 1.89.0-nightly; no leak markers; read-only Bash auto-approved (finding) → fixed same day, probe 5/5, D7 smoke calls now 3/3 spent |
-| M4 | Iteration loop, stop logic, resume drills, README draft | **not-started** | — | — |
+| M4 | Iteration loop, stop logic, resume drills, README draft | **done** | 2026-10-29 — 23c88b2 | selftest 88 → 120 (+32); drills A–H + D2, E2 all PASS (A SUCCESS@2, B MAX_ITERATIONS@1, C NO_PROGRESS@4, D restored, E attempt2, E2 exit 75, F 143→resume, G rerun identical, H tamper reverted); README 12/12 headings, generated sections current; no model calls |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **not-started** | — | — |
 | M6 | Full run: project_1 (satc) | **not-started** | — | — |
 | M7 | Full run: project_2 (libpsbt) | **not-started** | — | — |
@@ -582,6 +582,160 @@ probe as a reusable pre-run check, at a cost of one call, which needs
 an owner yes because the D7 smoke allowance is exhausted. (M4) The
 digest/trajectory parsers must accept string `message` fields. (M5)
 review the read-only denylist for gaps.
+
+### M4 — Iteration loop, stop logic, resume drills, README draft (2026-10-29, 23c88b2)
+
+**Shipped** (product terms): The pipeline is complete end to end, and
+proven without spending any quota. One command now sets up a fresh crate
+from the benchmark skeleton and runs the agent. After each session it
+checks, restores and measures everything, feeds the results into the
+next prompt, and stops on success, lack of progress, the iteration cap,
+or repeated tampering. It waits out usage limits and resumes, and a
+killed run can be continued from exactly where it stopped. Every step
+leaves a complete trajectory. The results tables are generated from
+those artifacts and cross-checked against an independent re-measurement.
+The README now describes the pipeline as built.
+
+**Deviations from spec**:
+- The loop lives in `run_pipeline.py` as the spec says (it grew to ~960
+  lines), with helpers `measure_crate`, `evaluate`, `do_checks`,
+  `decide_stop`, `finalize`, `_usage_limit` and a `Run` class. Taking
+  the config and paths as parameters is what lets the drills run it on
+  temp copies of the fixture.
+- The fake agent runs as a subprocess through `agent_runner.run`, not
+  as in-process code. That way the drills exercise the real stream tee,
+  init isolation check, wall-clock and process-group kill, and outcome
+  classification.
+- Added stop reasons beyond the spec list: `ABORT_ISOLATION` (an init
+  mismatch aborts the run, not just the iteration, because the next
+  iteration would repeat it with the same config) and `AUTH_ERROR` (M3
+  discovery). `agent_runner` gained an `auth_error` outcome.
+- `rate_limit.mode` values are `wait|exit` per this spec. M3's config
+  validator accepted `wait|stop`; `stop` was never used.
+- Spend guards in code beyond the spec: a real run refuses without `--yes`
+  or a terminal confirmation, refuses when `claude auth status` is not
+  logged in (M3 discovery), and refuses beyond the D7 envelope (one full
+  run per project plus 2 tuning reruns in total, counted from committed
+  `run_manifest.json` files).
+- Integrity verify-and-restore results are persisted in `integrity.json`
+  before cargo runs. Without that, a rerun after a crash would see the
+  already-restored files, report 0 violations, and break drill G's
+  idempotency.
+- Extra drills beyond A–H: D2 (two violations in a row → ABORT) and E2
+  (`rate_limit.mode exit` → code 75 → `--resume-run`). Also a guard
+  check (fake agent refused for `MP4/translations/`) and README checks.
+- The drill fixture needed two prepared variants
+  (`selftest_fixture_variants/{partial,clean}`). The drills use a
+  benchmark-shaped skeleton copy with no `src/fixture.rs`. The clean
+  variant uses one `#[allow(clippy::boxed_local)]`, declared in the drill
+  project config, because the fixture interface fixes a `Box<Vec<i32>>`
+  parameter. It builds its greeting with `concat!` of two short literals,
+  which shows the hard-coding scan's known limit (literal reuse only).
+- `--help` texts lost their internal phase tags because graders see
+  them. `check_only` now reuses `measure_crate()`; before, it duplicated
+  the measurement calls.
+- Mistake, corrected before reporting: the first commit of this phase
+  contained invalid YAML in `program.yaml` (an unquoted drill baseline).
+  The commit command was not chained to the YAML check. It was fixed and
+  the unpushed commit amended (23c88b2).
+- Owner chose "Do it here" again: the fourth phase in this session.
+
+**Owner gates**: none for this row (D7 settled `rate_limit.mode: wait`).
+
+**Verification** (real output):
+- `python3 -I MP4/src/selftest.py` → `selftest: 120 PASS, 0 FAIL` in
+  about 48 s (88 → 120, +32). Drills:
+  - A: `(0, 'SUCCESS', 2)`. Both iter dirs hold every design-reference
+    file (prompt.md, agent.stream.jsonl, agent_result.json,
+    integrity.json, check.json, build.log, test.log, clippy_rubric.log,
+    clippy_{correctness,style,complexity,perf}.json, safety_proxy.json,
+    src_after/, changes.diff, diagnostics.md, iteration_summary.json).
+    The run dir has run_state.json, run.log and run_manifest.json; the
+    trajectory root has INDEX.md and run_summary.json. Iteration-1
+    blockers are clippy + interface. The known-failing test is verified
+    (failed, assertion and location match). The iteration-2 prompt
+    carries `needless_return` and the missing item, and changes.diff
+    shows the repair.
+  - B `(0, 'MAX_ITERATIONS', 1)`; C `(0, 'NO_PROGRESS', 4)`.
+  - D: violation `('src/bin/fixture_test.rs', 'modified', True)`, not
+    green, file hash restored, then `(0, 'SUCCESS', 2)`. D2 `(1, 'ABORT')`.
+  - E: `(0, 'SUCCESS', 1 pause, [iter_01, iter_01_attempt2, iter_02])`,
+    waited 5 s. E2: `(75, attempt 2, step prompt)`, then resume →
+    `(0, 'SUCCESS')`.
+  - F: exit 143, state `(1, 'agent')`. Resume → `aborted_interrupted`,
+    checked, `SUCCESS`.
+  - G: exit -9 at step `checks`. Resume → `SUCCESS` (stale lock taken
+    over). Rerunning `do_checks` gives a byte-identical
+    iteration_summary.json.
+  - H: `workspace_tamper` `[(2, ['fixture.rs'], True)]`, and the hand
+    edit is gone from the workspace.
+  - summarize: results.md row `| selftest fixture | Yes | 1 | 2 | 50.0% |
+    2 | SUCCESS |`; a tampered run_summary is refused (MismatchError).
+  - README: 12/12 required headings; the generated sections equal
+    `pipeline.yaml`.
+- `grep -nE 'max_iter|no_progress|SUCCESS|resets_at|step'
+  MP4/src/run_pipeline.py` → 40 lines (STEPS cursor at 367, STOP_*
+  constants, no_progress at 714, resets_at at 936).
+- `py_compile` (src + tests) exit 0; flake8 (120 cols) exit 0; pyflakes
+  exit 0.
+- `--dry-run` exits 0 for project_1 and project_2. `--help` exit 0.
+  `--check-only` still works (pristine satc: compiles false).
+- Real-run guard: `run_pipeline.py --project project_1 < /dev/null`
+  prints the estimate ("up to 8 iterations x 60 turns of opus …") and
+  `refusing without --yes (no terminal to confirm on)`, exit 2. No run
+  dir was created and `MP4/translations/project_1` still holds only
+  `.gitkeep`. The guard ran `claude auth status` but made no model call.
+- `summarize.py --check-readme` → `up to date`; regenerating twice is
+  stable. `summarize.py` on the real repo → `PENDING project_1: missing
+  …run_summary.json, …check.json`, exit 2 (expected before M6).
+- `scrub_secrets.py --check MP4/ docs/programs/mp4/evidence/` → 0 hits.
+  `git grep … -- MP4/` → empty. No `fake_agent` processes left.
+  `git status MP4/translations MP4/subjects` → clean.
+- Docs-claims check: grepped `wait\|stop`, `not implemented yet`,
+  `arrives in M4`, and phase tags in `--help`. Fixed the help texts and
+  logged the config change in `configs/CHANGELOG.md`. why.md and what.md
+  already said wait|exit.
+- Security: the run id is regex-validated before it becomes a path.
+  The fake agent is refused near the benchmark (in the loop and in the
+  agent itself). Trajectory JSON is scrubbed on write (`_write_json`,
+  run.log, prompt.md, diagnostics.md). Signal handlers kill agent B's
+  process group so no orphan agent keeps editing. The lock prevents two
+  live processes driving one run. Spend guards are as above.
+
+**NOT demonstrated**:
+- No real agent has run the loop. Everything above uses the fake agent
+  on a toy crate. How Opus behaves inside the loop (turn use, repair
+  quality, whether prompts fit the digest caps) is unknown until M6.
+- The wait-mode pause was drilled at 5 s. Multi-hour sleeps, and a
+  machine sleeping through one, were not tested (O6: `caffeinate`).
+- Drill G showed checks rerun identically on an unchanged workspace. A
+  checks step killed after integrity restore but before persistence
+  cannot happen (restore and persist are adjacent, but not atomic).
+- The D7 envelope counter trusts committed `run_manifest.json` files.
+  Deleting a run dir would reset it.
+- The confirmation prompt's interactive "y" path was not exercised (only
+  `--yes` and the refusal).
+- `summarize.py`'s equality check was shown on fixture output only. The
+  `.tex` fragments were written but not compiled in LaTeX.
+- The README's tool scope describes the configured policy and the M3
+  probe, not a real translation run.
+
+**Discoveries logged for later rows**:
+- (M5) The hard-coding scan misses literals split across `concat!` or
+  `format!` pieces, as the clean variant shows. Review whether a
+  normalised-concatenation pass is worth it.
+- (M5) A `run_manifest.json`-based spend counter can be reset by
+  deleting run dirs. Consider an append-only ledger like the smoke
+  `calls.log`.
+- (M6) The first real iteration should record how `--max-turns 60` maps
+  to `num_turns` (M3: 2 → 4 and 12), and update why.md C6.
+- (M6) A real run replaces `MP4/translations/project_N`. That is the
+  intended behaviour, and the confirmation states it.
+
+**Queued for owner**: nothing new. Before M6: `claude auth status` must show
+loggedIn true, and `caffeinate -dims` should be running (O6). **O1 still
+deferred.** D8 remains the working assumption, and O1 must be resolved or
+consciously accepted before submission.
 
 ## Owner-action queue (only the owner can clear these)
 
