@@ -55,7 +55,7 @@ the specific conflict rather than picking an alternative.*
 |---|---|---|---|---|
 | M1 | MP4 layout, subjects, toolchain, baselines | **done** | 2026-10-28 — 0122f84 | 9/9 paths; checksums 13/13 + 28/28 OK; nightly = rustc 1.89.0-nightly 2025-05-12; Baseline A E0583 x1 (satc) / x5 (libpsbt); Baseline B 0/4 + 0/4 tests; harness clippy satc 0/0/0/0, libpsbt style 2; H-L10 answered; 10 why.md corrections |
 | M2 | Checks library, integrity guards, self-test | **done** | 2026-10-28 — a8994d9 | selftest 54 PASS / 0 FAIL (baseline null → 54); interface items satc 45, libpsbt 52; check-only on pristine satc: build.ok false, E0583, missing 45; course tool exit 2; check-only on M1 Baseline B copies reproduces M1 clippy split (libpsbt harness style 2) and 4 tests after dedupe |
-| M3 | Configs, prompts, agent runner, smoke run | **code-complete (owner actions pending: O8 — run `--smoke` from an authenticated terminal; the session shell cannot reach the Claude login)** | 2026-10-29 — be3de95 | selftest 54 → 88; rulings = all defaults; D-STRUCTOUT; smoke attempts 1–2 reached the model 0 times (0/3 D7 smoke calls spent) |
+| M3 | Configs, prompts, agent runner, smoke run | **done** | 2026-10-29 — 2e0f3d2 | rulings: all 4 defaults + D-STRUCTOUT; selftest 54 → 88 (+34, incl. 5 runner scenarios); smoke 2/3 D7 calls spent: init tools 6+StructuredOutput, mcp [], slash [], dontAsk, claude-opus-5; git denied; cargo 1.89.0-nightly; no leak markers; read-only Bash auto-approved (finding) |
 | M4 | Iteration loop, stop logic, resume drills, README draft | **not-started** | — | — |
 | M5 | Review 1: pipeline vs rubric, guard test, traceability | **not-started** | — | — |
 | M6 | Full run: project_1 (satc) | **not-started** | — | — |
@@ -358,6 +358,166 @@ a new session and answered "Do it here".
 working assumption, and O1 must be resolved or consciously accepted before
 submission.
 
+### M3 — Configs, prompts, agent runner, smoke run (2026-10-29, be3de95 + 2e0f3d2)
+
+**Shipped** (product terms): The pipeline can now launch the translation
+agent the way the program designed it. It runs headless on Opus with
+effort high. It has only file tools and a cargo-only Bash allowlist. It
+cannot see the owner's or the repo's instructions, memory, hooks, MCP
+servers or skills, and it gets the project's context and the owner's
+rulings in its prompt. Every call is checked at startup and stopped if it
+shows any extra capability. Its full stream is saved with secrets removed
+as it is written. Usage limits, turn caps and hangs are recognised. The
+configuration is validated, so the spend limits and the rubric clippy
+command cannot drift. Before spending anything, `--dry-run` shows the
+exact command and first prompt. A real two-call smoke test proved the
+isolation.
+
+**Spend** (D7, pre-authorized; announced here as required): 3 smoke
+attempts × 2 calls, each `--max-turns 2`, Opus, subscription quota.
+Attempts 1 and 2 never reached the model: `duration_api_ms 0`, 0 tokens,
+logged `not-spent` in `evidence/smoke/calls.log`. Attempt 3 reached it
+twice: api 38.7 s and 14.3 s, `num_turns` 4 each. **Smoke calls spent:
+2 of 3.** No full or tuning runs.
+
+**Deviations from spec**:
+- `pipeline.yaml` is grouped into sections (agent, loop, toolchain,
+  checks, safety, rate_limit, digest, prompts, projects) rather than the
+  flat key list in the spec. Every spec key is present, and `config.py`
+  allowlists keys per section.
+- `config.py` also enforces the D7 envelope (model opus, max_turns ≤ 60,
+  max_iterations ≤ 8), the handout clippy command, the pinned toolchain
+  and the settings-file values, so a config edit cannot quietly leave
+  the envelope.
+- `mp4common.py` (M2) changed. Before, toolchain and check settings were
+  hard-coded defaults marked `TODO-move-to-pipeline.yaml`. Now it reads
+  them from `pipeline.yaml` (defaults remain as fallback), so each value
+  is defined once.
+- The isolation check admits `StructuredOutput` (owner ruling
+  D-STRUCTOUT, below).
+- The smoke counter refuses calls beyond D7's 3. It counts a call only
+  if it reached the model (a non-synthetic assistant event, API time or
+  tokens). I corrected four log entries that the first counter version
+  had marked `spent`.
+- Leak markers: "CS598JBR" was removed after a false positive (it is
+  in the `--add-dir` path). The verdict was recomputed from the saved
+  text, and the original is preserved in `smoke_report.json`.
+- The D-FAITHFUL UB cases (satc AABB position, libpsbt base62 index 63)
+  are left to the agent to define and report in its final status. The
+  ruling says "defined, non-panicking". The session did not invent a
+  specific value, so no ruling detail was made up. Index 62 is noted as
+  well defined (the alphabet's NUL).
+- Owner chose "Do it here" again (third phase in this session). Logged
+  as a waiver of one-phase-per-session.
+
+**Owner gates**:
+- Defaults batch, asked in one `AskUserQuestion`. Answers verbatim:
+  D-ALLOW "One allow, that fn only"; D-CLIMAIN "Make it pub fn main";
+  D-FAITHFUL "Faithful; define UB safely"; D-FORBID "Yes, inject it".
+  Recorded in why.md § D and in both project yamls.
+- Spec conflict raised mid-phase: the real init lists `StructuredOutput`
+  (added by `--json-schema`), but the spec required exactly six tools.
+  Asked; answer: "Allow StructuredOutput too (Recommended)". Recorded as
+  D-STRUCTOUT in why.md and where.md, and what.md's verification line
+  updated.
+- Auth: the CLI was logged out. The owner ran `claude auth login`
+  themself ("Login successful"). The session did not handle credentials.
+
+**Verification** (real output):
+- `run_pipeline.py --dry-run --project project_1` exits 0 and prints
+  `claude -p --output-format stream-json --verbose --model opus --effort
+  high --max-turns 60 --max-budget-usd 30 --permission-mode dontAsk
+  --tools Read,Edit,Write,Glob,Grep,Bash --allowedTools …
+  --disallowedTools 'Bash(git *)' … --setting-sources project
+  --settings … --append-system-prompt-file … --json-schema …
+  --strict-mcp-config --mcp-config '{"mcpServers":{}}'
+  --disable-slash-commands --session-id … --add-dir …/project_1/c`.
+  That is every C2–C6 flag. project_2 also exits 0. The prompt carries
+  no fn body (self-test asserts it for both projects, initial and
+  repair).
+- `grep -niE 'do not (modify|alter|change).*test|FFI|unsafe|hard.?cod'
+  MP4/configs/prompts/*` → 6 lines.
+- `grep -rn 'configs/' MP4/src/` → non-empty (config.py, agent_runner.py,
+  run_pipeline.py, …).
+- `python3 -I MP4/src/selftest.py` → `selftest: 88 PASS, 0 FAIL`
+  (54 → 88, +34). New assertions: config loads, unknown key / model /
+  max_turns rejected, config_hash stable, argv flags, git denial,
+  add-dir, isolation env. The 5 runner scenarios: normal → ok, usage
+  limit → usage_limit with resets_at, timeout kill → timeout in 2.0 s,
+  tool mismatch → isolation_violation, scrub of planted
+  key/e-mail/home path. Also max_turns, and prompt guardrails / no fn
+  body / no placeholder / repair carries failures and clippy sites for
+  both projects. Templates have no `satc_`/`psbt_`.
+- Smoke attempt 3 (`evidence/smoke/smoke_report.json`). Both calls'
+  init: `tools ['Bash','Edit','Glob','Grep','Read','StructuredOutput',
+  'Write']`, `mcp_servers []`, `slash_commands []`, `permissionMode
+  dontAsk`, `model claude-opus-5`, `claude_code_version 2.1.235`;
+  init also shows `skills []`, `plugins []`. Call a's answer lists the 7
+  tools and describes only the appended system prompt. Its Glob for
+  `**/{CLAUDE.md,AGENTS.md,.claude/**}` found nothing, and it says "I
+  found no CLAUDE.md, AGENTS.md or .claude/ memory files". No leak
+  marker (working agreement, program-builder, commit-only, mp4-program,
+  memory notes) appears. Call b's `permission_denials`: `[{tool_name:
+  Bash, tool_input: {command: "git status"}}]`, and it reports `cargo
+  1.89.0-nightly (056f5f4f3 2025-05-09)`. Verdict: all 5 true.
+- `scrub_secrets.py --check MP4/ docs/programs/mp4/evidence/` → 0 hits.
+  `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/` → empty.
+- `--check-only` still works: pristine satc skeleton → `"compiles":
+  false`, E0583.
+- `py_compile` (src + tests) exit 0; flake8 (120 cols) exit 0; pyflakes
+  exit 0.
+- Docs-claims check: grepped `TODO-move`, `tools\[\] ==`, `confirm at
+  M3`, `sandbox`. Updated why.md (C2, C3, C4, C6, D-ALLOW…D-FORBID,
+  D-STRUCTOUT), what.md M3 verification line, where.md ratified list,
+  runbook O8 (the wrong sandbox diagnosis corrected). Historical log
+  lines were left as written.
+- Security: the agent's argv is a list (no shell). Config paths cannot
+  escape `MP4/configs`. Streams are scrubbed on write and the scrubber
+  never echoes matches. The smoke ledger caps spend in code. Prompt
+  injection from C sources into agent B is bounded by the tool allowlist
+  (see the finding below). Rate limiting and CSRF do not apply.
+
+**NOT demonstrated**:
+- **The tool restriction has a read-only hole.** Under `dontAsk` the
+  agent ran `ls -a … | head -60`, which is not allowlisted and is piped,
+  and it was approved. Claude Code auto-approves read-only shell
+  commands. Read/Glob/Grep are not path-restricted either. So agent B
+  can read any file the user can, including `~/.claude/CLAUDE.md` and
+  the rest of this repo, if it chooses to. Isolation from *automatic*
+  injection is shown; isolation from deliberate reading is not.
+  Mutating commands (`git status` was denied) appear blocked, but only
+  `git` was tested.
+- The `Edit(//…/subjects/**)` / `Write(…)` denials were never exercised.
+- `--max-turns 2` produced `num_turns: 4`, so how the cap counts is not
+  understood. A 60-turn cap may allow more model turns than intended.
+- No real translation prompt has reached the model. The prompts are
+  unproven on actual work (M4/M6).
+- The rate-limit event shape is taken from C1 and the fake. No real
+  `rate_limit_event` has been observed (none occurred).
+- An expired login gives `is_error` with "Failed to authenticate" and
+  is classified `error`. The loop does not yet stop on it specifically.
+
+**Discoveries logged for later rows**:
+- (M4/M5, security) Close the read-only hole. Candidates: path-scoped
+  `Read(./**)`, `Glob`/`Grep` rules plus an `Read(//<c_dir>/**)` allow;
+  explicit denials for `Bash(cat *)`, `Bash(ls *)`, `Bash(head *)`,
+  `Bash(find *)` and similar; or a sandboxed cwd. Each needs smoke
+  evidence, and only 1 D7 smoke call remains, so testing it costs the
+  last one or needs an owner yes beyond D7.
+- (M4) Treat "Failed to authenticate" as its own outcome that stops the
+  run and points to `claude auth login`, instead of a retryable
+  `error`.
+- (M4) Measure how `--max-turns` maps to `num_turns` on the first real
+  iteration, and record the result in why.md C6.
+- (M4) The pre-run checklist should run `claude auth status` and refuse
+  to start when loggedIn is false. That would have saved attempt 2.
+
+**Queued for owner**: O8 done (CLI logged in). Decision for the next
+phase or the owner: whether to spend the last D7 smoke call verifying a
+tightened tool policy (discovery 1), or to approve calls beyond D7 for
+it. **O1 still deferred.** D8 remains the working assumption, and O1
+must be resolved or consciously accepted before submission.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -372,5 +532,5 @@ submission.
 | O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off 2026-11-15); not yet released by the course as of 2026-10-28; owner checks periodically |
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | open |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
-| O8 | Run `python3 -I MP4/src/run_pipeline.py --project project_1 --smoke` from your own logged-in terminal (runbook Stage 2) | The session shell is sandboxed away from the Claude login (`loggedIn: false`); agent B cannot authenticate from it | M3 close; also every model run (M6, M7, M9) | open |
+| O8 | Log the `claude` CLI in (`claude auth login`) and keep it logged in for model runs (runbook Stage 2) | The CLI's login is separate from the desktop app's; it was logged out, so agent B failed with "OAuth session expired" (first diagnosed, wrongly, as a sandbox issue) | M3 smoke; M6, M7, M9 | **done 2026-10-29** (owner ran `claude auth login`; status loggedIn true, claude.ai, max) |
 | O7 | After the program reports ready-to-merge: merge `mp4-program` into `main` with a merge commit and push `main` before 2026-11-18 23:59 | invariant 6/7 | submission | open |
