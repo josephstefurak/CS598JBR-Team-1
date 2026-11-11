@@ -8,6 +8,14 @@ drift before any code is written.*
 Source of truth for grading: the MP4 handout, 430 points, due 2026-11-18
 23:59. Group 1: project_1 = `satc`, project_2 = `libpsbt` (CRUST-bench).
 
+**Handout v2 (2026-11-11).** The owner supplied a re-export,
+`MP4/docs/MP4 CS598JBR v2 (rubric + newmetrics).pdf` (gitignored). Pages 1-10
+(the assignment body) are text-identical to the original, page by page
+(pypdf extraction, whitespace-normalised, 10/10 same). New material: the
+Canvas rubric (pages 11-15, section RC below) and the staff announcement of
+the unsafe-metrics tool plus the course repo link (pages 15-16, section N
+below). Nothing in R, Z or the bands changes.
+
 ---
 
 ## R — Rubric rows (21 rows, 430 points)
@@ -50,6 +58,96 @@ Safety bands: all zero 25; 1-10 findings 18; 11-20 findings 10; >20 findings 4;
 FFI 0. Idiom bands by clippy sum: 0-10 = 20; 11-20 = 15; 21-30 = 8; more = 3.
 (Handout text for the last idiom band literally reads "more than 22", which
 overlaps the 21-30 band; read as a typo for >30. Verified M1, 2026-10-28.)
+
+## RC — Canvas rubric (handout v2 pages 11-15, read 2026-11-11)
+
+- RC1 21 criteria, 430 points: the same 21 rows and point values as the R
+  table above, in the same order by task. No row added, removed or re-weighted.
+- RC2 Canvas shows every criterion with two ratings only, "Full Marks" and
+  "No Marks". The handout's banded tables (compile 15/10/5/0, safety
+  25/18/10/4/0, idiom 20/15/8/3, correctness proportional) are not encoded as
+  ratings; the criterion text still says "Score is proportional to tests
+  passed". Read: graders type a number per the handout bands; the two ratings
+  are the Canvas default, not an all-or-nothing rule. Unconfirmed by staff.
+- RC3 Asymmetry in the correctness rows: Project 1 says "pass the CRUST-Bench
+  tests"; Project 2 says "pass the CRUST-Bench tests **and any additional
+  grading tests**". For Group 1, Project 2 is libpsbt, the project with the
+  defective `read_test_vector` (H-L1, D8). This raises the weight of the M8
+  behavioural spot checks for libpsbt and of resolving O1.
+- RC4 Safety row wording: "Full credit requires all primary safety metrics to
+  be zero", the four primary metrics named (unsafe lines, unsafe calls, unsafe
+  casts, pointer arithmetic). Matches R-T3-*-SAFETY.
+- RC5 Task 4 safety row: "using the provided unsafe-metrics tool". Proxy
+  numbers alone do not satisfy R-T4-SAFETY-ANALYSIS now that the tool exists.
+- RC6 The Task 1 README criterion links "README.md" to an external page; the
+  course repo's `MP4/README.md` (N6) is a template and is the likely target.
+
+## N — Course release 2026-11-09: `newmetrics` (read from source 2026-11-11)
+
+Repo: https://github.com/Intelligent-CAT-Lab/CS598JBR-Team-0/tree/main/MP4
+(commits 0a75cbc, 32a1650, 4597e75, all 2026-11-09). Contents: `MP4/README.md`
+(template) and `MP4/newmetrics/` (the tool). **No validation script** is in
+the repo as of 2026-11-11; O4/M13 stay blocked.
+
+- N1 Install (staff): from `MP4/newmetrics/`, `cargo install --debug --locked --path . --force`.
+  Its `rust-toolchain.toml` pins `nightly-2025-05-13` with components
+  `rustc-dev` and `llvm-tools-preview`. This machine has neither (installed:
+  cargo, clippy, rust-std, rustc); adding them is a software install, so an
+  owner gate. The repo ships **no `Cargo.lock`** while the command passes
+  `--locked`; whether that installs cleanly is unverified until tried.
+  Installs two binaries into `~/.cargo/bin`: `cargo-newmetrics`, `newmetrics`.
+- N2 Run (staff): from the translated crate root,
+  `cargo newmetrics 2>&1 | python3 aggregate.py --out summary.json`.
+  `aggregate.py` sums every `Label: N` line across compilation units and
+  writes `pointer_arithmetic, unsafe_lines, unsafe_calls, unsafe_casts,
+  total_spans, raw_pointer_dereferences, raw_pointer_declarations,
+  unsafe_ratio`.
+- N3 **Side effects in the crate root**: the analyzer writes
+  `unsafe_spans.txt`, `derefs.txt`, `decls.txt` into the working directory,
+  the documented command writes `summary.json` there, and the driver runs
+  `cargo clean -p <pkg>` then `cargo check`. Run in place this drops files into
+  `MP4/translations/project_N/`, which the outside-src guard and
+  `integrity.py --provenance` treat as violations. M12 must run it on a copy
+  (or a snapshot), never in `translations/`.
+- N4 What it analyses: one `cargo check` per lib target and per `bin` target
+  of the package. satc's `src/bin/satc_test.rs` is an auto-discovered bin, so
+  the harness is analysed too. libpsbt declares `src/bin/test.rs` as
+  `[[test]]`, whose kind is `test`: printed as "not supported" and skipped,
+  but the same file is also an auto-discovered bin (H-L10) and is analysed in
+  that role. Neither harness contains `unsafe` (grep, 2026-11-11).
+  Workspaces are unsupported. Files whose diagnostic path is absolute
+  (dependencies, std) are skipped; macro-expanded code is not skipped.
+- N5 How the metrics are actually computed (differs from the handout's prose):
+  - Unsafe lines = sum of `end_line - start_line + 1` over every user
+    `unsafe { }` block and every `unsafe fn` item (whole item, signature
+    included). Blank and comment lines inside count; nested blocks count twice.
+  - Unsafe calls = every call or method call expression lexically inside an
+    `unsafe { }` block, safe callees included. Calls inside an `unsafe fn`
+    body but outside a block are **not** counted (the flag is set and reset
+    before the walk).
+  - Unsafe casts = every `as` cast inside an `unsafe { }` block, ordinary
+    numeric casts included.
+  - Pointer arithmetic = method calls on a raw-pointer receiver named
+    `add, sub, offset, offset_from, byte_add, byte_sub, byte_offset,
+    wrapping_add, wrapping_sub, wrapping_offset, wrapping_byte_add,
+    wrapping_byte_sub`, anywhere (no unsafe block needed).
+  - Extra: raw-pointer dereferences and raw-pointer-typed bindings, anywhere.
+  - "Total spans" is the crate's source size in **bytes**, so `unsafe_ratio`
+    is lines over bytes and not a meaningful fraction.
+  - `transmute`, FFI and `extern` are not detected by this tool; Z3 stays
+    guarded by `safety_check.py`.
+  Consequence for us: a crate with no `unsafe` block, no `unsafe fn` and no
+  raw pointers scores 0 on all four primary metrics. Both translations carry
+  `#![forbid(unsafe_code)]` (D-FORBID) and the proxy reports 0, so the expected
+  official result is 0/0/0/0 for both. Expected, not measured.
+- N6 Course `MP4/README.md` template headings: `Environment` (bullets: agent
+  framework and version; model(s) and provider/runtime; inference settings;
+  OS/runtime; tools available to the agent; API or usage limits), `Setup`,
+  `Run`, `Pipeline`, `Outputs`, `Evaluation`. Our README covers every item
+  under 14 differently named headings. Whether the unreleased validator
+  matches on these heading names is unknown.
+- N7 The announcement repeats Task 4: run the tool on both final projects and
+  report the four primary metrics in the progress report.
 
 ## Z — Zero-credit traps (verbatim or near-verbatim from the handout)
 
