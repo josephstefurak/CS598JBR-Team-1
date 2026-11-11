@@ -146,6 +146,8 @@ the repo as of 2026-11-11; O4/M13 stay blocked.
   `Run`, `Pipeline`, `Outputs`, `Evaluation`. Our README covers every item
   under 14 differently named headings. Whether the unreleased validator
   matches on these heading names is unknown.
+  **M15 (2026-11-11):** the README now uses these six headings, with the 14
+  former sections as subsections.
 - N7 The announcement repeats Task 4: run the tool on both final projects and
   report the four primary metrics in the progress report.
 

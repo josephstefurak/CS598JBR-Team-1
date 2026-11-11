@@ -67,7 +67,7 @@ the specific conflict rather than picking an alternative.*
 | M9 | Tuning rerun | **dropped (owner accepted M6/M7 results)** | 2026-10-29 (M8 gate) | D-M8GATES: "Neither (Recommended)". The three approved orchestration changes went to `post-merge.md` |
 | M10 | Results, README final, report draft | **done** | 2026-10-29 — 73be41e | `summarize.py` exit 0, results equal `--check-only` for both projects; satc 4/4 100.0% 2 iter, libpsbt 3/4 75.0% 2 iter, agent clippy 0/0/0/0 both, proxy safety 0 (labelled PENDING official); usage: 4 `rate_limit_event` all `allowed`, 0 pauses; README 14 headings, tool diff empty both ways; report draft 6 sections, 5 tex + 6 md blocks byte-identical to the generator, 4 examples / 22 cited lines all grep; `grep -c PENDING` .tex = 4 (recorded as 3 at M10, corrected at M11: the count was taken before the last PENDING sentence was added); selftest 214 → 233 (+19), 5/5 mutations caught; .tex not compiled (no LaTeX engine) |
 | M11 | Review 3: fresh-clone rubric walk, consistency, submittable as-is | **done** | 2026-10-29 — 2cb0ce8 (fixes) | fresh clone at 16e2377: help/dry-run/check-only/provenance/summarize/check-readme/check-report all exit 0, selftest 233/0; 21 rubric rows: 13 verified, the 8 owner-blocked ones proxy/drafted; T4 vs handout 37/37; consistency 23 items 0 mismatches; integrity sweep clean (literal `sk-ant-` history count 8 = self-quoting doc lines, key-shaped 0); `/code-review max` 10 angles + 3 verifiers + sweep: 32 + 2 defects, 31 + 2 fixed or partly fixed, 1 refuted, M8 → PM6, D10 code → M12; selftest 233 → 266 (+33), 18/18 mutations caught; review-3.md with the submission-as-is statement |
-| M15 | Handout-v2 alignment: untrack report-type files, README to the course template | **not-started** | — | Added by the 2026-11-11 amendment; runs before M12 (IDs are not reused). Selftest baseline 266 |
+| M15 | Handout-v2 alignment: untrack report-type files, README to the course template | **done** | 2026-11-11 — c18bdd4 | 9 files untracked (2 drafts, 5 `results/*.tex`, traceability map, forum-post draft), all still on disk and gitignored; README: 6 template `##` headings in order, 6 Environment bullets, 14 former sections kept as `###` (239 of 246 old lines verbatim, the 7 others are the reference fixes); `summarize.py --tex` added, absent draft → `local draft absent, skipped` exit 0; selftest 266 → 279 (+13), 0 FAIL, same in a fresh clone; fresh clone: check-only, provenance, `--check-readme`, `--check-report` all exit 0; `results.md` byte-identical; runs before M12 (IDs are not reused) |
 | M12 | Course unsafe-metrics tool: install, adapter, retroactive run, table swap | **not-started** | — | Spec rewritten 2026-11-11 from the tool's source (why.md N); tool released 2026-11-09; install pre-approved (D-TOOL); runs after M15 |
 | M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released as of 2026-11-11; when it appears the owner names its path and a session flips this row to not-started; from 2026-11-17 a session marks it dropped)** | — | Cut-off 2026-11-17 (D9 revised) |
 | M14 | Review 4: final rubric walk, local report draft, merge handoff | **not-started** | — | Spec rewritten 2026-11-11 (no Overleaf precondition, D-REPORT). Runs after M12 and after M13 is done or dropped |
@@ -1633,6 +1633,139 @@ cb0eb35), on the plan the owner approved the same day.
   0/0/0/0 is a reading of its source, not a measurement. The README has not
   been restructured. Whether the validator checks README heading names is
   unknown. O1 is still open.
+
+### M15 — Handout-v2 alignment: untrack report-type files, README to the course template (2026-11-11, c18bdd4 + this commit)
+
+**Shipped** (product terms): The repository no longer carries the report
+drafts, the LaTeX table fragments, the rubric traceability map or the
+forum-post draft; they stay on the owner's machine as local working files.
+A grader who clones the repository can run every evaluation command without
+them. `MP4/README.md` now follows the course template: the six headings
+`Environment`, `Setup`, `Run`, `Pipeline`, `Outputs`, `Evaluation`, with the
+template's six Environment bullets filled in, and everything the README said
+before is still there as subsections.
+
+**Deviations from spec / judgment calls**:
+- "Generate the `.tex` fragments when the files are present or asked for"
+  was implemented as: a new `summarize.py --tex` flag asks for them; without
+  it the default mode refreshes them only where `results/` already holds a
+  `.tex` file. Considered: always writing them (they are gitignored anyway).
+  Rejected because a grader's clone would then grow files the README does
+  not describe.
+- `--report` (not only `--check-report`) also prints `local draft absent,
+  skipped` and exits 0 without a draft: the draft is a hand-written file with
+  markers, so there is nothing to generate it from. If only one of the two
+  drafts is on disk, that one is processed and the other is named as skipped.
+- The absent-draft exit comes after the existing run_summary/check-only
+  equality and missing-run checks, so those still exit 1 and 2 on a clone
+  (selftest cases M11 S1 pass in the clone).
+- README placement decided here: API/usage limits and the tools-used table
+  under `Environment`; diagram, stopping condition, infrastructure
+  interventions and the academic-integrity statement under `Pipeline`;
+  repository layout under `Outputs`. The "Evaluating without a Claude
+  subscription" block was the second half of "How to run the pipeline"; it
+  moved under `Evaluation` as its own subsection (its bold lead-in became the
+  heading). In its command list the `--check-report` line was replaced by
+  `--check-readme`, and a paragraph explains that the report files are local.
+- The six Environment bullets are one-line summaries of facts already in the
+  subsections (versions, model, settings). No new value was introduced. The
+  template was read from the public course repo
+  (`Intelligent-CAT-Lab/CS598JBR-Team-0`, `MP4/README.md`) to get the exact
+  bullet labels; the selftest enforces them.
+- The selftest gained an assertion that no report-type path is tracked
+  (`git ls-files`); it prints SKIP outside a git checkout.
+- `summarize.py` (existing code) changed. Before: it always wrote five `.tex`
+  fragments and `--report`/`--check-report` crashed into exit 2 when a draft
+  was missing. That had to change because the files are no longer in the
+  repository.
+- The phase commit and this ledger commit are separate, as in earlier phases
+  (a commit cannot contain its own hash).
+
+**Owner gates**: none on this row. No spend: no model call was made.
+
+**Tooling**: none (spec). Considered `/code-review`; not run, the closing
+review covers this diff.
+
+**Verification** (real output):
+- `git ls-files | grep -E 'report_mp4_draft|rubric_traceability|results/.*\.tex$|forum-post-draft'`
+  → no output (rc 1). `ls` on disk: all 9 files present with their previous
+  sizes (drafts 25776 / 28641 bytes, traceability 27961, forum post 2526,
+  five `.tex`), sha256 of every one unchanged after the session's
+  `summarize.py` run.
+- `python3 -I -m py_compile MP4/src/*.py` exit 0; `flake8 --max-line-length
+  120` exit 0; `pyflakes` exit 0 (no typechecker is installed for this
+  project).
+- `python3 -I MP4/src/selftest.py` → `selftest: 279 PASS, 0 FAIL`
+  (266 → 279, +13: 3 README layout assertions replace 1, 11 new M15 cases).
+- Working tree: `scrub_secrets.py --check MP4/` → `0 hit(s)`;
+  `run_pipeline.py --help` exit 0; `--check-only` project_1 and project_2
+  exit 0, summary diff against the committed check.json `{}` for both;
+  `integrity.py --provenance` exit 0 for both; `summarize.py` → `results
+  equal --check-only for 2 project(s)`; `results.md` sha256 `ee3b5aad030c…`
+  before and after; `git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/` → no
+  output (the `docs/` half still matches only self-quoting lines, M1
+  discovery).
+- Fresh clone of `mp4-program` at c18bdd4 (`MP4/docs` holds only
+  `environment.md` and `pipeline_diagram.mmd`; `MP4/results` has no `.tex`):
+  `selftest.py` → `selftest: 279 PASS, 0 FAIL`, exit 0; `--check-only` exit
+  0 for both projects; provenance exit 0 for both; `summarize.py
+  --check-readme` → `README generated sections: up to date`, exit 0;
+  `--check-report` → `local draft absent, skipped`, exit 0; `--report` → the
+  same, exit 0; `summarize.py` wrote only `results.md` and
+  `repair_mining.md`, `git diff --stat` on both empty; scrub 0 hits.
+- README: `## ` headings are exactly `Environment, Setup, Run, Pipeline,
+  Outputs, Evaluation`; all 14 former titles grep as `### `; of the old
+  README's 246 non-blank lines, 239 are carried verbatim and the 7 others are
+  the intended edits (the bold lead-in that became a heading, 2 command
+  lines, the TikZ note, 3 layout lines naming untracked files).
+- Tool list: `grep -oh '"name":"[A-Za-z]*"' …agent.stream.jsonl | sort -u` →
+  Bash, Edit, Glob, Grep, Read, StructuredOutput, Write: the seven in the
+  README table.
+- Docs-claims check: grepped `report_mp4_draft|rubric_traceability|
+  results/.*\.tex|forum-post-draft|check-report|LaTeX|fragment|heading` over
+  `CLAUDE.md`, `docs/programs/mp4/` and `MP4/`. Fixed 7 README lines and
+  why.md N6 (1 line added). what.md's later specs, the runbook and CLAUDE.md
+  already described the files as local (2026-11-11 amendment). Historical
+  phase-log lines were left as written.
+- Security: no input, auth, storage or network surface changed. The one new
+  subprocess (selftest `git ls-files`) is an argv list with fixed arguments.
+- After the push: see the report (the ls-tree check runs after this commit).
+
+**NOT demonstrated**:
+- Whether the unreleased course validator checks README heading names, or
+  expects content directly under a heading rather than in subsections.
+- The README was not rendered on GitHub; the Mermaid block and tables were
+  only moved, not viewed.
+- `--tex` and `--report` were exercised by the selftest on temp copies and
+  by one default run here that refreshed the existing fragments; `--tex` was
+  not run from the CLI on a clone.
+- The fresh clone was made from the local repository before the push, on
+  this machine with the toolchain already installed; nothing was tested on
+  another machine or OS.
+- The selftest's untracked-files assertion was not exercised in its SKIP
+  branch (no non-git copy was run).
+
+**Discoveries logged for later rows**:
+- (M12) The README intro and "External tools available to the agent" still
+  say the course tool "has not been released"; stale since 2026-11-09. Left
+  alone here (M15 forbids prose rewrites and safety-tool work). M12's spec
+  item 4 names a "README safety section", which does not exist as a heading:
+  the safety text lives in the intro, the tools subsection and the
+  tools-used table.
+- (M12/M14) `--check-only` rewrites `results/project_N.check.json` and its
+  logs with a new `generated_at`, a different test-name order and cargo's
+  varying warning-summary lines even when every measurement is equal. After
+  the floor the tree is not clean until `git checkout -- MP4/results/`. This
+  session restored them. A grader who runs the README commands sees the same
+  noise in `git status`.
+- (post-merge candidate) `summarize.py --tex` combined with a stale local
+  draft is not cross-checked; `--check-report` is the only guard, and it now
+  runs only where the draft exists.
+
+**Queued for owner**: nothing new. **O1 is still open** (asked in class
+2026-11-11, no answer recorded); D8 remains the working assumption and it
+must be resolved or consciously accepted before submission. O4 (validator)
+still open with the 2026-11-17 cut-off. Next runnable row: M12.
 
 ## Owner-action queue (only the owner can clear these)
 
