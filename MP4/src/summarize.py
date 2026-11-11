@@ -1,15 +1,20 @@
-"""Generate MP4/results/results.md, LaTeX table fragments, and the generated README sections.
+"""Generate MP4/results/results.md, the generated README sections and, locally, the report-draft tables.
 
 Every number comes from committed artifacts: trajectories/<project>/run_summary.json (the final run) and
 results/<project>.check.json (run_pipeline.py --check-only on the committed translation). The two must
 agree on every reported field, or nothing is written (why.md standing priority 2). README sections between
 `<!-- BEGIN GENERATED: name -->` and `<!-- END GENERATED: name -->` are rendered from configs/pipeline.yaml.
 
-  summarize.py                 results for both projects
+  summarize.py                 results for both projects (results.md, repair_mining.md)
+  summarize.py --tex           the same, plus the LaTeX table fragments results/*.tex
   summarize.py --readme        rewrite the generated README sections
   summarize.py --check-readme  exit 1 if the README sections are out of date
   summarize.py --report        fill the generated tables in docs/report_mp4_draft.md and .tex
   summarize.py --check-report  exit 1 if those tables are out of date
+
+The report draft and the LaTeX fragments are local working files and are not part of the repository (the team writes
+the report by hand). Without --tex the fragments are refreshed only where results/ already holds one. When no draft
+is on disk, --report and --check-report print `local draft absent, skipped` and exit 0.
 
 Exit codes: 0 ok; 1 out of date, or run_summary.json and check.json disagree; 2 an input is missing (PENDING) or a
 report draft's generated blocks are broken (the message names the file and line).
@@ -156,16 +161,25 @@ def render_tex(rows):
             "idiom.tex": "\n".join(idiom) + "\n"}
 
 
-def write_results(entries, out_dir, trends=None, usage=None, mining=None):
-    """trends/usage/mining (M10) are optional so a run without trajectories (the selftest fixture) still works."""
+def has_tex_fragments(out_dir):
+    """True when out_dir already holds a LaTeX fragment, i.e. this is a working copy that keeps the local ones."""
+    return os.path.isdir(out_dir) and any(n.endswith(".tex") for n in os.listdir(out_dir))
+
+
+def write_results(entries, out_dir, trends=None, usage=None, mining=None, tex=None):
+    """trends/usage/mining (M10) are optional so a run without trajectories (the selftest fixture) still works.
+    tex: True writes the LaTeX fragments, False never does, None (default) only refreshes them where out_dir
+    already has one. They are local, untracked files (M15), so a fresh clone gets none unless asked."""
     rows = build_rows(entries)
     os.makedirs(out_dir, exist_ok=True)
     paths = [os.path.join(out_dir, "results.md")]
     with open(paths[0], "w", encoding="utf-8") as fh:
         fh.write(render_markdown(rows, trends, usage))
-    files = render_tex(rows)
-    for t in trends or []:
-        files["trend_%s.tex" % t["project"]] = render_trend_tex(t)
+    files = {}
+    if tex or (tex is None and has_tex_fragments(out_dir)):
+        files.update(render_tex(rows))
+        for t in trends or []:
+            files["trend_%s.tex" % t["project"]] = render_trend_tex(t)
     if mining is not None:
         files["repair_mining.md"] = mining
     for name, text in files.items():
@@ -654,14 +668,19 @@ def _write_atomic(path, text):
 
 def update_report(blocks, check):
     """Fill (or, with check, compare) the generated blocks of both report drafts. Both are rendered before either
-    is written, so a broken draft leaves both untouched (review 3, S3). Returns the out-of-date paths."""
+    is written, so a broken draft leaves both untouched (review 3, S3). Returns the out-of-date paths. The drafts
+    are local, untracked files (M15): one that is not on disk is left out, and None is returned when neither is."""
     md, tx = blocks
     plan = []
     for path, sections, markers, what in ((REPORT_MD, md, MD_MARKERS, "report .md"),
                                           (REPORT_TEX, tx, TEX_MARKERS, "report .tex")):
+        if not os.path.isfile(path):
+            continue
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
         plan.append((path, text, fill_blocks(text, sections, markers, what)))
+    if not plan:
+        return None
     stale = [mc.rel(path, mc.REPO_DIR) for path, text, new in plan if new != text]
     if not check:
         for path, text, new in plan:
@@ -735,8 +754,12 @@ def main(argv=None):
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--readme", action="store_true")
     mode.add_argument("--check-readme", action="store_true")
-    mode.add_argument("--report", action="store_true", help="fill the generated blocks of docs/report_mp4_draft.*")
-    mode.add_argument("--check-report", action="store_true", help="exit 1 if those blocks are out of date")
+    mode.add_argument("--report", action="store_true",
+                      help="fill the generated blocks of the local docs/report_mp4_draft.* (skipped when absent)")
+    mode.add_argument("--check-report", action="store_true",
+                      help="exit 1 if those blocks are out of date (exit 0 and a note when no local draft exists)")
+    mode.add_argument("--tex", action="store_true",
+                      help="results as in the default mode, plus the local LaTeX table fragments results/*.tex")
     a = ap.parse_args(argv)
     if a.readme or a.check_readme:
         pipeline = config.validate_pipeline(config._load_yaml(mc.PIPELINE_YAML))
@@ -777,13 +800,19 @@ def main(argv=None):
         usage = usage_digest(entries)
         if a.report or a.check_report:
             stale = update_report(report_blocks(rows, trends, usage), a.check_report)
+            if stale is None:
+                print("local draft absent, skipped")
+                return 0
+            absent = [mc.rel(p, mc.REPO_DIR) for p in (REPORT_MD, REPORT_TEX) if not os.path.isfile(p)]
+            if absent:
+                print("local draft absent, skipped: %s" % ", ".join(absent))
             if a.check_report:
                 print("report generated blocks: %s" % ("OUT OF DATE: " + ", ".join(stale) if stale else "up to date"))
                 return 1 if stale else 0
             print("report generated blocks written%s" % (": " + ", ".join(stale) if stale else " (no change)"))
             return 0
         mining = render_mining(entries)
-        for p in write_results(entries, mc.RESULTS_DIR, trends, usage, mining):
+        for p in write_results(entries, mc.RESULTS_DIR, trends, usage, mining, tex=True if a.tex else None):
             print("wrote %s" % mc.rel(p, mc.REPO_DIR))
     except (ValueError, OSError) as exc:   # a broken report draft or an unreadable trajectory: say which, exit 2
         print("summarize: %s" % exc, file=sys.stderr)

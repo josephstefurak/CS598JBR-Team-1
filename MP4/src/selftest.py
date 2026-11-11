@@ -9,7 +9,9 @@ in the repository is modified.
 
 Prints PASS/FAIL per assertion and a final count; exit 1 if anything failed.
 """
+import contextlib
 import glob
+import io
 import json
 import os
 import shutil
@@ -45,6 +47,40 @@ def expect(name, actual, expected):
 
 def expect_true(name, cond, detail=""):
     return expect(name + ((" (%s)" % detail) if detail else ""), bool(cond), True)
+
+
+# MP4/README.md follows the course template (why.md N6): six `##` headings, the Environment bullets, and our
+# sections as `###` under the heading they belong to (M15).
+README_TEMPLATE_HEADINGS = ["Environment", "Setup", "Run", "Pipeline", "Outputs", "Evaluation"]
+README_ENV_BULLETS = ["Agent framework and version", "Model(s) and provider/runtime",
+                      "Inference settings (temperature, token limits, etc.)", "OS/runtime",
+                      "Tools available to the agent", "API or usage limits"]
+README_SECTIONS = {
+    "Environment": ["Agentic framework and version", "Model(s) and provider / runtime", "Inference settings",
+                    "OS and runtime", "External tools available to the agent",
+                    "API and usage limits that affected the experiment", "Models, frameworks and tools used"],
+    "Setup": ["Dependency installation"],
+    "Run": ["How to run the pipeline"],
+    "Pipeline": ["Pipeline diagram", "Stopping condition", "Infrastructure interventions", "Academic integrity"],
+    "Outputs": ["Repository layout"],
+    "Evaluation": ["Evaluating without a Claude subscription"],
+}
+
+
+def _readme_sections(text):
+    """{`##` heading: [its `###` headings, in order]}, ignoring fenced code blocks."""
+    out, cur, fenced = {}, None, False
+    for ln in text.split("\n"):
+        if ln.lstrip().startswith("```"):
+            fenced = not fenced
+        elif fenced:
+            continue
+        elif ln.startswith("## "):
+            cur = ln[3:]
+            out[cur] = []
+        elif ln.startswith("### ") and cur is not None:
+            out[cur].append(ln[4:])
+    return out
 
 
 def fresh_copy(tmp_root, label):
@@ -223,6 +259,7 @@ def _run(tmp_root):
     _run_m8(tmp_root)
     _run_m10(tmp_root)
     _run_m11(tmp_root)
+    _run_m15(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -543,14 +580,15 @@ def _run_m4(tmp_root):
            (code, [(t["iteration"], t["modified"], t["reverted"]) for t in st.get("workspace_tamper", [])],
             "// hand edit" in ws_text), (0, [(2, ["fixture.rs"], True)], False))
 
-    # README: required headings, generated sections equal pipeline.yaml
+    # README: the course template's six headings in order (M15), the sections under them, generated sections
     with open(summarize.README, encoding="utf-8") as fh:
         readme = fh.read()
-    required = ["Agentic framework and version", "Model(s) and provider / runtime", "Inference settings",
-                "OS and runtime", "External tools available to the agent", "Dependency installation",
-                "How to run the pipeline", "Stopping condition", "API and usage limits that affected the experiment",
-                "Models, frameworks and tools used", "Repository layout", "Infrastructure interventions"]
-    expect("README: every required heading", [h for h in required if "\n## %s\n" % h not in readme], [])
+    expect("README: exactly the course template's six ## headings, in order",
+           [ln[3:] for ln in readme.split("\n") if ln.startswith("## ")], README_TEMPLATE_HEADINGS)
+    expect("README: every section sits under its template heading", _readme_sections(readme), README_SECTIONS)
+    env = readme.split("\n## Environment\n", 1)[-1].split("\n### ", 1)[0]
+    expect("README: Environment opens with the template's six bullets",
+           [ln[2:].split(":", 1)[0] for ln in env.split("\n") if ln.startswith("- ")], README_ENV_BULLETS)
     pipeline = config.validate_pipeline(config._load_yaml(mc.PIPELINE_YAML))
     expect("README: generated sections equal pipeline.yaml",
            summarize.render_readme(readme, summarize.generated_sections(pipeline)) == readme, True)
@@ -1705,7 +1743,8 @@ def _run_m11(tmp_root):
         summarize.REPORT_MD, summarize.REPORT_TEX = saved_md, saved_tex
 
     # S1/S9: main() on the committed tree and on broken copies (read-only modes only)
-    expect("M11 S9: the committed report drafts are current (summarize.py --check-report)",
+    # (M15) the drafts are local, untracked files: current where they exist, skipped with exit 0 on a clone
+    expect("M11 S9: summarize.py --check-report exits 0 (local drafts current, or absent and skipped)",
            summarize.main(["--check-report"]), 0)
     saved_traj, saved_res = mc.TRAJECTORIES_DIR, mc.RESULTS_DIR
     try:
@@ -1728,6 +1767,90 @@ def _run_m11(tmp_root):
                summarize.main(["--check-report"]), 1)
     finally:
         summarize.mc.TRAJECTORIES_DIR, summarize.mc.RESULTS_DIR = saved_traj, saved_res
+
+
+def _main_out(argv):
+    """(exit code, stdout) of summarize.main(argv)."""
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = summarize.main(argv)
+    return code, buf.getvalue()
+
+
+def _run_m15(tmp_root):
+    """M15: the report drafts and the LaTeX fragments are local, untracked files. Nothing may depend on them."""
+    ddir = os.path.join(tmp_root, "m15")
+    os.makedirs(ddir)
+    blocks = ({"overall": "md table"}, {"overall": "tex rows"})
+    saved_md, saved_tex = summarize.REPORT_MD, summarize.REPORT_TEX
+    try:
+        summarize.REPORT_MD = os.path.join(ddir, "absent.md")
+        summarize.REPORT_TEX = os.path.join(ddir, "absent.tex")
+        expect("M15: update_report with no draft on disk returns None", summarize.update_report(blocks, True), None)
+        code, out = _main_out(["--check-report"])
+        expect("M15: --check-report without a local draft is skipped with exit 0",
+               (code, out.strip()), (0, "local draft absent, skipped"))
+        code, out = _main_out(["--report"])
+        expect("M15: --report without a local draft is skipped with exit 0 and creates nothing",
+               (code, out.strip(), os.listdir(ddir)), (0, "local draft absent, skipped", []))
+        with open(summarize.REPORT_MD, "w", encoding="utf-8") as fh:   # only one of the two drafts present
+            fh.write("<!-- BEGIN GENERATED: overall -->\nstale\n<!-- END GENERATED: overall -->\n")
+        expect("M15: with one draft present only that one is checked",
+               summarize.update_report(blocks, True), [mc.rel(summarize.REPORT_MD, mc.REPO_DIR)])
+        summarize.update_report(blocks, False)
+        expect("M15: ... and filled, without creating the other",
+               (summarize.update_report(blocks, True), os.path.exists(summarize.REPORT_TEX)), ([], False))
+        with open(summarize.REPORT_MD, "w", encoding="utf-8") as fh:
+            fh.write("<!-- BEGIN GENERATED: overal -->\n<!-- END GENERATED: overal -->\n")
+        try:
+            summarize.update_report(blocks, True)
+            expect("M15: a broken draft that is present is still refused", "accepted", "ValueError")
+        except ValueError:
+            expect("M15: a broken draft that is present is still refused", "ValueError", "ValueError")
+    finally:
+        summarize.REPORT_MD, summarize.REPORT_TEX = saved_md, saved_tex
+
+    # LaTeX fragments: written when asked for, refreshed where one exists, never created on their own
+    entries = []
+    for project in mc.PROJECTS:
+        with open(os.path.join(mc.TRAJECTORIES_DIR, project, "run_summary.json"), encoding="utf-8") as fh:
+            rsum = json.load(fh)
+        with open(os.path.join(mc.RESULTS_DIR, "%s.check.json" % project), encoding="utf-8") as fh:
+            entries.append({"label": project, "project": project, "run_summary": rsum, "check": json.load(fh)})
+    trends = [summarize.iteration_trend(e["project"], e["label"], e["run_summary"]) for e in entries]
+    names = lambda d: sorted(os.listdir(d))   # noqa: E731
+    clone = os.path.join(ddir, "clone_results")
+    summarize.write_results(entries, clone, trends, mining="m\n")
+    expect("M15: default results on a tree without fragments write no .tex",
+           names(clone), ["repair_mining.md", "results.md"])
+    summarize.write_results(entries, clone, trends, mining="m\n", tex=True)
+    all_names = ["idiom.tex", "overall.tex", "repair_mining.md", "results.md", "safety.tex"] + [
+        "trend_%s.tex" % p for p in mc.PROJECTS]
+    expect("M15: --tex writes every fragment", names(clone), sorted(all_names))
+    _edit(os.path.join(clone, "overall.tex"), "&", "& stale &")
+    summarize.write_results(entries, clone, trends, mining="m\n")
+    with open(os.path.join(clone, "overall.tex"), encoding="utf-8") as fh:
+        expect_true("M15: fragments already on disk are refreshed by the default mode", "stale" not in fh.read())
+    off = os.path.join(ddir, "off_results")
+    shutil.copytree(clone, off)
+    os.remove(os.path.join(off, "safety.tex"))
+    summarize.write_results(entries, off, trends, mining="m\n", tex=False)
+    expect_true("M15: tex=False leaves fragments alone", "safety.tex" not in names(off))
+
+    # the report-type files are not tracked (D-UNTRACK); skipped where there is no git checkout
+    import subprocess
+    try:
+        ls = subprocess.run(["git", "-C", mc.REPO_DIR, "ls-files", "-z", "--", "MP4", "docs"], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, timeout=60)
+        tracked = ls.stdout.decode("utf-8", "replace").split("\0") if ls.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        tracked = None
+    if tracked is None:
+        print("SKIP  M15: report-type files are untracked (not a git checkout)")
+    else:
+        bad = [t for t in tracked if t.startswith("MP4/docs/report_mp4_draft.") or t.endswith("forum-post-draft.md")
+               or t == "MP4/docs/rubric_traceability.md" or (t.startswith("MP4/results/") and t.endswith(".tex"))]
+        expect("M15: no report-type file is tracked (D-UNTRACK)", bad, [])
 
 
 if __name__ == "__main__":

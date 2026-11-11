@@ -2,3 +2,10 @@ __pycache__/
 
 # Assignment handouts (local reference only, never committed)
 MP4/docs/*.pdf
+
+# Report-type files: local only, never committed (docs/programs/mp4/why.md D-UNTRACK)
+MP4/docs/report_mp4_draft.md
+MP4/docs/report_mp4_draft.tex
+MP4/docs/rubric_traceability.md
+MP4/results/*.tex
+docs/programs/mp4/forum-post-draft.md

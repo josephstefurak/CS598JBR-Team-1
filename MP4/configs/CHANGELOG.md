@@ -102,3 +102,23 @@ stopped at SUCCESS with no violation, pause or ship-best (review-2.md § 6, "Eff
 - The leak scan reads every block the agent wrote, including Write/Edit/Bash inputs and the final status.
   It records `null` (unknown) when the stream cannot be read, and also scans interrupted attempts.
 - `loop.min_iterations` may not exceed `loop.no_progress_rounds + 1`.
+
+## 2026-11-11 — repository layout and README aligned with the course template (program phase M15; no file under configs/ changed)
+
+Infrastructure change. Program logic affected: no. No prompt, configuration value, pipeline behaviour,
+translation, trajectory or measured number changed; `results/results.md` is byte-identical.
+
+Evidence: the course released a README template on 2026-11-09 (headings `Environment`, `Setup`, `Run`,
+`Pipeline`, `Outputs`, `Evaluation`), and the team decided on 2026-11-11 to write the progress report by
+hand outside the repository.
+
+- `README.md` now uses the template's six headings in that order, with the template's six `Environment`
+  bullets. The former sections are unchanged in content and sit as subsections under the heading they
+  belong to. The check-only instructions moved from "How to run the pipeline" to `Evaluation`.
+- The report draft, the LaTeX table fragments under `results/`, the rubric traceability map and a
+  forum-post draft are no longer part of the repository. They remain in the earlier history.
+- `src/summarize.py`: the LaTeX fragments are written only with `--tex`, or refreshed where `results/`
+  already holds one. `--report` and `--check-report` print `local draft absent, skipped` and exit 0 when no
+  draft is on disk. `results.md` and `repair_mining.md` are generated exactly as before.
+- `src/selftest.py`: the README check enforces the six template headings, the section placement and the
+  `Environment` bullets; new cases cover a tree without the local drafts and fragments.
