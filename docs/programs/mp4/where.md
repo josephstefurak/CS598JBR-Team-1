@@ -68,7 +68,7 @@ the specific conflict rather than picking an alternative.*
 | M10 | Results, README final, report draft | **done** | 2026-10-29 — 73be41e | `summarize.py` exit 0, results equal `--check-only` for both projects; satc 4/4 100.0% 2 iter, libpsbt 3/4 75.0% 2 iter, agent clippy 0/0/0/0 both, proxy safety 0 (labelled PENDING official); usage: 4 `rate_limit_event` all `allowed`, 0 pauses; README 14 headings, tool diff empty both ways; report draft 6 sections, 5 tex + 6 md blocks byte-identical to the generator, 4 examples / 22 cited lines all grep; `grep -c PENDING` .tex = 4 (recorded as 3 at M10, corrected at M11: the count was taken before the last PENDING sentence was added); selftest 214 → 233 (+19), 5/5 mutations caught; .tex not compiled (no LaTeX engine) |
 | M11 | Review 3: fresh-clone rubric walk, consistency, submittable as-is | **done** | 2026-10-29 — 2cb0ce8 (fixes) | fresh clone at 16e2377: help/dry-run/check-only/provenance/summarize/check-readme/check-report all exit 0, selftest 233/0; 21 rubric rows: 13 verified, the 8 owner-blocked ones proxy/drafted; T4 vs handout 37/37; consistency 23 items 0 mismatches; integrity sweep clean (literal `sk-ant-` history count 8 = self-quoting doc lines, key-shaped 0); `/code-review max` 10 angles + 3 verifiers + sweep: 32 + 2 defects, 31 + 2 fixed or partly fixed, 1 refuted, M8 → PM6, D10 code → M12; selftest 233 → 266 (+33), 18/18 mutations caught; review-3.md with the submission-as-is statement |
 | M15 | Handout-v2 alignment: untrack report-type files, README to the course template | **done** | 2026-11-11 — c18bdd4 | 9 files untracked (2 drafts, 5 `results/*.tex`, traceability map, forum-post draft), all still on disk and gitignored; README: 6 template `##` headings in order, 6 Environment bullets, 14 former sections kept as `###` (239 of 246 old lines verbatim, the 7 others are the reference fixes); `summarize.py --tex` added, absent draft → `local draft absent, skipped` exit 0; selftest 266 → 279 (+13), 0 FAIL, same in a fresh clone; fresh clone: check-only, provenance, `--check-readme`, `--check-report` all exit 0; `results.md` byte-identical; runs before M12 (IDs are not reused) |
-| M12 | Course unsafe-metrics tool: install, adapter, retroactive run, table swap | **not-started** | — | Spec rewritten 2026-11-11 from the tool's source (why.md N); tool released 2026-11-09; install pre-approved (D-TOOL); runs after M15 |
+| M12 | Course unsafe-metrics tool: install, adapter, retroactive run, table swap | **done** | 2026-11-11 — cf6a831 | `newmetrics` 0.1.0 @ 4597e75 installed outside the repo, staff command with `--locked` exit 0 (no gate needed); official metrics 0/0/0/0 and 0 raw-pointer derefs/decls for both final crates and all 4 snapshots (2 compilation units each); proxy equals course on both; `safety.tool: both`; `official_safety/2026-11-11/` 16 files per project; `results.md` and README PENDING count 0; selftest 279 → 316 (+37), 0 FAIL, same in a fresh clone; provenance exit 0 before and after; translations byte-identical; no nonzero-metric gate |
 | M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released as of 2026-11-11; when it appears the owner names its path and a session flips this row to not-started; from 2026-11-17 a session marks it dropped)** | — | Cut-off 2026-11-17 (D9 revised) |
 | M14 | Review 4: final rubric walk, local report draft, merge handoff | **not-started** | — | Spec rewritten 2026-11-11 (no Overleaf precondition, D-REPORT). Runs after M12 and after M13 is done or dropped |
 
@@ -1766,6 +1766,184 @@ review covers this diff.
 2026-11-11, no answer recorded); D8 remains the working assumption and it
 must be resolved or consciously accepted before submission. O4 (validator)
 still open with the 2026-11-17 cut-off. Next runnable row: M12.
+
+### M12 — Course unsafe-metrics tool: install, adapter, retroactive run, table swap (2026-11-11, cf6a831 + this commit)
+
+**Shipped** (product terms): The safety numbers in the repository are now
+the official ones. The course's `newmetrics` tool is installed on the
+pipeline machine and is the pipeline's safety backend. Both final
+translations, and every iteration of both runs, were measured with it: all
+four graded metrics are 0 everywhere. The raw tool output is committed
+beside the trajectories, the results table names the tool, and the README
+tells a grader how to install the tool, how to reproduce the numbers and how
+the tool actually counts. Nothing in the generated Rust changed and no run
+was repeated.
+
+**Deviations from spec / judgment calls**:
+- Second phase in one session: the owner invoked `/mp4-phase` again in the
+  session that ran M15. Treated as the owner's waiver of
+  one-phase-per-session, as in the M2-M4 sessions.
+- Clone location `~/cs598jbr-course-tools/CS598JBR-Team-0` (the spec only
+  says "outside this repo"). `main` was still at `4597e75`, so there was no
+  diff to read; the driver, analyzer entry point, aggregator and every
+  output/process call were re-read before the install.
+- New config key `safety.course_aggregate` (the spec names only `course_cmd`
+  and `course_version`). The staff command is a shell pipeline; the adapter
+  runs its two halves as argv lists without a shell, so it needs the path of
+  `aggregate.py`. `MP4_NEWMETRICS_AGGREGATE` overrides it for another
+  machine. The path in `pipeline.yaml` uses `~`, no user name.
+- The adapter also sums the metric lines itself and requires the staff
+  `summary.json` to equal that sum. Reason: the selftest must work on a
+  machine without the tool, and a silent disagreement would be a wrong
+  published number.
+- `safety.tool` accepts `proxy` or `both`; `course` alone was removed from
+  the validator (it was never used). The course tool has no forbid, FFI,
+  `build.rs` or dependency guard.
+- `both` when the tool is missing or fails: the result is labelled `proxy`,
+  carries a `course_tool_unavailable` / `course_tool_failed` finding that
+  blocks SUCCESS in the loop, and `--check-only` prints a NOTE and exits 0.
+  Considered failing `--check-only` outright; rejected because a grader
+  without the tool could then not re-measure anything else.
+- `run_summary.json`: the spec says "update the safety blocks". An
+  `official_safety` block was **added**; the run's own `final` block and the
+  `iteration_summary.json` files still say `safety_tool: proxy`, because
+  that is what the run measured at the time. The trend tables read the
+  official per-iteration totals from the new block.
+- Spec step 3 names `safety_check.py --all-snapshots`; the storing mode is a
+  new `--official` (final crate + every snapshot of the final run + index +
+  `run_summary.json`). `--all-snapshots --tool course` also works and only
+  prints.
+- File names under `official_safety/2026-11-11/`: `raw_final.txt`,
+  `raw_iter_KK.txt` as specified, plus `summary_<tag>.json` (the staff
+  `summary.json`), `official_safety.json` (index), and the span files as
+  `unsafe_spans.txt` / `derefs.txt` / `decls.txt` for the final crate and
+  `iter_KK.<name>` per iteration. All 18 span files are empty (0 bytes).
+- An iteration snapshot holds only `src/`; it is measured as the benchmark
+  skeleton's `Cargo.toml` + `Cargo.lock` with the snapshot as `src/`.
+- README: a new `### Unsafe metrics (course tool)` subsection under
+  `Evaluation` (the selftest's section map was extended), a new
+  infrastructure-intervention entry, and the stale "not released" prose from
+  the M15 discovery fixed. The spec's "README safety section" did not exist.
+- Existing code changed: `measure_crate` and `check_only` gained a
+  `safety_tool` parameter (before: always the proxy); `safety_check.course`
+  was a stub that returned `None` metrics; `md_safety`/`_safety_label`
+  printed a fixed PENDING line; the M10 selftest case asserting that line
+  now asserts the new mixed-table wording.
+- The local report draft (gitignored) had its generated blocks refreshed and
+  its safety prose rewritten to the official numbers in both `.md` and
+  `.tex`. Its one remaining PENDING is the O1 staff ruling.
+- `pipeline.yaml` changed, so `config_hash` changed: the two finished runs
+  cannot be resumed under this configuration. Neither needs to be.
+
+**Owner gates**: none hit. "`--locked` fails: retry without it?" did not
+arise (exit 0). "Official metrics nonzero: authorize a rerun?" did not arise
+(all 0). Install pre-approved by D-TOOL. No model call, no quota spent.
+
+**Tooling**: none (spec).
+
+**Verification** (real output):
+- Install: `rustup component add rustc-dev llvm-tools-preview --toolchain
+  nightly-2025-05-13` rc 0; `cargo install --debug --locked --path .
+  --force` → `Installed package newmetrics v0.1.0 … (executables
+  cargo-newmetrics, newmetrics)`, rc 0. Recorded in
+  `MP4/docs/environment.md` with the 22 resolved dependency versions.
+- Official numbers (`official_safety/2026-11-11/official_safety.json`;
+  order: unsafe lines, calls, casts, pointer arithmetic, raw-pointer derefs,
+  decls):
+
+  | | final | iter_01 | iter_02 | targets analysed |
+  |---|---|---|---|---|
+  | project_1 (satc) | 0 0 0 0 0 0 | 0 0 0 0 0 0 | 0 0 0 0 0 0 | `satc`, `satc_test` |
+  | project_2 (libpsbt) | 0 0 0 0 0 0 | 0 0 0 0 0 0 | 0 0 0 0 0 0 | `libpsbt`, bin `test` (`test:test` not supported) |
+
+  Raw side by side: `raw_final.txt` of each project has `Unsafe lines: 0`,
+  `Unsafe calls: 0`, `Unsafe casts: 0`, `Pointer arithmetic: 0` twice (two
+  compilation units); `summary_final.json` → `"unsafe_lines": 0,
+  "unsafe_calls": 0, "unsafe_casts": 0, "pointer_arithmetic": 0`
+  (`total_spans` 24431 / 54085); `results.md` rows `| satc (CRUST-bench) | 0
+  | 0 | 0 | 0 | course tool (…@ 4597e75) |` and the same for libpsbt.
+- `check.json` safety block, both projects: `tool: both`, `tool_version:
+  newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75) +
+  proxy-1`, metrics `[0, 0, 0, 0]`, `extra.proxy` `[0, 0, 0, 0]`,
+  `proxy_equals_course: true`, findings `[]`.
+- `grep -c PENDING` → `MP4/README.md:0`, `MP4/results/results.md:0`.
+- Translations: sha256 over every file outside `target/` identical before
+  and after; `git status --short MP4/translations` empty; `integrity.py
+  --provenance` exit 0 for both projects before and after.
+- `run_summary.json` diff: 38 and 41 added lines, 0 removed.
+- Selftest: `selftest: 316 PASS, 0 FAIL` (279 → 316, +37), including the
+  recorded-output fixture (tool on `selftest_fixture`: lines 1, calls 2,
+  casts 0, pointer arithmetic 1, derefs 1, decls 1), "the measured crate
+  directory is byte-identical before and after" (replay and live), the
+  tool-missing cases, and the committed-artifact consistency cases.
+- Floor: py_compile exit 0; flake8 (120) exit 0; pyflakes exit 0 (no
+  typechecker is installed for this project); `scrub_secrets.py --check
+  MP4/` → `0 hit(s)`; `--help` and `--dry-run` exit 0; `summarize.py` →
+  `results equal --check-only for 2 project(s)`; `--check-readme` up to
+  date; `--check-report` up to date (local draft); secret grep over `MP4/`
+  empty; no absolute or temp path in `official_safety/` or `results/`.
+- Fresh clone at cf6a831: `selftest: 316 PASS, 0 FAIL`; `--check-only` both
+  projects exit 0 with `"safety_tool": "both"`; provenance exit 0;
+  `summarize.py` exit 0 with `results.md`, `repair_mining.md` and
+  `trajectories/` unchanged; `--check-report` → `local draft absent,
+  skipped`. With the aggregator path pointed at a missing file: `NOTE: the
+  course unsafe-metrics tool did not run (…)`, `"safety_tool": "proxy"`,
+  exit 0.
+- Docs-claims check: grepped `PENDING|proxy|not been released|interim|course
+  tool|unsafe-metrics` over `MP4/README.md`, `MP4/docs/`, `MP4/configs/`,
+  `MP4/trajectories/*/INDEX.md`, and `N1|Expected, not measured` in why.md.
+  Fixed 9 README passages, the diagram label (README and `.mmd`), 2 why.md
+  notes, the runbook Stage 3 paragraph, and added a CLAUDE.md rule.
+- Security: the tool and the aggregator run as argv lists, no shell; the
+  aggregator path comes from repo config or one environment variable and is
+  executed with `python3 -I`; `--date` is validated before it becomes a
+  directory name and the run id before it becomes a path; raw output is
+  scrubbed of the temp path, home path, secrets and e-mails before it is
+  written. The tool itself has no network use (re-read at 4597e75); its
+  install fetched its dependencies from crates.io.
+
+**NOT demonstrated**:
+- That the course grader runs the tool the same way (same commit, same
+  targets, on the crate as committed). The grader may run it in place; we
+  never did, by rule.
+- The nonzero path on a real translation: only the selftest fixture has
+  nonzero official counts.
+- A full pipeline run under `safety.tool: both` (do_checks with the course
+  tool inside the loop): no run was made; the loop path is covered only by
+  `measure_crate`/`evaluate` unit cases and the proxy drills.
+- The dependency versions the tool was built with are not pinned by the
+  course; a grader's install may resolve newer ones.
+- The tool-missing path was exercised by hiding `aggregate.py`, not on a
+  machine without `cargo-newmetrics`.
+- The counting rules in the README were read from the source and checked on
+  one fixture (transmute, one unsafe block); nested blocks, `unsafe fn` and
+  numeric casts were not each exercised.
+- The local `.tex` draft was edited but still never compiled.
+
+**Discoveries logged for later rows**:
+- (M14) The local `MP4/docs/rubric_traceability.md` still marks the safety
+  rows as proxy/owner-blocked; M12's spec did not list it. Update it in the
+  final rubric walk.
+- (M14, carried from M15) `--check-only` rewrites `check.json` and its logs
+  with a new timestamp and test order on every run.
+- (M13/M14) If the validator or grader runs `cargo newmetrics` inside
+  `MP4/translations/project_N/`, it leaves `unsafe_spans.txt`, `derefs.txt`,
+  `decls.txt`, `summary.json` and `target/` there; provenance would then
+  report strays on the grader's copy. Nothing to do in the repo; worth one
+  README sentence if the validator turns out to do this.
+- (post-merge candidate) `official()` deletes and rewrites the date
+  directory; two measurements on one day keep only the last.
+- (post-merge candidate) `MEASURE_LOGS` does not list the three
+  `course.*.txt` span files; they hold source snippets only, and are empty
+  for both projects.
+
+**Queued for owner**: nothing new. Keep the clone at
+`~/cs598jbr-course-tools/` while `--check-only` is in use (runbook Stage 3).
+**O1 is still open** (asked in class 2026-11-11, no answer recorded); D8
+remains the working assumption and it must be resolved or consciously
+accepted before submission. O4 (validator) is open with the 2026-11-17
+cut-off: the next row, M13, is `blocked` until the validator appears or that
+date passes.
 
 ## Owner-action queue (only the owner can clear these)
 
