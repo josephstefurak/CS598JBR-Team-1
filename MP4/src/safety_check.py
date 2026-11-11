@@ -6,10 +6,24 @@
               with brace-tracked regexes over library code only (src/bin and
               src/interfaces are benchmark infrastructure and excluded, as in
               the handout). Regex-level by design: the course tool replaces it.
---tool course (M12): runs configs/pipeline.yaml safety.course_cmd; fails
-              loudly while it is not configured.
+--tool course (official): runs the course's `newmetrics` tool
+              (configs/pipeline.yaml safety.course_cmd, then the staff
+              aggregate.py at safety.course_aggregate) on a temporary copy of
+              the crate, never in the crate itself: the tool runs `cargo clean`
+              and `cargo check` and writes unsafe_spans.txt, derefs.txt,
+              decls.txt and summary.json into its working directory. The tool
+              is not part of this repository; MP4/README.md says how to get it.
+--tool both   (pipeline default): the proxy, for its build and FFI guards,
+              plus the course tool. The four reported metrics are the course
+              tool's; the proxy's counts are kept under extra.proxy.
 
-Output schema (both tools): {tool, tool_version, unsafe_lines, unsafe_calls,
+  safety_check.py --project project_1 --tool course
+  safety_check.py --project project_1 --official     final translation and every
+              iteration snapshot with the course tool; raw outputs go to
+              trajectories/<project>/official_safety/<date>/ and the totals
+              into run_summary.json `official_safety`
+
+Output schema (all tools): {tool, tool_version, unsafe_lines, unsafe_calls,
 unsafe_casts, pointer_arithmetic, extra, findings[], raw_path}.
 
 Proxy metric definitions:
@@ -23,6 +37,7 @@ Proxy metric definitions:
                       receiver bound to a raw pointer
 """
 import argparse
+import datetime
 import json
 import os
 import re
@@ -40,6 +55,15 @@ import rustlex  # noqa: E402
 
 PROXY_VERSION = "proxy-1"
 COURSE_NOT_CONFIGURED = "course safety tool not configured"
+PRIMARY = ("unsafe_lines", "unsafe_calls", "unsafe_casts", "pointer_arithmetic")
+# The course tool prints one `Label: N` line per metric and compilation unit; the staff aggregate.py sums them.
+COURSE_LABELS = {"pointer_arithmetic": "Pointer arithmetic", "unsafe_lines": "Unsafe lines",
+                 "unsafe_calls": "Unsafe calls", "unsafe_casts": "Unsafe casts", "total_spans": "Total spans",
+                 "raw_pointer_dereferences": "Raw pointer dereferences",
+                 "raw_pointer_declarations": "Raw pointer declarations"}
+COURSE_SIDE_FILES = ("unsafe_spans.txt", "derefs.txt", "decls.txt")
+COURSE_TIMEOUT_S = 1800
+AGGREGATE_ENV = "MP4_NEWMETRICS_AGGREGATE"   # overrides safety.course_aggregate (path to the staff aggregate.py)
 
 _UNSAFE_RE = re.compile(r"\bunsafe\b")
 _CALL_RE = re.compile(r"(?<![\w!])([A-Za-z_]\w*)\s*(?:::\s*<[^<>;{}]*>)?\s*\(")
@@ -215,24 +239,254 @@ def proxy(crate, raw_path=None, build=True, source=None):
     return res
 
 
-def course(crate, raw_path=None):
-    """Run the course unsafe-metrics tool. Raises SystemExit(2) while it is not configured."""
-    cfg = mc.load_pipeline_config().get("safety") or {}
+def parse_course_output(text):
+    """Sum every `Label: N` line of the tool's output, as the staff aggregate.py does. Returns (totals, units):
+    units is the number of compilation units that reported, 0 when the tool printed no metrics at all."""
+    totals, units = {}, 0
+    for key, label in COURSE_LABELS.items():
+        hits = re.findall(r"^\s*%s:\s*(\d+)\s*$" % re.escape(label), text, re.M)
+        totals[key] = sum(int(h) for h in hits)
+        if key == "unsafe_lines":
+            units = len(hits)
+    return totals, units
+
+
+def course_config(cfg=None):
+    """(argv, aggregate path or None, version) from configs/pipeline.yaml `safety`, or from cfg when given."""
+    cfg = (mc.load_pipeline_config().get("safety") or {}) if cfg is None else cfg
     cmd = cfg.get("course_cmd")
-    if not cmd:
-        print(COURSE_NOT_CONFIGURED + " (set safety.course_cmd in MP4/configs/pipeline.yaml)", file=sys.stderr)
+    argv = (shlex.split(cmd) if isinstance(cmd, str) else [str(x) for x in cmd]) if cmd else None
+    agg = os.environ.get(AGGREGATE_ENV) or cfg.get("course_aggregate")
+    return argv, (os.path.abspath(os.path.expanduser(agg)) if agg else None), cfg.get("course_version")
+
+
+def course_unavailable(cfg=None):
+    """Why the course tool cannot run here, or None when it can. Checked before every `both` measurement, so a
+    machine without the tool reports that plainly instead of failing inside cargo."""
+    argv, agg, _ = course_config(cfg)
+    if not argv:
+        return COURSE_NOT_CONFIGURED + " (set safety.course_cmd in MP4/configs/pipeline.yaml)"
+    path = mc.cargo_env().get("PATH")
+    exe = "cargo-" + argv[1] if os.path.basename(argv[0]) == "cargo" and len(argv) > 1 else argv[0]
+    if not shutil.which(exe, path=path):
+        return "course safety tool not installed (%s is not on PATH; see MP4/README.md)" % exe
+    if agg and not os.path.isfile(agg):
+        return "course safety tool not installed (no aggregate.py at safety.course_aggregate; see MP4/README.md)"
+    return None
+
+
+def _scrub_course(text, copy):
+    """The temporary copy's path -> <crate> (both macOS spellings), then secrets, e-mails and home paths."""
+    import scrub_secrets
+    for p in sorted({os.path.realpath(copy), copy}, key=len, reverse=True):
+        text = text.replace(p, "<crate>")
+    return scrub_secrets.scrub_text(text)
+
+
+def course(crate, raw_path=None, cfg=None, keep_dir=None, keep_tag=None):
+    """Official metrics from the course tool, measured on a temporary copy of `crate` (without target/), which is
+    deleted afterwards: the tool cleans, builds and writes files where it runs, and `crate` must stay untouched.
+
+    Runs safety.course_cmd in the copy with stdout and stderr merged (the staff command's `2>&1`), sums the
+    metric lines, and, when safety.course_aggregate names the staff aggregate.py, also pipes the same output
+    through it (`python3 aggregate.py --out summary.json`) and requires the two to agree. keep_dir/keep_tag: also
+    store the scrubbed raw output as raw_<tag>.txt, summary_<tag>.json and the tool's three span files there.
+    Raises SystemExit(2) when the tool is not configured or not installed."""
+    why = course_unavailable(cfg)
+    if why:
+        print(why, file=sys.stderr)
         raise SystemExit(2)
-    argv = shlex.split(cmd) if isinstance(cmd, str) else [str(x) for x in cmd]
-    argv = [a.replace("{crate}", crate) for a in argv]
-    proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=mc.cargo_env())
-    out = proc.stdout.decode("utf-8", "replace")
-    # The adapter that maps the course tool's output onto the schema is M12's job.
-    res = {"tool": "course", "tool_version": cfg.get("course_version"), "unsafe_lines": None,
-           "unsafe_calls": None, "unsafe_casts": None, "pointer_arithmetic": None,
-           "extra": {"exit_code": proc.returncode, "raw_output": out[-20000:]}, "findings": [],
-           "raw_path": raw_path}
+    if not os.path.exists(os.path.join(crate, "Cargo.toml")):
+        print("no crate at %s" % crate, file=sys.stderr)
+        raise SystemExit(2)
+    argv, agg, version = course_config(cfg)
+    env = mc.cargo_env({"RUSTUP_TOOLCHAIN": mc.TOOLCHAIN})
+    env.pop("RUSTC_WRAPPER", None)
+    copy = mc.copy_crate(crate)
+    findings, summary, side = [], None, {}
+    try:
+        try:
+            proc = subprocess.run(argv, cwd=copy, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, timeout=COURSE_TIMEOUT_S)
+            code, raw_bytes = proc.returncode, proc.stdout
+        except subprocess.TimeoutExpired as exc:
+            code, raw_bytes = 124, (exc.stdout or b"") + b"\n[mp4] course tool timed out\n"
+        raw = raw_bytes.decode("utf-8", "replace")
+        totals, units = parse_course_output(raw)
+        if code != 0 or units == 0:
+            findings.append({"kind": "course_tool_failed", "file": "",
+                             "detail": "exit %d, %d compilation unit(s) reported" % (code, units)})
+        elif agg:
+            agg_proc = subprocess.run([sys.executable, "-I", agg, "--out", "summary.json"], cwd=copy, env=env,
+                                      input=raw_bytes, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+            try:
+                with open(os.path.join(copy, "summary.json"), encoding="utf-8") as fh:
+                    summary = json.load(fh)
+            except (OSError, ValueError):
+                summary = None
+            if agg_proc.returncode != 0 or not isinstance(summary, dict) or any(
+                    summary.get(k) != totals[k] for k in COURSE_LABELS):
+                findings.append({"kind": "course_tool_failed", "file": "",
+                                 "detail": "aggregate.py exit %d; its summary.json does not equal the summed "
+                                           "metric lines" % agg_proc.returncode})
+        for name in COURSE_SIDE_FILES:
+            p = os.path.join(copy, name)
+            if os.path.isfile(p) and not os.path.islink(p):
+                side[name] = _scrub_course(mc.read_text(p), copy)
+        raw = _scrub_course(raw, copy)
+    finally:
+        shutil.rmtree(os.path.dirname(copy), ignore_errors=True)   # copy_crate's temp parent
+    ok = not findings
+    metrics = {k: (totals[k] if ok else None) for k in PRIMARY}
+    for k in PRIMARY:
+        if ok and totals[k]:
+            findings.append({"kind": k, "file": "", "count": totals[k]})
+    extra = {"exit_code": code, "compilation_units": units,
+             "targets": re.findall(r"^Target name: (.+)$", raw, re.M),
+             "unsupported_targets": re.findall(r"^Target (\S+) is not supported$", raw, re.M),
+             "aggregate": "staff aggregate.py" if summary is not None else "summed by the adapter"}
+    if ok:
+        extra.update({k: totals[k] for k in ("raw_pointer_dereferences", "raw_pointer_declarations", "total_spans")})
+    if keep_dir:
+        tag = keep_tag or "final"
+        os.makedirs(keep_dir, exist_ok=True)
+        files = {"raw_%s.txt" % tag: raw}
+        if ok:
+            # the staff summary.json when it was produced; otherwise the same fields from the summed lines
+            files["summary_%s.json" % tag] = json.dumps(summary if summary is not None else totals, indent=2) + "\n"
+        for name, body in side.items():
+            files[name if tag == "final" else "%s.%s" % (tag, name)] = body
+        for name, body in files.items():
+            with open(os.path.join(keep_dir, name), "w", encoding="utf-8") as fh:
+                fh.write(body)
+    else:
+        extra["raw_output"] = raw[-20000:]
+    res = {"tool": "course", "tool_version": version, "extra": extra, "findings": findings, "raw_path": raw_path}
+    res.update(metrics)
     _write(res, raw_path)
     return res
+
+
+def both(crate, log_dir=None, source=None, cfg=None):
+    """Proxy plus course tool (`safety.tool: both`). The four reported metrics are the course tool's. The proxy
+    still runs for what the course tool does not look at: the forbid line, the `-D unsafe_code` build, FFI,
+    build.rs and dependencies. Where the course tool cannot run (not installed, or it failed) the result says so
+    in a finding that blocks SUCCESS, and the reported metrics fall back to the proxy's."""
+    p = proxy(crate, raw_path=os.path.join(log_dir, "safety_proxy.json") if log_dir else None, source=source)
+    proxy_metrics = {k: p[k] for k in PRIMARY}
+    findings = list(p["findings"])
+    extra = dict(p["extra"])
+    extra["proxy"] = dict(proxy_metrics, tool_version=PROXY_VERSION)
+    why = course_unavailable(cfg)
+    c = None
+    if why:
+        findings.append({"kind": "course_tool_unavailable", "file": "", "detail": why})
+    else:
+        c = course(crate, raw_path=os.path.join(log_dir, "safety_course.json") if log_dir else None, cfg=cfg,
+                   keep_dir=log_dir, keep_tag="course" if log_dir else None)
+        findings += [f for f in c["findings"] if f["kind"] == "course_tool_failed"]
+    official = c is not None and all(c[k] is not None for k in PRIMARY)
+    if c is not None:
+        extra["course"] = dict({k: c[k] for k in PRIMARY}, tool_version=c["tool_version"],
+                               **{k: v for k, v in c["extra"].items() if k != "raw_output"})
+    metrics = {k: c[k] for k in PRIMARY} if official else proxy_metrics
+    extra["proxy_equals_course"] = (metrics == proxy_metrics) if official else None
+    res = {"tool": "both" if official else "proxy",
+           "tool_version": "%s + %s" % (c["tool_version"], PROXY_VERSION) if official else PROXY_VERSION,
+           "extra": extra, "findings": findings,
+           "raw_path": os.path.join(log_dir, "safety_course.json") if (log_dir and official) else p["raw_path"]}
+    res.update(metrics)
+    return res
+
+
+def measure(tool, crate, log_dir=None, source=None):
+    """The pipeline's safety step for the configured safety.tool."""
+    if tool == "both":
+        return both(crate, log_dir, source)
+    return proxy(crate, raw_path=os.path.join(log_dir, "safety_proxy.json") if log_dir else None, source=source)
+
+
+def snapshot_crate(project, snap, parent):
+    """A buildable crate for one iteration snapshot: the benchmark skeleton's Cargo.toml and Cargo.lock with the
+    snapshot (the iteration's whole src/) as its src/. Returns the crate path under parent."""
+    crate = os.path.join(parent, os.path.basename(mc.translation_dir(project)))
+    os.makedirs(crate)
+    for name in ("Cargo.toml", "Cargo.lock"):
+        src = os.path.join(mc.skeleton_dir(project), name)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(crate, name))
+    shutil.copytree(snap, os.path.join(crate, "src"), symlinks=True)
+    return crate
+
+
+def final_run_snapshots(project):
+    """(run_summary, [(iteration dir name, src_after path)]) of the project's final run, in run order."""
+    traj = os.path.join(mc.TRAJECTORIES_DIR, project)
+    with open(os.path.join(traj, "run_summary.json"), encoding="utf-8") as fh:
+        rsum = json.load(fh)
+    run_id = rsum.get("run_id")
+    if not isinstance(run_id, str) or not re.match(r"^[A-Za-z0-9_.-]{1,64}$", run_id):
+        raise ValueError("%s run_summary.json has no valid run_id" % project)
+    run_dir = os.path.join(traj, "run_%s" % run_id)
+    snaps = []
+    for it in sorted((d for d in os.listdir(run_dir) if integrity._ITER_DIR_RE.match(d)), key=integrity._iter_key):
+        snap = os.path.join(run_dir, it, "src_after")
+        if os.path.isdir(snap):
+            snaps.append((it, snap))
+    return rsum, snaps
+
+
+def official(project, date=None, cfg=None):
+    """Measure the committed translation and every iteration snapshot of the final run with the course tool.
+    Raw outputs and an index go to trajectories/<project>/official_safety/<date>/, and the totals are recorded
+    in run_summary.json under `official_safety` (the run's own `final` block, measured by the proxy at run time,
+    is left as it was). Nothing under MP4/translations/ is written."""
+    date = date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise ValueError("date must be YYYY-MM-DD")
+    traj = os.path.join(mc.TRAJECTORIES_DIR, project)
+    rsum, snaps = final_run_snapshots(project)
+    out_dir = os.path.join(traj, "official_safety", date)
+    if os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+    _, _, version = course_config(cfg)
+
+    def entry(res):
+        e = {k: res[k] for k in PRIMARY}
+        e.update({k: res["extra"].get(k) for k in ("raw_pointer_dereferences", "raw_pointer_declarations",
+                                                   "total_spans", "compilation_units", "targets",
+                                                   "unsupported_targets", "exit_code")})
+        e["failed"] = any(f["kind"] == "course_tool_failed" for f in res["findings"])
+        return e
+
+    final = entry(course(mc.translation_dir(project), cfg=cfg, keep_dir=out_dir, keep_tag="final"))
+    final["crate"] = mc.rel(mc.translation_dir(project), mc.REPO_DIR)
+    iterations = {}
+    for it, snap in snaps:
+        tmp = tempfile.mkdtemp(prefix="mp4snap_")
+        try:
+            iterations[it] = entry(course(snapshot_crate(project, snap, tmp), cfg=cfg, keep_dir=out_dir,
+                                          keep_tag=it))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        iterations[it]["snapshot"] = mc.rel(snap, mc.REPO_DIR)
+    index = {"project": project, "run_id": rsum["run_id"], "tool": "course", "tool_version": version,
+             "measured": date, "dir": mc.rel(out_dir, mc.REPO_DIR), "final": final, "iterations": iterations,
+             "note": "Measured after the run, each on a temporary copy. An iteration is its src_after/ snapshot "
+                     "with the benchmark's Cargo.toml and Cargo.lock. The tool rewrites its three span files for "
+                     "every compilation unit, so they hold the last unit's spans only."}
+    with open(os.path.join(out_dir, "official_safety.json"), "w", encoding="utf-8") as fh:
+        json.dump(index, fh, indent=2)
+        fh.write("\n")
+    rsum["official_safety"] = {k: index[k] for k in ("tool", "tool_version", "measured", "dir", "final")}
+    rsum["official_safety"]["iterations"] = {it: {k: e[k] for k in PRIMARY} for it, e in iterations.items()}
+    path = os.path.join(traj, "run_summary.json")
+    tmp_path = path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as fh:
+        json.dump(rsum, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp_path, path)
+    return index
 
 
 def _write(res, raw_path):
@@ -255,7 +509,11 @@ def all_snapshots(project, tool):
             if not os.path.isdir(snap):
                 continue
             if tool == "course":
-                res = course(snap)
+                tmp = tempfile.mkdtemp(prefix="mp4snap_")
+                try:
+                    res = course(snapshot_crate(project, snap, tmp))
+                finally:
+                    shutil.rmtree(tmp, ignore_errors=True)
             else:
                 # a snapshot is the crate's src/ only: lay it out as <tmp>/src so the same scan applies
                 tmp = tempfile.mkdtemp(prefix="mp4snap_")
@@ -270,18 +528,32 @@ def all_snapshots(project, tool):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Safety metrics for generated Rust (proxy now, course tool later).")
-    ap.add_argument("--tool", choices=("proxy", "course"), default="proxy")
+    ap = argparse.ArgumentParser(description="Safety metrics for generated Rust (interim proxy and the course tool).")
+    ap.add_argument("--tool", choices=("proxy", "course", "both"), default="proxy")
     ap.add_argument("--project")
     ap.add_argument("--crate-dir", help="default: MP4/translations/<project>")
     ap.add_argument("--out", help="write the JSON result here")
     ap.add_argument("--all-snapshots", action="store_true", help="every iter_*/src_after/ of the project")
     ap.add_argument("--no-build", action="store_true", help="proxy: skip the -D unsafe_code build")
+    ap.add_argument("--official", action="store_true",
+                    help="course tool on the final translation and every iteration snapshot of the final run; "
+                         "writes trajectories/<project>/official_safety/<date>/ and run_summary.json")
+    ap.add_argument("--date", help="--official: directory name, YYYY-MM-DD (default: today, UTC)")
     a = ap.parse_args(argv)
+    if a.official:
+        if not a.project:
+            ap.error("--official needs --project")
+        try:
+            res = official(mc.check_project(a.project), a.date)
+        except (ValueError, OSError) as exc:
+            print("safety_check: %s" % exc, file=sys.stderr)
+            return 2
+        print(json.dumps(res, indent=2))
+        return 0
     if a.all_snapshots:
         if not a.project:
             ap.error("--all-snapshots needs --project")
-        res = all_snapshots(mc.check_project(a.project), a.tool)
+        res = all_snapshots(mc.check_project(a.project), "course" if a.tool == "both" else a.tool)
         _write(res, a.out)
         print(json.dumps(res, indent=2))
         return 0
@@ -293,6 +565,9 @@ def main(argv=None):
         ap.error("give --project or --crate-dir")
     if a.tool == "course":
         res = course(crate, a.out)
+    elif a.tool == "both":
+        res = both(crate, source=mc.skeleton_dir(a.project) if a.project else None)
+        _write(res, a.out)
     else:
         if not os.path.exists(os.path.join(crate, "Cargo.toml")):
             print("no crate at %s" % crate, file=sys.stderr)

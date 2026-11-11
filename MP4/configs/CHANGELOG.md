@@ -122,3 +122,36 @@ hand outside the repository.
   draft is on disk. `results.md` and `repair_mining.md` are generated exactly as before.
 - `src/selftest.py`: the README check enforces the six template headings, the section placement and the
   `Environment` bullets; new cases cover a tree without the local drafts and fragments.
+
+## 2026-11-11 — course unsafe-metrics tool becomes the safety backend (program phase M12)
+
+Infrastructure change. Program logic affected: no. No prompt changed, no run was repeated and no Rust
+changed (`integrity.py --provenance` exit 0 for both projects before and after).
+
+Evidence: the course released `newmetrics` on 2026-11-09, after both committed runs (2026-10-29). Measured
+with it on 2026-11-11, both final translations and all four iteration snapshots score 0 unsafe lines,
+0 unsafe calls, 0 unsafe casts and 0 pointer arithmetic
+(`trajectories/project_N/official_safety/2026-11-11/raw_*.txt`). The interim proxy had reported the same.
+
+- `pipeline.yaml` `safety.tool`: `proxy` -> `both`. `safety.course_cmd`: `[cargo, newmetrics]`.
+  New key `safety.course_aggregate` (path to the staff `aggregate.py`; the environment variable
+  `MP4_NEWMETRICS_AGGREGATE` overrides it). `safety.course_version` records the tool version and commit.
+  The value `course` is no longer accepted for `safety.tool`: the course tool has no forbid, FFI,
+  `build.rs` or dependency guard, so it never runs without the proxy.
+- `src/safety_check.py`: the course adapter copies the crate to a temporary directory, runs the staff
+  command there, parses the result and deletes the copy. It never runs in `translations/`. New
+  `--official` mode measures the final crate and every iteration snapshot of the final run.
+- `src/run_pipeline.py`: the safety step follows `safety.tool`. A course tool that is not installed, or
+  that fails, is a finding that blocks SUCCESS; `--check-only` then prints a note and reports the proxy's
+  numbers under their own label.
+- `src/summarize.py`: the safety table names the measuring tool, lists the tool's two extra metrics and
+  one proxy comparison line; the per-iteration tables use the official per-snapshot counts. A mismatch
+  between `run_summary.json` `official_safety` and the check-only result stops the generator.
+- `run_summary.json` of both projects gained an `official_safety` block. The run's own record (`final`,
+  `iteration_summary.json`) is unchanged and still names the proxy it used at the time.
+- Differences between the proxy and the tool are documented in the README, not "fixed": on the
+  self-test fixture the proxy counts a `transmute` as an unsafe cast (1) where the tool counts 0 casts;
+  the other three counts agree (1 line, 2 calls, 1 pointer arithmetic). The proxy's regexes were left as
+  they are.
+- The config hash changes with `pipeline.yaml`, so the two finished runs cannot be resumed under the new
+  configuration. Neither needs to be: both ended at SUCCESS.

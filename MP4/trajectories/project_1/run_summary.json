@@ -57,6 +57,44 @@
   "iterations": 2,
   "known_failing_tests": [],
   "last_iteration_dir": "iter_02",
+  "official_safety": {
+    "dir": "MP4/trajectories/project_1/official_safety/2026-11-11",
+    "final": {
+      "compilation_units": 2,
+      "crate": "MP4/translations/project_1",
+      "exit_code": 0,
+      "failed": false,
+      "pointer_arithmetic": 0,
+      "raw_pointer_declarations": 0,
+      "raw_pointer_dereferences": 0,
+      "targets": [
+        "satc",
+        "satc_test"
+      ],
+      "total_spans": 24431,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "unsafe_lines": 0,
+      "unsupported_targets": []
+    },
+    "iterations": {
+      "iter_01": {
+        "pointer_arithmetic": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "unsafe_lines": 0
+      },
+      "iter_02": {
+        "pointer_arithmetic": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "unsafe_lines": 0
+      }
+    },
+    "measured": "2026-11-11",
+    "tool": "course",
+    "tool_version": "newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)"
+  },
   "project": "project_1",
   "run_id": "20261029T184931Z",
   "stop_reason": "SUCCESS",

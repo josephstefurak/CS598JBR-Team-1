@@ -1,0 +1,65 @@
+{
+  "project": "project_1",
+  "run_id": "20261029T184931Z",
+  "tool": "course",
+  "tool_version": "newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)",
+  "measured": "2026-11-11",
+  "dir": "MP4/trajectories/project_1/official_safety/2026-11-11",
+  "final": {
+    "unsafe_lines": 0,
+    "unsafe_calls": 0,
+    "unsafe_casts": 0,
+    "pointer_arithmetic": 0,
+    "raw_pointer_dereferences": 0,
+    "raw_pointer_declarations": 0,
+    "total_spans": 24431,
+    "compilation_units": 2,
+    "targets": [
+      "satc",
+      "satc_test"
+    ],
+    "unsupported_targets": [],
+    "exit_code": 0,
+    "failed": false,
+    "crate": "MP4/translations/project_1"
+  },
+  "iterations": {
+    "iter_01": {
+      "unsafe_lines": 0,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "pointer_arithmetic": 0,
+      "raw_pointer_dereferences": 0,
+      "raw_pointer_declarations": 0,
+      "total_spans": 23819,
+      "compilation_units": 2,
+      "targets": [
+        "satc",
+        "satc_test"
+      ],
+      "unsupported_targets": [],
+      "exit_code": 0,
+      "failed": false,
+      "snapshot": "MP4/trajectories/project_1/run_20261029T184931Z/iter_01/src_after"
+    },
+    "iter_02": {
+      "unsafe_lines": 0,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "pointer_arithmetic": 0,
+      "raw_pointer_dereferences": 0,
+      "raw_pointer_declarations": 0,
+      "total_spans": 24431,
+      "compilation_units": 2,
+      "targets": [
+        "satc",
+        "satc_test"
+      ],
+      "unsupported_targets": [],
+      "exit_code": 0,
+      "failed": false,
+      "snapshot": "MP4/trajectories/project_1/run_20261029T184931Z/iter_02/src_after"
+    }
+  },
+  "note": "Measured after the run, each on a temporary copy. An iteration is its src_after/ snapshot with the benchmark's Cargo.toml and Cargo.lock. The tool rewrites its three span files for every compilation unit, so they hold the last unit's spans only."
+}

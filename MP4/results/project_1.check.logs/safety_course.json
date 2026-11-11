@@ -1,0 +1,23 @@
+{
+  "tool": "course",
+  "tool_version": "newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)",
+  "extra": {
+    "exit_code": 0,
+    "compilation_units": 2,
+    "targets": [
+      "satc",
+      "satc_test"
+    ],
+    "unsupported_targets": [],
+    "aggregate": "staff aggregate.py",
+    "raw_pointer_dereferences": 0,
+    "raw_pointer_declarations": 0,
+    "total_spans": 24431
+  },
+  "findings": [],
+  "raw_path": "MP4/results/project_1.check.logs/safety_course.json",
+  "unsafe_lines": 0,
+  "unsafe_calls": 0,
+  "unsafe_casts": 0,
+  "pointer_arithmetic": 0
+}

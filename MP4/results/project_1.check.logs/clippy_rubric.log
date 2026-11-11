@@ -17,6 +17,6 @@ warning: function `satc_nearest_hundredth` is never used
   = note: `#[warn(dead_code)]` on by default
 
 warning: `satc` (bin "satc_test") generated 2 warnings (run `cargo clippy --fix --bin "satc_test"` to apply 1 suggestion)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
 
 [exit 0]

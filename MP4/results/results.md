@@ -15,10 +15,12 @@ Known-defective benchmark test: `read_test_vector` (libpsbt (CRUST-bench)), see 
 
 | Project | Unsafe Lines | Unsafe Calls | Unsafe Casts | Pointer Arithmetic | Measured by |
 |---|---|---|---|---|---|
-| satc (CRUST-bench) | 0 | 0 | 0 | 0 | interim proxy (`safety_check.py --tool proxy`); official tool PENDING |
-| libpsbt (CRUST-bench) | 0 | 0 | 0 | 0 | interim proxy (`safety_check.py --tool proxy`); official tool PENDING |
+| satc (CRUST-bench) | 0 | 0 | 0 | 0 | course tool (`newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)`) |
+| libpsbt (CRUST-bench) | 0 | 0 | 0 | 0 | course tool (`newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)`) |
 
-Additional metrics produced by the course unsafe-metrics tool: PENDING (tool not yet released).
+Additional metrics from the course tool (raw pointer dereferences / raw pointer declarations): satc (CRUST-bench) 0 / 0; libpsbt (CRUST-bench) 0 / 0.
+
+For comparison, the interim proxy (`safety_check.py --tool proxy`, regex counts over library code) reports unsafe lines / calls / casts / pointer arithmetic: satc (CRUST-bench) 0 / 0 / 0 / 0; libpsbt (CRUST-bench) 0 / 0 / 0 / 0.
 
 ## Idiomaticity analysis (clippy, agent-written code)
 
@@ -32,18 +34,18 @@ Warnings from the immutable benchmark test file are excluded above: libpsbt (CRU
 
 ## Per-iteration trend: satc (CRUST-bench)
 
-Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
+Run `run_20261029T184931Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: course tool, measured after the run on each iteration's `src_after/` snapshot, raw output in `MP4/trajectories/project_1/official_safety/2026-11-11/`; during the run the controller used the interim proxy, whose totals were the same). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
 
-| Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (proxy) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
+| Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (course tool) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | iter_01 | Yes | 4/4 | 0/0/0/0 | 0 | 0 | 0/0 | 0 | 12 | 22801 | 4.0 | +623/-0 | Yes |
 | iter_02 | Yes | 4/4 | 0/0/0/0 | 0 | 0 | 0/0 | 0 | 17 | 17170 | 3.5 | +13/-2 | Yes |
 
 ## Per-iteration trend: libpsbt (CRUST-bench)
 
-Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: interim proxy, official tool PENDING). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
+Run `run_20261029T194929Z`. Clippy, safety and interface are the controller's measurements after the iteration (safety: course tool, measured after the run on each iteration's `src_after/` snapshot, raw output in `MP4/trajectories/project_2/official_safety/2026-11-11/`; during the run the controller used the interim proxy, whose totals were the same). Turns, output tokens and minutes are from the agent session's own `result` event; lines changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only from iteration 2. `paused` = the attempt was interrupted before the controller's checks.
 
-| Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (proxy) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
+| Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (course tool) | Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | iter_01 | Yes | 3/4 | 0/0/0/0 | 2 | 0 | 0/0 | 0 | 56 | 94525 | 17.8 | +1515/-0 | Yes |
 | iter_02 | Yes | 3/4 | 0/0/0/0 | 2 | 0 | 0/0 | 0 | 31 | 17044 | 4.1 | +4/-1 | Yes |

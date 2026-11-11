@@ -66,8 +66,8 @@ warning: value assigned to `step` is never read
     = note: `#[warn(unused_assignments)]` on by default
 
 warning: `libpsbt` (bin "test") generated 7 warnings (run `cargo fix --bin "test"` to apply 1 suggestion)
-warning: `libpsbt` (bin "test" test) generated 2 warnings (1 duplicate)
-warning: `libpsbt` (test "test") generated 2 warnings (2 duplicates)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.50s
+warning: `libpsbt` (test "test") generated 2 warnings (1 duplicate)
+warning: `libpsbt` (bin "test" test) generated 2 warnings (2 duplicates)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.80s
 
 [exit 0]

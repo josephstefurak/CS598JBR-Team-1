@@ -63,7 +63,7 @@ README_SECTIONS = {
     "Run": ["How to run the pipeline"],
     "Pipeline": ["Pipeline diagram", "Stopping condition", "Infrastructure interventions", "Academic integrity"],
     "Outputs": ["Repository layout"],
-    "Evaluation": ["Evaluating without a Claude subscription"],
+    "Evaluation": ["Evaluating without a Claude subscription", "Unsafe metrics (course tool)"],
 }
 
 
@@ -148,7 +148,7 @@ def _run(tmp_root):
     expect("int .wrapping_add outside unsafe not pointer arithmetic",
            safety_check.count_file(rustlex.strip("fn f(a: u32) -> u32 { a.wrapping_add(1) }"))["pointer_arithmetic"], 0)
     try:
-        safety_check.course(crate)
+        safety_check.course(crate, cfg={})
         expect("course tool unset -> exit 2", "returned", "SystemExit(2)")
     except SystemExit as exc:
         expect("course tool unset -> exit 2", exc.code, 2)
@@ -260,6 +260,7 @@ def _run(tmp_root):
     _run_m10(tmp_root)
     _run_m11(tmp_root)
     _run_m15(tmp_root)
+    _run_m12(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -382,6 +383,8 @@ def drill_cfg(tmp_root, name, scenario, max_iterations=8, mode="wait", min_itera
     # the M4/M5 drills predate owner gate G3 and expect SUCCESS to stop at the first clean iteration
     cfg["pipeline"]["loop"]["min_iterations"] = min_iterations
     cfg["pipeline"]["rate_limit"].update({"mode": mode, "resume_margin_seconds": 1})
+    # the drills test the loop, not the course tool: they must pass on a machine without it (M12)
+    cfg["pipeline"]["safety"]["tool"] = "proxy"
     cfg["project_cfg"] = {
         "name": "project_1", "label": "selftest fixture", "crate": "fixture", "modules": ["fixture"],
         "c_dir": "", "c_files": [], "test_file": "src/bin/fixture_test.rs", "interface_dir": "src/interfaces",
@@ -1528,8 +1531,8 @@ def _run_m10(tmp_root):
              "clippy": {g: 0 for g in summarize.GROUPS}, "harness": {g: 0 for g in summarize.GROUPS},
              "safety": {m: 0 for m in summarize.SAFETY}, "safety_tool": "proxy", "known_failing": []}]
     expect_true("M10: proxy safety table says the official tool is PENDING",
-                "official tool PENDING" in summarize.md_safety(rows) and "PENDING (tool not yet released)" in
-                summarize.md_safety(rows))
+                "official tool PENDING" in summarize.md_safety(rows) and "PENDING for the rows marked interim proxy"
+                in summarize.md_safety(rows))
     expect_true("M10: results.md tables are the report's blocks",
                 all(b in summarize.render_markdown(rows) for b in (
                     summarize.md_overall(rows), summarize.md_safety(rows), summarize.md_idiom(rows))))
@@ -1851,6 +1854,199 @@ def _run_m15(tmp_root):
         bad = [t for t in tracked if t.startswith("MP4/docs/report_mp4_draft.") or t.endswith("forum-post-draft.md")
                or t == "MP4/docs/rubric_traceability.md" or (t.startswith("MP4/results/") and t.endswith(".tex"))]
         expect("M15: no report-type file is tracked (D-UNTRACK)", bad, [])
+
+
+def _tree_state(root):
+    """{relative path: sha256, or 'dir', or 'link -> target'} of everything under root."""
+    import hashlib
+    out = {}
+    for base, dirs, files in os.walk(root):
+        for d in dirs:
+            p = os.path.join(base, d)
+            out[mc.rel(p, root)] = "link -> " + os.readlink(p) if os.path.islink(p) else "dir"
+        for f in files:
+            p = os.path.join(base, f)
+            if os.path.islink(p):
+                out[mc.rel(p, root)] = "link -> " + os.readlink(p)
+            else:
+                with open(p, "rb") as fh:
+                    out[mc.rel(p, root)] = hashlib.sha256(fh.read()).hexdigest()
+    return out
+
+
+def _run_m12(tmp_root):
+    """M12: the course unsafe-metrics tool. The deterministic cases replay a recorded run of the real tool
+    (tests/newmetrics_fixture_raw.txt) through tests/fake_newmetrics.py, so they pass without the tool."""
+    P = safety_check.PRIMARY
+    fake = os.path.join(mc.SRC_DIR, "tests", "fake_newmetrics.py")
+    fake_cfg = {"course_cmd": [sys.executable, "-I", fake], "course_version": "recorded newmetrics 0.1.0"}
+    with open(os.path.join(mc.SRC_DIR, "tests", "newmetrics_fixture_raw.txt"), encoding="utf-8") as fh:
+        recorded = fh.read()
+    totals, units = safety_check.parse_course_output(recorded)
+    expect("M12: recorded tool output sums like the staff aggregate.py",
+           (totals, units), ({"pointer_arithmetic": 1, "unsafe_lines": 1, "unsafe_calls": 2, "unsafe_casts": 0,
+                              "total_spans": 1528, "raw_pointer_dereferences": 1, "raw_pointer_declarations": 1}, 2))
+    expect("M12: output without metric lines reports 0 units", safety_check.parse_course_output("error: x\n")[1], 0)
+
+    # the adapter measures a copy: the crate directory is byte-identical afterwards, and no copy is left behind
+    crate = fresh_copy(tmp_root, "m12")
+    before = _tree_state(crate)
+    tmp_before = set(glob.glob(os.path.join(tempfile.gettempdir(), "mp4crate_*")))
+    keep = os.path.join(tmp_root, "m12_keep")
+    res = safety_check.course(crate, raw_path=os.path.join(tmp_root, "m12_course.json"), cfg=fake_cfg, keep_dir=keep,
+                              keep_tag="iter_01")
+    expect("M12: course adapter maps the tool output onto the schema",
+           (res["tool"], res["tool_version"], [res[k] for k in P], res["extra"]["raw_pointer_dereferences"],
+            res["extra"]["raw_pointer_declarations"], res["extra"]["compilation_units"], res["extra"]["targets"]),
+           ("course", "recorded newmetrics 0.1.0", [1, 2, 0, 1], 1, 1, 2, ["fixture", "fixture_test"]))
+    expect("M12: the measured crate directory is byte-identical before and after", _tree_state(crate), before)
+    expect("M12: the tool's files and target/ never appear in the crate",
+           [n for n in ("unsafe_spans.txt", "derefs.txt", "decls.txt", "summary.json", "target")
+            if os.path.exists(os.path.join(crate, n))], [])
+    expect("M12: the temporary copy is deleted",
+           sorted(set(glob.glob(os.path.join(tempfile.gettempdir(), "mp4crate_*"))) - tmp_before), [])
+    expect("M12: raw output, summary and span files are kept under the tag",
+           sorted(os.listdir(keep)), ["iter_01.decls.txt", "iter_01.derefs.txt", "iter_01.unsafe_spans.txt",
+                                      "raw_iter_01.txt", "summary_iter_01.json"])
+    with open(os.path.join(keep, "raw_iter_01.txt"), encoding="utf-8") as fh:
+        raw = fh.read()
+    expect_true("M12: the kept raw output names the crate as <crate>, not the temp path",
+                "(<crate>)" in raw and tempfile.gettempdir() not in raw and os.path.realpath(
+                    tempfile.gettempdir()) not in raw)
+    nonzero = sorted(f["kind"] for f in res["findings"])
+    expect("M12: nonzero official metrics are findings", nonzero, ["pointer_arithmetic", "unsafe_calls",
+                                                                   "unsafe_lines"])
+
+    failed = safety_check.course(crate, cfg=dict(fake_cfg, course_cmd=fake_cfg["course_cmd"] + ["--fail"]))
+    expect("M12: a failed tool run reports no numbers, only the failure",
+           ([failed[k] for k in P], [f["kind"] for f in failed["findings"]]), ([None] * 4, ["course_tool_failed"]))
+    for label, cfg in (("not configured", {}), ("not installed", {"course_cmd": ["cargo", "mp4-no-such-tool"]}),
+                       ("aggregate.py missing", dict(fake_cfg, course_aggregate=os.path.join(tmp_root, "none.py")))):
+        why = safety_check.course_unavailable(cfg)
+        try:
+            safety_check.course(crate, cfg=cfg)
+            expect("M12: course tool %s -> exit 2" % label, "returned", "SystemExit(2)")
+        except SystemExit as exc:
+            expect("M12: course tool %s -> exit 2" % label, (exc.code, bool(why)), (2, True))
+
+    # `both`: official numbers from the course tool, guards from the proxy
+    b = safety_check.both(crate, log_dir=os.path.join(tmp_root, "m12_logs"), cfg=fake_cfg)
+    expect("M12: both reports the course tool's metrics and keeps the proxy's beside them",
+           (b["tool"], [b[k] for k in P], [b["extra"]["proxy"][k] for k in P], b["extra"]["proxy_equals_course"]),
+           ("both", [1, 2, 0, 1], [1, 2, 1, 1], False))
+    expect_true("M12: both keeps the proxy's guard findings", any(f["kind"] == "forbid_missing" for f in b["findings"])
+                and b["extra"]["forbid_unsafe_code_first_line"] is False)
+    expect("M12: both writes the proxy and course logs",
+           sorted(n for n in os.listdir(os.path.join(tmp_root, "m12_logs")) if "course" in n or "proxy" in n),
+           ["course.decls.txt", "course.derefs.txt", "course.unsafe_spans.txt", "raw_course.txt",
+            "safety_course.json", "safety_proxy.json", "summary_course.json"])
+    expect_true("M12: every log both writes is in the list the loop scrubs",
+                all(n in run_pipeline.MEASURE_LOGS for n in (
+                    "safety_course.json", "raw_course.txt", "summary_course.json", "safety_proxy.json")))
+    u = safety_check.both(crate, cfg={"course_cmd": ["cargo", "mp4-no-such-tool"]})
+    expect("M12: both without the tool falls back to the proxy and says so",
+           (u["tool"], [u[k] for k in P], [f["kind"] for f in u["findings"] if f["kind"].startswith("course_")]),
+           ("proxy", [1, 2, 1, 1], ["course_tool_unavailable"]))
+
+    # the loop treats a missing or failed course tool as a blocker; config admits proxy or both only
+    cfg = drill_cfg(tmp_root, "m12", {})
+    chk = run_pipeline.measure_crate(fresh_copy(tmp_root, "m12eval"), FIXTURE, os.path.join(tmp_root, "m12_eval_logs"),
+                                     cfg["project_cfg"]["allow_attributes"])
+    base = run_pipeline.evaluate(chk, cfg["project_cfg"])["blockers"]
+    for kind in ("course_tool_unavailable", "course_tool_failed"):
+        bad = json.loads(json.dumps(chk))
+        bad["safety"]["findings"].append({"kind": kind, "file": "", "detail": "x"})
+        expect("M12: %s blocks SUCCESS" % kind,
+               [b for b in run_pipeline.evaluate(bad, cfg["project_cfg"])["blockers"] if b not in base],
+               ["safety finding: %s" % kind])
+    raw_cfg = config._load_yaml(mc.PIPELINE_YAML)
+    expect("M12: pipeline.yaml runs both tools", (raw_cfg["safety"]["tool"], raw_cfg["safety"]["course_cmd"]),
+           ("both", ["cargo", "newmetrics"]))
+    for label, change in (("course alone", {"tool": "course"}), ("both without a command", {"course_cmd": None})):
+        broken = json.loads(json.dumps(raw_cfg))
+        broken["safety"].update(change)
+        try:
+            config.validate_pipeline(broken)
+            expect("M12: safety.tool %s rejected" % label, "accepted", "ConfigError")
+        except config.ConfigError:
+            expect("M12: safety.tool %s rejected" % label, "ConfigError", "ConfigError")
+
+    # a snapshot becomes a crate: the benchmark's manifest and lock file around the iteration's src/
+    snap_parent = os.path.join(tmp_root, "m12_snap")
+    os.makedirs(snap_parent)
+    _, snaps = safety_check.final_run_snapshots("project_1")
+    sc = safety_check.snapshot_crate("project_1", snaps[0][1], snap_parent)
+    expect("M12: snapshot crate = skeleton manifest + the snapshot as src/",
+           (sorted(os.listdir(sc)), _tree_state(os.path.join(sc, "src")) == _tree_state(snaps[0][1]),
+            mc.read_text(os.path.join(sc, "Cargo.toml")) == mc.read_text(
+                os.path.join(mc.skeleton_dir("project_1"), "Cargo.toml"))),
+           (["Cargo.lock", "Cargo.toml", "src"], True, True))
+
+    # results: official label, no PENDING, one proxy comparison line; an official mismatch stops the generator
+    zero = {m: 0 for m in summarize.SAFETY}
+    row = {"label": "P", "compiles": True, "passed": 1, "total": 1, "iterations": 2, "stop_reason": "SUCCESS",
+           "clippy": {g: 0 for g in summarize.GROUPS}, "harness": {g: 0 for g in summarize.GROUPS}, "safety": zero,
+           "safety_tool": "both", "known_failing": [], "proxy": dict(zero, unsafe_casts=1),
+           "course": {"tool_version": "newmetrics 0.1.0", "raw_pointer_dereferences": 0,
+                      "raw_pointer_declarations": 3}}
+    md = summarize.md_safety([row])
+    expect_true("M12: official safety table names the course tool and has no PENDING",
+                "| P | 0 | 0 | 0 | 0 | course tool (`newmetrics 0.1.0`) |" in md and "PENDING" not in md)
+    expect_true("M12: extra metrics and one proxy comparison line",
+                "P 0 / 3." in md and md.count("interim proxy") == 1 and "P 0 / 0 / 1 / 0." in md)
+    expect_true("M12: a mixed table still marks the proxy row PENDING",
+                "PENDING" in summarize.md_safety([row, dict(row, safety_tool="proxy", course={}, proxy={})]))
+    summ = {"final": {"safety": zero}, "official_safety": {"final": dict(zero, unsafe_lines=2)}}
+    chk_s = {"summary": {"compiles": None, "tests_passed": None, "tests_total": None, "clippy_agent": {},
+                         "clippy_harness": {}, "safety": zero, "safety_tool": "both"}}
+    expect("M12: run_summary official numbers that differ from check-only are a mismatch",
+           [d["field"] for d in summarize.compare(summ, chk_s)], ["official_safety.unsafe_lines"])
+    chk_s["summary"]["safety_tool"] = "proxy"
+    expect("M12: ... but a proxy-only check result is not compared with them", summarize.compare(summ, chk_s), [])
+
+    # the committed official measurements: raw output, index, run_summary and check.json all agree
+    for project in mc.PROJECTS:
+        with open(os.path.join(mc.TRAJECTORIES_DIR, project, "run_summary.json"), encoding="utf-8") as fh:
+            rsum = json.load(fh)
+        off = rsum.get("official_safety") or {}
+        odir = os.path.join(mc.REPO_DIR, off.get("dir", "missing"))
+        with open(os.path.join(odir, "official_safety.json"), encoding="utf-8") as fh:
+            index = json.load(fh)
+        _, snaps = safety_check.final_run_snapshots(project)
+        tags = ["final"] + [it for it, _ in snaps]
+        parsed = {}
+        for tag in tags:
+            with open(os.path.join(odir, "raw_%s.txt" % tag), encoding="utf-8") as fh:
+                t, n = safety_check.parse_course_output(fh.read())
+            parsed[tag] = [t[k] for k in P] if n else None
+        recorded_idx = {"final": [index["final"][k] for k in P]}
+        recorded_idx.update({it: [e[k] for k in P] for it, e in index["iterations"].items()})
+        expect("M12: %s official index equals its raw tool output, final and every iteration" % project,
+               recorded_idx, parsed)
+        with open(os.path.join(mc.RESULTS_DIR, "%s.check.json" % project), encoding="utf-8") as fh:
+            chk_safety = json.load(fh)["safety"]
+        expect("M12: %s check.json is measured by both tools and equals the official record" % project,
+               (chk_safety["tool"], [chk_safety[k] for k in P], [off["final"][k] for k in P],
+                sorted(off["iterations"]) == sorted(index["iterations"])),
+               ("both", parsed["final"], parsed["final"], True))
+        trend = summarize.iteration_trend(project, project, rsum)
+        expect("M12: %s trend rows carry the official per-iteration totals" % project,
+               [(r["dir"], r["safety_tool"], r["safety_total"]) for r in trend["rows"] if r["checked"]],
+               [(it, "course", sum(parsed[it])) for it, _ in snaps])
+
+    # live: the real tool, where it is installed (the same numbers as the recording)
+    if safety_check.course_unavailable():
+        print("SKIP  M12: live course tool run (%s)" % safety_check.course_unavailable())
+    else:
+        live_crate = fresh_copy(tmp_root, "m12live")
+        before = _tree_state(live_crate)
+        live = safety_check.course(live_crate)
+        expect("M12 live: the installed course tool reproduces the recording, through the staff aggregate.py",
+               ([live[k] for k in P], live["extra"]["raw_pointer_dereferences"],
+                live["extra"]["raw_pointer_declarations"], live["extra"]["aggregate"], live["findings"][0]["kind"]),
+               ([1, 2, 0, 1], 1, 1, "staff aggregate.py", "unsafe_lines"))
+        expect("M12 live: the measured crate directory is byte-identical before and after",
+               _tree_state(live_crate), before)
 
 
 if __name__ == "__main__":

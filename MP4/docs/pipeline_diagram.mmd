@@ -5,7 +5,7 @@ flowchart TD
     AG -->|"compiler, test and clippy output<br/>inside the session"| AG
     AG --> IG["integrity.py<br/>restore protected files, remove strays,<br/>record violations"]
     IG --> CK["checks.py<br/>build, per-test results, rubric clippy<br/>(agent vs harness warnings)"]
-    CK --> SA["safety_check.py<br/>(interim proxy; course tool later)"]
+    CK --> SA["safety_check.py<br/>(course newmetrics tool + guard proxy)"]
     SA --> IF["check_interface.py,<br/>hard-coding and lint-attribute scans"]
     IF --> DG["diagnostics.md, iteration_summary.json,<br/>changes.diff, src_after/"]
     DG --> ST{"Stop?<br/>SUCCESS, ABORT,<br/>NO_PROGRESS, MAX_ITERATIONS"}

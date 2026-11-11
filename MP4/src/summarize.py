@@ -39,6 +39,7 @@ import mp4common as mc  # noqa: E402
 README = os.path.join(mc.MP4_DIR, "README.md")
 GROUPS = ("correctness", "style", "complexity", "perf")
 SAFETY = ("unsafe_lines", "unsafe_calls", "unsafe_casts", "pointer_arithmetic")
+OFFICIAL_TOOLS = ("course", "both")   # safety_tool values whose four metrics are the course tool's
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")   # run_pipeline.RUN_ID_RE
 
 
@@ -70,6 +71,12 @@ def compare(run_summary, check):
                       s["clippy_harness"].get(g)))
     for m in SAFETY:
         pairs.append(("safety.%s" % m, (final.get("safety") or {}).get(m), s["safety"][m]))
+    # official numbers recorded beside the trajectory (safety_check.py --official) must equal the course tool's
+    # numbers in the check-only result, whenever both exist (M12)
+    official = _dict((run_summary.get("official_safety") or {}).get("final"))
+    if official and s.get("safety_tool") in OFFICIAL_TOOLS:
+        for m in SAFETY:
+            pairs.append(("official_safety.%s" % m, official.get(m), s["safety"][m]))
     return [{"field": f, "run_summary": a, "check_only": b} for f, a, b in pairs if a != b]
 
 
@@ -86,6 +93,8 @@ def build_rows(entries):
             "iterations": e["run_summary"]["iterations"], "stop_reason": e["run_summary"]["stop_reason"],
             "clippy": s["clippy_agent"], "harness": s["clippy_harness"], "safety": s["safety"],
             "safety_tool": s["safety_tool"], "known_failing": e["run_summary"].get("known_failing_tests") or [],
+            "course": _dict(_dict(_dict(e["check"].get("safety")).get("extra")).get("course")),
+            "proxy": _dict(_dict(_dict(e["check"].get("safety")).get("extra")).get("proxy")),
         })
     return rows
 
@@ -107,9 +116,10 @@ def md_overall(rows):
     return "\n".join(out)
 
 
-def _safety_label(tool):
-    if tool == "course":
-        return "course tool"
+def _safety_label(r):
+    if r["safety_tool"] in OFFICIAL_TOOLS:
+        version = _dict(r.get("course")).get("tool_version")
+        return "course tool" + (" (`%s`)" % version if version else "")
     return "interim proxy (`safety_check.py --tool proxy`); official tool PENDING"
 
 
@@ -118,9 +128,21 @@ def md_safety(rows):
            "|---|---|---|---|---|---|"]
     for r in rows:
         out.append("| %s | %s | %s | %s | %s | %s |" % ((r["label"],) + tuple(r["safety"][m] for m in SAFETY) + (
-            _safety_label(r["safety_tool"]),)))
-    if any(r["safety_tool"] != "course" for r in rows):
-        out += ["", "Additional metrics produced by the course unsafe-metrics tool: PENDING (tool not yet released)."]
+            _safety_label(r),)))
+    official = [r for r in rows if r["safety_tool"] in OFFICIAL_TOOLS]
+    extras = [r for r in official if _dict(r.get("course")).get("raw_pointer_dereferences") is not None]
+    if extras:
+        out += ["", "Additional metrics from the course tool (raw pointer dereferences / raw pointer declarations): "
+                + "; ".join("%s %s / %s" % (r["label"], r["course"]["raw_pointer_dereferences"],
+                                            r["course"]["raw_pointer_declarations"]) for r in extras) + "."]
+    compared = [r for r in official if all(m in _dict(r.get("proxy")) for m in SAFETY)]
+    if compared:
+        out += ["", "For comparison, the interim proxy (`safety_check.py --tool proxy`, regex counts over library "
+                "code) reports unsafe lines / calls / casts / pointer arithmetic: " + "; ".join(
+                    "%s %s" % (r["label"], " / ".join(str(r["proxy"][m]) for m in SAFETY)) for r in compared) + "."]
+    if len(official) != len(rows):
+        out += ["", "Official metrics from the course unsafe-metrics tool: PENDING for the rows marked interim proxy "
+                "(the tool did not run for them)."]
     return "\n".join(out)
 
 
@@ -256,6 +278,7 @@ def iteration_trend(project, label, run_summary):
     An attempt that paused (usage limit, outage, lost login) has no checks; its row says so instead of vanishing,
     and its edits are counted in the next attempt's changes.diff, which diffs against the last checked one."""
     run_dir = final_run_dir(project, run_summary)
+    official = _dict(_dict(run_summary.get("official_safety")).get("iterations"))
     rows = []
     for d in iter_dirs(run_dir):
         base = os.path.join(run_dir, d)
@@ -285,8 +308,16 @@ def iteration_trend(project, label, run_summary):
                 "interface_missing": s.get("interface_missing"), "interface_changed": s.get("interface_changed"),
                 "integrity": len(iv) if isinstance(iv, list) else iv, "success": s.get("success"),
                 "added": sum(a for a, _ in stats.values()), "removed": sum(r for _, r in stats.values())})
+            off = official.get(d)
+            if isinstance(off, dict) and all(isinstance(off.get(m), int) for m in SAFETY):
+                # the course tool's count for this iteration's snapshot replaces the proxy's run-time count
+                row["proxy_total"], row["safety_total"] = row["safety_total"], sum(off[m] for m in SAFETY)
+                row["safety_tool"] = "course"
         rows.append(row)
-    return {"project": project, "label": label, "run_id": run_summary["run_id"], "rows": rows}
+    retro = _dict(run_summary.get("official_safety")) if any("proxy_total" in r for r in rows) else {}
+    return {"project": project, "label": label, "run_id": run_summary["run_id"], "rows": rows,
+            "official_dir": retro.get("dir"),
+            "proxy_agrees": all(r["proxy_total"] == r["safety_total"] for r in rows if "proxy_total" in r)}
 
 
 def _cell(v):
@@ -306,6 +337,16 @@ def _trend_safety(trend):
     return "course tool" if tools == {"course"} else "proxy"
 
 
+def _trend_safety_note(trend, safety):
+    if safety == "proxy":
+        return "interim proxy, official tool PENDING"
+    if not trend.get("official_dir"):
+        return "course tool"
+    return ("course tool, measured after the run on each iteration's `src_after/` snapshot, raw output in `%s/`; "
+            "during the run the controller used the interim proxy, whose totals were %s" % (
+                trend["official_dir"], "the same" if trend.get("proxy_agrees") else "different"))
+
+
 def md_trend(trend):
     safety = _trend_safety(trend)
     out = ["Run `run_%s`. Clippy, safety and interface are the controller's measurements after the iteration "
@@ -313,7 +354,7 @@ def md_trend(trend):
            "changed are from `changes.diff`. C/S/X/P = correctness/style/complexity/perf. Success = that "
            "iteration's crate met the SUCCESS rule (a known-defective test excepted); the run may stop on it only "
            "from iteration 2. `paused` = the attempt was interrupted before the controller's checks." % (
-               trend["run_id"], "interim proxy, official tool PENDING" if safety == "proxy" else "course tool"), "",
+               trend["run_id"], _trend_safety_note(trend, safety)), "",
            "| Iteration | Compiles | Tests | Clippy (agent) C/S/X/P | Clippy (harness) | Safety (%s) | "
            "Interface missing/changed | Integrity | Turns | Output tokens | Minutes | Lines +/- | Success |" % safety,
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]

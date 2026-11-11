@@ -67,6 +67,47 @@
     "read_test_vector"
   ],
   "last_iteration_dir": "iter_02",
+  "official_safety": {
+    "dir": "MP4/trajectories/project_2/official_safety/2026-11-11",
+    "final": {
+      "compilation_units": 2,
+      "crate": "MP4/translations/project_2",
+      "exit_code": 0,
+      "failed": false,
+      "pointer_arithmetic": 0,
+      "raw_pointer_declarations": 0,
+      "raw_pointer_dereferences": 0,
+      "targets": [
+        "libpsbt",
+        "test",
+        "test"
+      ],
+      "total_spans": 54085,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "unsafe_lines": 0,
+      "unsupported_targets": [
+        "test:test"
+      ]
+    },
+    "iterations": {
+      "iter_01": {
+        "pointer_arithmetic": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "unsafe_lines": 0
+      },
+      "iter_02": {
+        "pointer_arithmetic": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "unsafe_lines": 0
+      }
+    },
+    "measured": "2026-11-11",
+    "tool": "course",
+    "tool_version": "newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)"
+  },
   "project": "project_2",
   "run_id": "20261029T194929Z",
   "stop_reason": "SUCCESS",

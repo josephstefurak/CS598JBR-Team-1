@@ -109,8 +109,11 @@ usage-limit attempts on one iteration the run exits with code 75 instead of wait
 **O3 — unsafe-metrics tool. CLEARED.** Released 2026-11-09 at
 `https://github.com/Intelligent-CAT-Lab/CS598JBR-Team-0` (`MP4/newmetrics/`).
 You pre-approved the install on 2026-11-11 (why.md D-TOOL); the M12 session
-does it. Nothing for you to do unless M12 asks whether to retry the install
-without `--locked`. To remove it later:
+does it. **Installed 2026-11-11 (M12)** with the staff command as written; the
+clone is at `~/cs598jbr-course-tools/CS598JBR-Team-0` (commit `4597e75`), and
+`MP4/configs/pipeline.yaml` `safety.course_aggregate` points at its
+`aggregate.py`. Keep the clone while you run `--check-only`. To remove the
+tool later (then also delete the clone):
 
 ```bash
 cargo uninstall newmetrics

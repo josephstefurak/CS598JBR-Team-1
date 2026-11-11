@@ -4,9 +4,10 @@ Group 1 translates two CRUST-bench projects into safe, idiomatic Rust: `satc` (p
 (project_2). The translation agent is Claude Code running headless. A Python controller (`src/`) drives it
 in a loop: inspect C, write Rust, compile, test, clippy, safety and interface checks, feedback, repair,
 repeat until a stopping condition. Results tables are generated from committed artifacts by
-`src/summarize.py` into `results/results.md`. Numbers not yet produced are marked PENDING. The only
-PENDING numbers are the official unsafe metrics: the course's tool has not been released, so the safety
-numbers come from an interim proxy and are labelled as such everywhere.
+`src/summarize.py` into `results/results.md`. The unsafe metrics are measured with the course's
+`newmetrics` tool (see "Unsafe metrics (course tool)" under Evaluation). The tool was released after our
+two runs, so during the runs the controller used its own interim proxy; the official numbers for both
+final translations and for every iteration were measured afterwards, on 2026-11-11.
 
 ## Environment
 
@@ -14,7 +15,7 @@ numbers come from an interim proxy and are labelled as such everywhere.
 - Model(s) and provider/runtime: Claude Opus (`opus` alias, reported as `claude-opus-5`), Anthropic first party, Claude Max subscription login; no local model. See "Model(s) and provider / runtime".
 - Inference settings (temperature, token limits, etc.): effort `high`, 60 turns and 45 minutes per iteration, at most 8 iterations; temperature, top-p and max output tokens are not configurable through Claude Code. See "Inference settings".
 - OS/runtime: macOS 26.5.2 on Apple Silicon, Rust `nightly-2025-05-13`, Python 3.9.12 with PyYAML 6.0. See "OS and runtime".
-- Tools available to the agent: `Read`, `Glob`, `Grep`, `Edit`, `Write`, `Bash` limited to cargo build, check, test and clippy (so the Rust compiler and Clippy), and `StructuredOutput`. See "External tools available to the agent".
+- Tools available to the agent: `Read`, `Glob`, `Grep`, `Edit`, `Write`, `Bash` limited to cargo build, check, test and clippy (so the Rust compiler and Clippy), and `StructuredOutput`. The unsafe-metrics tool is run by the controller, not by the agent. See "External tools available to the agent".
 - API or usage limits: none affected either run; the subscription's rolling 5-hour and weekly limits apply. See "API and usage limits that affected the experiment".
 
 ### Agentic framework and version
@@ -80,9 +81,10 @@ calls. The Rust the agent writes is compiled and its tests are run by `cargo`, w
 user who runs the controller, so the controller does not rely on the tool rules alone. After every session
 it restores the protected benchmark files and re-checks the benchmark sources against their checksums. It
 also refuses FFI, `build.rs` and C sources, and every reported number can be re-measured independently
-(`--check-only`). The course's unsafe-metrics tool has
-not been released yet. Until it is, the controller runs an interim proxy (`src/safety_check.py`) and
-feeds its results back to the agent. The agent does not call it directly.
+(`--check-only`). The agent does not call the course's unsafe-metrics tool itself: the controller
+runs it after each session (`src/safety_check.py`) and feeds the result back in the next prompt. In the
+two committed runs, which predate the tool's release, that feedback came from the controller's interim
+proxy.
 
 Cross-check against the trajectories: the tool names the agent actually called in both runs are exactly the
 seven in the table above, no more and no fewer:
@@ -125,7 +127,8 @@ one full run per project plus at most two tuning reruns, and the controller refu
 | Rust toolchain | nightly-2025-05-13 (rustc 1.89.0-nightly) | Build, test, used by the agent and the controller |
 | Clippy | 0.1.88 | Idiomaticity feedback and scoring (correctness, style, complexity, perf) |
 | Python + PyYAML | 3.9.12, 6.0 | Controller (`src/`) |
-| Safety proxy | `src/safety_check.py` (`proxy-1`) | Interim unsafe metrics until the course tool is released |
+| Course unsafe-metrics tool | `newmetrics` 0.1.0, course repository commit `4597e75` | Official unsafe metrics; run by the controller on a temporary copy of the crate |
+| Safety proxy | `src/safety_check.py` (`proxy-1`) | Guards the course tool does not have (`forbid(unsafe_code)`, `-D unsafe_code` build, FFI, `build.rs`, dependencies); the unsafe-metrics feedback in the two committed runs |
 | CRUST-bench | commit `4b47025`, `datasets/CRUST_bench.zip` | Source of the C projects, Rust interfaces and tests |
 
 ## Setup
@@ -190,7 +193,7 @@ flowchart TD
     AG -->|"compiler, test and clippy output<br/>inside the session"| AG
     AG --> IG["integrity.py<br/>restore protected files, remove strays,<br/>record violations"]
     IG --> CK["checks.py<br/>build, per-test results, rubric clippy<br/>(agent vs harness warnings)"]
-    CK --> SA["safety_check.py<br/>(interim proxy; course tool later)"]
+    CK --> SA["safety_check.py<br/>(course newmetrics tool + guard proxy)"]
     SA --> IF["check_interface.py,<br/>hard-coding and lint-attribute scans"]
     IF --> DG["diagnostics.md, iteration_summary.json,<br/>changes.diff, src_after/"]
     DG --> ST{"Stop?<br/>SUCCESS, ABORT,<br/>NO_PROGRESS, MAX_ITERATIONS"}
@@ -265,6 +268,13 @@ iteration the run shipped (`run_summary.json` `final_iteration_dir`). The contro
   directory with `~` and removes anything that looks like an API key, token or e-mail address
   (`src/scrub_secrets.py`). `scrub_secrets.py --check MP4/` reports 0 hits on the committed tree. Program
   logic affected: no (only the logs are rewritten, never the crate).
+- **Official unsafe metrics measured after the runs.** The course tool was released on 2026-11-09, after
+  both runs (2026-10-29). On 2026-11-11 the controller measured both final translations and every
+  iteration's `src_after/` snapshot with it and recorded the results in
+  `trajectories/project_N/official_safety/2026-11-11/` and in `run_summary.json` under `official_safety`.
+  The run's own record (`final`, each `iteration_summary.json`) still shows the proxy it used at the time.
+  No run was repeated and no Rust changed; the proxy and the course tool agree (all four metrics are 0
+  in every iteration of both projects). Program logic affected: no.
 - **Tool-policy change before the first run.** On 2026-10-29 the agent's tool permissions were tightened
   after a smoke test showed it could read files outside its directories (`configs/CHANGELOG.md`). No
   translation run had happened yet. Program logic affected: no.
@@ -291,7 +301,8 @@ MP4/
 │                   config.py, selftest.py (+ selftest_fixture/, fake_agent.py, tests/)
 ├── configs/        pipeline.yaml, claude_settings.json, agent_system_prompt.md, prompts/, projects/,
 │                   cheatsheet_c_to_rust.md, CHANGELOG.md (every config change, with its evidence)
-├── trajectories/   project_1/, project_2/: baseline/, run_<id>/iter_KK/..., run_summary.json, INDEX.md
+├── trajectories/   project_1/, project_2/: baseline/, run_<id>/iter_KK/..., run_summary.json, INDEX.md,
+│                   official_safety/<date>/ (raw course-tool output for the final crate and every iteration)
 ├── translations/   project_1/, project_2/: the final generated Rust crates
 ├── subjects/       project_1/, project_2/: original C (c/) and CRUST-bench Rust skeleton (rust_skeleton/),
 │                   with CHECKSUMS.sha256 and SOURCE.md
@@ -304,7 +315,7 @@ MP4/
 ### Evaluating without a Claude subscription
 
 This reruns every measurement (build, tests, rubric
-clippy, safety proxy, interface, integrity) on the committed translation without calling a model, and
+clippy, unsafe metrics, interface, integrity) on the committed translation without calling a model, and
 writes `results/project_N.check.json`:
 
 ```bash
@@ -323,3 +334,58 @@ errors and warnings it reported and its test totals, which the report's repair e
 The progress report is written by the team and is not part of this repository. The report draft, the
 LaTeX table fragments (`summarize.py --tex`) and their check (`summarize.py --check-report`) are local
 working files; on a clone without them `--check-report` prints `local draft absent, skipped` and exits 0.
+
+### Unsafe metrics (course tool)
+
+The four unsafe metrics come from the course's `newmetrics` tool
+(<https://github.com/Intelligent-CAT-Lab/CS598JBR-Team-0>, `MP4/newmetrics/`, commit `4597e75`). It is not
+part of this repository. To install it next to the pinned toolchain, with the staff's own command:
+
+```bash
+git clone https://github.com/Intelligent-CAT-Lab/CS598JBR-Team-0 ~/cs598jbr-course-tools/CS598JBR-Team-0
+rustup component add rustc-dev llvm-tools-preview --toolchain nightly-2025-05-13
+cd ~/cs598jbr-course-tools/CS598JBR-Team-0/MP4/newmetrics && cargo install --debug --locked --path . --force
+```
+
+If the clone lives elsewhere, set `MP4_NEWMETRICS_AGGREGATE` to the path of its `aggregate.py`
+(`configs/pipeline.yaml` `safety.course_aggregate` holds the default). Then, from the repository root:
+
+```bash
+python3 -I MP4/src/run_pipeline.py --project project_1 --check-only     # the final crate; safety block has "tool": "both"
+python3 -I MP4/src/safety_check.py --project project_1 --tool course    # the course tool alone
+python3 -I MP4/src/safety_check.py --project project_1 --official       # final crate and every iteration snapshot
+```
+
+The controller never runs the tool inside `translations/`. The tool runs `cargo clean` and `cargo check`
+and writes `unsafe_spans.txt`, `derefs.txt`, `decls.txt` and `summary.json` into its working directory, so
+`src/safety_check.py` copies the crate to a temporary directory, runs the staff command there
+(`cargo newmetrics 2>&1 | python3 aggregate.py --out summary.json`), keeps the output and deletes the
+copy. To run it by hand, do the same: copy `MP4/translations/project_N` somewhere else first.
+
+Committed results: `results/project_N.check.json` (`safety`), `results/project_N.check.logs/raw_course.txt`
+and `summary_course.json`, and `trajectories/project_N/official_safety/2026-11-11/` with `raw_final.txt`,
+one `raw_iter_KK.txt` per iteration, the matching `summary_*.json` and the tool's span files. Both
+translations score 0 unsafe lines, 0 unsafe calls, 0 unsafe casts and 0 pointer arithmetic, in the final
+crate and in every iteration.
+
+Without the tool installed, `--check-only` still runs: it prints a note, reports the interim proxy's
+numbers, and labels them as such (`"tool": "proxy"` plus a `course_tool_unavailable` finding).
+
+How the tool counts, where that differs from the handout's wording (read from its source at `4597e75`):
+
+- It analyses the library target and every `bin` target, so the benchmark's test binary under `src/bin/`
+  is included. libpsbt's `[[test]]` target is printed as "not supported" and skipped; the same file is
+  still analysed as a `bin`.
+- Unsafe lines: the line span of every `unsafe { }` block and every `unsafe fn` item, signature, blank
+  and comment lines included. A nested block is counted again.
+- Unsafe calls: every call or method call inside an `unsafe { }` block, safe callees included. Calls in an
+  `unsafe fn` body outside a block are not counted.
+- Unsafe casts: every `as` cast inside an `unsafe { }` block, ordinary numeric casts included.
+  `transmute` is not a cast for the tool.
+- Pointer arithmetic: calls to `add`, `sub`, `offset` and their `byte_`/`wrapping_` variants on a raw
+  pointer, anywhere.
+- It also reports raw-pointer dereferences and raw-pointer declarations (both 0 for our crates), and
+  "Total spans", which is the source size in bytes, so its "unsafe ratio" is lines over bytes.
+- The three span files are rewritten for every target, so they hold the last target's spans only.
+- FFI, `extern` blocks and `transmute` are not detected by the tool. The controller's proxy checks those,
+  together with `#![forbid(unsafe_code)]` and a `-D unsafe_code` build, and both must be clean for SUCCESS.

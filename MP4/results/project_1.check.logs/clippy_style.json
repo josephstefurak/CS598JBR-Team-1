@@ -7,6 +7,6 @@ $ cargo +nightly-2025-05-13 clippy --all-targets --all-features --message-format
 {"reason":"compiler-artifact","package_id":"path+file://<crate>#satc@0.1.0","manifest_path":"<crate>/Cargo.toml","target":{"kind":["bin"],"crate_types":["bin"],"name":"satc_test","src_path":"<crate>/src/bin/satc_test.rs","edition":"2024","doc":true,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":false},"features":[],"filenames":["<crate>/target/debug/deps/libsatc_test-f3b22ba2be9a2fcc.rmeta"],"executable":null,"fresh":false}
 {"reason":"compiler-artifact","package_id":"path+file://<crate>#satc@0.1.0","manifest_path":"<crate>/Cargo.toml","target":{"kind":["bin"],"crate_types":["bin"],"name":"satc_test","src_path":"<crate>/src/bin/satc_test.rs","edition":"2024","doc":true,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["<crate>/target/debug/deps/libsatc_test-8aa85201f4b23e26.rmeta"],"executable":null,"fresh":false}
 {"reason":"build-finished","success":true}
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
 
 [exit 0]

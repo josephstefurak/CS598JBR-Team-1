@@ -35,7 +35,8 @@ SCHEMA = {
     "toolchain": {"name": str, "cargo_locked": bool, "cargo_timeout_seconds": int},
     "checks": {"clippy_rubric_args": list, "clippy_groups": list, "forbid_unsafe_in_lib": bool,
                "forbid_line": str, "hardcode_min_literal": int},
-    "safety": {"tool": str, "course_cmd": (str, list, type(None)), "course_version": (str, type(None))},
+    "safety": {"tool": str, "course_cmd": (str, list, type(None)), "course_version": (str, type(None)),
+               "course_aggregate": (str, type(None))},
     "rate_limit": {"mode": str, "fallback_minutes": (int, float), "max_wait_hours": (int, float),
                    "resume_margin_seconds": (int, float)},
     "digest": {"max_build_errors": int, "max_failing_tests": int, "max_panic_chars": int,
@@ -112,8 +113,11 @@ def validate_pipeline(cfg):
         raise ConfigError("checks.clippy_rubric_args must equal the handout's rubric clippy command exactly")
     if cfg["toolchain"]["name"] != "nightly-2025-05-13":
         raise ConfigError("toolchain.name must be nightly-2025-05-13 (why.md Z15)")
-    if cfg["safety"]["tool"] not in ("proxy", "course"):
-        raise ConfigError("safety.tool must be proxy or course")
+    if cfg["safety"]["tool"] not in ("proxy", "both"):
+        # the course tool alone has no forbid, FFI, build.rs or dependency guard, so it never runs without the proxy
+        raise ConfigError("safety.tool must be proxy or both")
+    if cfg["safety"]["tool"] == "both" and not cfg["safety"]["course_cmd"]:
+        raise ConfigError("safety.tool both needs safety.course_cmd")
     if cfg["rate_limit"]["mode"] not in ("wait", "exit"):
         raise ConfigError("rate_limit.mode must be wait or exit")
     return cfg

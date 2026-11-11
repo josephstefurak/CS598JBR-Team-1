@@ -1,7 +1,7 @@
 {
   "project": "project_2",
   "crate": "MP4/translations/project_2",
-  "generated_at": "2026-10-29T20:11:50Z",
+  "generated_at": "2026-11-11T16:12:32Z",
   "toolchain": "cargo 1.89.0-nightly (056f5f4f3 2025-05-09)",
   "subjects_checksums_ok": true,
   "build": {
@@ -33,12 +33,12 @@
     "missing_names": [],
     "extra_tests": {},
     "tests": {
-      "test_vector": {
+      "empty_input_test": {
         "status": "ok",
         "executions": 2,
         "panic": null
       },
-      "empty_input_test": {
+      "test_vector": {
         "status": "ok",
         "executions": 2,
         "panic": null
@@ -66,8 +66,8 @@
     "exit_code": 0,
     "summary_lines": [
       "warning: `libpsbt` (bin \"test\") generated 8 warnings (run `cargo clippy --fix --bin \"test\"` to apply 2 suggestions)",
-      "warning: `libpsbt` (test \"test\") generated 4 warnings (3 duplicates)",
-      "warning: `libpsbt` (bin \"test\" test) generated 4 warnings (3 duplicates) (run `cargo clippy --fix --bin \"test\" --tests` to apply 1 suggestion)"
+      "warning: `libpsbt` (bin \"test\" test) generated 4 warnings (4 duplicates)",
+      "warning: `libpsbt` (test \"test\") generated 4 warnings (2 duplicates) (run `cargo clippy --fix --test \"test\"` to apply 1 suggestion)"
     ],
     "error_count": 0,
     "log": "MP4/results/project_2.check.logs/clippy_rubric.log"
@@ -233,12 +233,8 @@
     "ok": true
   },
   "safety": {
-    "tool": "proxy",
-    "tool_version": "proxy-1",
-    "unsafe_lines": 0,
-    "unsafe_calls": 0,
-    "unsafe_casts": 0,
-    "pointer_arithmetic": 0,
+    "tool": "both",
+    "tool_version": "newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75) + proxy-1",
     "extra": {
       "raw_pointer_types": 0,
       "manual_alloc": 0,
@@ -352,10 +348,43 @@
             "transmute": 0
           }
         }
-      }
+      },
+      "proxy": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "tool_version": "proxy-1"
+      },
+      "course": {
+        "unsafe_lines": 0,
+        "unsafe_calls": 0,
+        "unsafe_casts": 0,
+        "pointer_arithmetic": 0,
+        "tool_version": "newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)",
+        "exit_code": 0,
+        "compilation_units": 2,
+        "targets": [
+          "libpsbt",
+          "test",
+          "test"
+        ],
+        "unsupported_targets": [
+          "test:test"
+        ],
+        "aggregate": "staff aggregate.py",
+        "raw_pointer_dereferences": 0,
+        "raw_pointer_declarations": 0,
+        "total_spans": 54085
+      },
+      "proxy_equals_course": true
     },
     "findings": [],
-    "raw_path": "MP4/results/project_2.check.logs/safety_proxy.json"
+    "raw_path": "MP4/results/project_2.check.logs/safety_course.json",
+    "unsafe_lines": 0,
+    "unsafe_calls": 0,
+    "unsafe_casts": 0,
+    "pointer_arithmetic": 0
   },
   "interface": {
     "modules": {
@@ -441,7 +470,7 @@
       "unsafe_casts": 0,
       "pointer_arithmetic": 0
     },
-    "safety_tool": "proxy",
+    "safety_tool": "both",
     "interface_missing": 0,
     "interface_changed": 0,
     "integrity_violations": 0,

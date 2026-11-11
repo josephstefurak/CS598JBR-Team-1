@@ -33,6 +33,11 @@ Rules that hold in every session touching MP4:
 - **Never edit generated Rust** under `MP4/translations/`. Only prompts and
   orchestration change (logged in `MP4/configs/CHANGELOG.md`), then the
   pipeline reruns. `integrity.py --provenance` enforces this.
+- **The course unsafe-metrics tool** (`newmetrics`, cloned outside the repo
+  at `~/cs598jbr-course-tools/`) is the safety backend (`safety.tool: both`).
+  It is only ever run through `MP4/src/safety_check.py`, which measures a
+  temporary copy: never run `cargo newmetrics` inside `MP4/translations/`.
+  The tool is not vendored or modified.
 - **Benchmark tests, interfaces, `Cargo.toml`, `Cargo.lock`** under
   `MP4/subjects/` and the copies in `MP4/translations/` are immutable.
 - **Spend**: `run_pipeline.py --project ...` consumes the owner's Claude

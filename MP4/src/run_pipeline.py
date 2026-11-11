@@ -118,7 +118,7 @@ def _scrub_logs(log_dir, work, names=None, crate_label="<crate>"):
                     fh.write(new)
 
 
-def check_only(project, crate, out_path, allowed=()):
+def check_only(project, crate, out_path, allowed=(), safety_tool="proxy"):
     source = mc.skeleton_dir(project)
     out_path = os.path.abspath(out_path)
     log_dir = out_path[:-5] + ".logs" if out_path.endswith(".json") else out_path + ".logs"
@@ -135,7 +135,7 @@ def check_only(project, crate, out_path, allowed=()):
             "toolchain": _toolchain_version(),
             "subjects_checksums_ok": not integrity.verify_subjects(source),
         }
-        res.update(measure_crate(work, source, log_dir, allowed))
+        res.update(measure_crate(work, source, log_dir, allowed, safety_tool))
         _scrub_logs(log_dir, work)
         text = _scrub_paths(json.dumps(res, indent=2), work, log_dir)
     finally:
@@ -437,7 +437,8 @@ STOP_ABORT = "ABORT"
 STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
 PAUSE_OUTCOMES = ("usage_limit", "overloaded", "connection_error", "auth_error")
 NO_CLIPPY = 10 ** 6   # clippy count used in the score when the build failed and clippy could not run
-MEASURE_LOGS = ("build.log", "test.log", "clippy_rubric.log", "safety_proxy.json")   # + clippy_<group>.json
+MEASURE_LOGS = ("build.log", "test.log", "clippy_rubric.log", "safety_proxy.json",   # + clippy_<group>.json
+                "safety_course.json", "raw_course.txt", "summary_course.json")        # course tool (safety.tool both)
 
 
 class Interrupted(Exception):
@@ -448,12 +449,13 @@ def _on_signal(signum, _frame):
     raise Interrupted(signum)
 
 
-def measure_crate(work, source, log_dir, allowed=()):
+def measure_crate(work, source, log_dir, allowed=(), safety_tool="proxy"):
     """Build, test, clippy, safety, interface, integrity (report-only), hard-coding and lint attributes for one
     crate. Tests are counted against the benchmark's own test names (source/src/bin), not whatever ran.
-    allowed is the project's allow_attributes (D-ALLOW)."""
+    allowed is the project's allow_attributes (D-ALLOW). safety_tool is pipeline.yaml safety.tool: `both` adds
+    the course tool, which measures its own temporary copy of work."""
     res = dict(checks.run_all(work, log_dir, checks.benchmark_tests(source)))
-    res["safety"] = safety_check.proxy(work, raw_path=os.path.join(log_dir, "safety_proxy.json"), source=source)
+    res["safety"] = safety_check.measure(safety_tool, work, log_dir, source)
     res["interface"] = check_interface.compare(os.path.join(source, "src", "interfaces"), work)
     res["integrity"] = {"violations": integrity.verify(work, source, restore=False)}
     res["hardcode_hits"] = integrity.hardcode_scan(work)
@@ -513,7 +515,8 @@ def evaluate(check, proj):
         blockers.append("unsafe metrics: %d" % safety_total)
     for f in check["safety"]["findings"]:
         if f["kind"] in ("forbid_missing", "deny_unsafe_build_failed", "extern_c", "link_attr", "libc",
-                         "cc_crate", "build_rs", "c_source", "new_dependency"):
+                         "cc_crate", "build_rs", "c_source", "new_dependency", "course_tool_unavailable",
+                         "course_tool_failed"):
             blockers.append("safety finding: %s" % f["kind"])
     if s["interface_missing"] or s["interface_changed"]:
         blockers.append("interface missing %d, changed %d" % (s["interface_missing"], s["interface_changed"]))
@@ -796,7 +799,8 @@ def do_checks(run, k, n, agent_outcome):
     else:
         violations = integrity.verify(run.workspace, run.skeleton, restore=True)
         _write_json(integ_path, {"violations": violations})
-    check = measure_crate(run.workspace, run.skeleton, it, run.proj["allow_attributes"])
+    check = measure_crate(run.workspace, run.skeleton, it, run.proj["allow_attributes"],
+                          run.cfg["pipeline"]["safety"]["tool"])
     integ = _read_json(integ_path)
     if "after_measurement" not in integ:
         # measuring ran agent code (cargo test): anything it planted (a .cargo/config.toml lint cap, an attribute
@@ -1247,14 +1251,19 @@ def main(argv=None):
             return run_loop(cfg, run_id=args.resume_run, resume=True, yes=True)
         return run_loop(cfg, run_id=args.run_id, yes=args.yes)
     # the measurement settings it uses (toolchain, rubric clippy, D-ALLOW) must be valid too
-    allowed = config.load(args.project)["project_cfg"]["allow_attributes"]
+    cfg = config.load(args.project)
+    allowed = cfg["project_cfg"]["allow_attributes"]
     crate = os.path.abspath(args.crate_dir) if args.crate_dir else mc.translation_dir(args.project)
     if not os.path.exists(os.path.join(crate, "Cargo.toml")):
         print("no crate at %s (no translation yet? pass --crate-dir)" % mc.rel(crate, mc.REPO_DIR), file=sys.stderr)
         return 2
     out = args.out or os.path.join(mc.RESULTS_DIR, "%s.check.json" % args.project)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    res = check_only(args.project, crate, out, allowed)
+    res = check_only(args.project, crate, out, allowed, cfg["pipeline"]["safety"]["tool"])
+    for f in res["safety"]["findings"]:
+        if f["kind"] in ("course_tool_unavailable", "course_tool_failed"):
+            print("NOTE: the course unsafe-metrics tool did not run (%s); the safety numbers below are the "
+                  "proxy's, not official ones" % f.get("detail"), file=sys.stderr)
     print(json.dumps(res["summary"], indent=2))
     print("wrote %s" % (mc.rel(os.path.abspath(out), mc.REPO_DIR)))
     return 0

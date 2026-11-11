@@ -95,6 +95,8 @@ the repo as of 2026-11-11; O4/M13 stay blocked.
   cargo, clippy, rust-std, rustc); adding them is a software install, so an
   owner gate. The repo ships **no `Cargo.lock`** while the command passes
   `--locked`; whether that installs cleanly is unverified until tried.
+  **M12 (2026-11-11):** it does. `cargo install --debug --locked --path . --force` exited 0 without a lock
+  file and wrote none; the resolved versions are in `MP4/docs/environment.md`.
   Installs two binaries into `~/.cargo/bin`: `cargo-newmetrics`, `newmetrics`.
 - N2 Run (staff): from the translated crate root,
   `cargo newmetrics 2>&1 | python3 aggregate.py --out summary.json`.
@@ -140,6 +142,11 @@ the repo as of 2026-11-11; O4/M13 stay blocked.
   raw pointers scores 0 on all four primary metrics. Both translations carry
   `#![forbid(unsafe_code)]` (D-FORBID) and the proxy reports 0, so the expected
   official result is 0/0/0/0 for both. Expected, not measured.
+  **M12 (2026-11-11): measured.** 0/0/0/0, and 0 raw-pointer dereferences and declarations, for both final
+  translations and all four iteration snapshots
+  (`MP4/trajectories/project_N/official_safety/2026-11-11/`). Also confirmed on the self-test fixture: the
+  three span files are rewritten per compilation unit (they end up holding the last target's spans), and a
+  `transmute` is a call, not a cast, for the tool (proxy casts 1, tool casts 0).
 - N6 Course `MP4/README.md` template headings: `Environment` (bullets: agent
   framework and version; model(s) and provider/runtime; inference settings;
   OS/runtime; tools available to the agent; API or usage limits), `Setup`,

@@ -115,9 +115,11 @@ checks:
   hardcode_min_literal: 20
 
 safety:
-  tool: proxy                           # D6 interim
-  course_cmd: null                      # M12 sets this when the course tool exists
-  course_version: null
+  tool: both                            # course tool (official numbers) + proxy (forbid, build and FFI guards)
+  course_cmd: [cargo, newmetrics]       # the staff command; always run in a temporary copy of the crate
+  # the staff aggregate.py of the course repository; MP4_NEWMETRICS_AGGREGATE overrides this path
+  course_aggregate: ~/cs598jbr-course-tools/CS598JBR-Team-0/MP4/newmetrics/aggregate.py
+  course_version: newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)
 
 rate_limit:
   mode: wait                            # D7: pause and resume the same iteration
