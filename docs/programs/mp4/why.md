@@ -231,15 +231,15 @@ the repo as of 2026-11-11; O4/M13 stay blocked.
 ## D — Ratified decisions (owner, 2026-10-28; see also the plan file)
 
 - D1 Agent B = Claude Code headless, **model opus, effort high**, one model for every iteration, subscription auth.
-- D2 program-builder, branch `mp4-program` from `ffcb972`, commit-only, never push.
+- D2 program-builder, branch `mp4-program` from `ffcb972`, commit-only, never push. **Revised 2026-11-11 (owner: "I'm authorizing the sessions to push the MP4 program"):** sessions push `mp4-program` after each phase commit (`program.yaml git.push_ref`). `main` is never pushed by a session; no PR, no merge.
 - D3 Owner-blocked rows last (M12-M14) with preconditions in code.
 - D4 Reviews validate the rubric with evidence AND hunt bugs.
 - D5 No manual Rust repair; integrity guards in code; `configs/CHANGELOG.md`.
 - D6 Interim safety = wrapper-injected `#![forbid(unsafe_code)]` + `-D unsafe_code` build + regex counts; course tool as second backend, run retroactively over snapshots.
 - D7 **Spend envelope pre-authorized**: <= 8 iterations x <= 60 turns per project per run, <= 2 full runs, <= 2 tuning reruns, <= 3 smoke calls; auto-resume after usage-limit pause (`rate_limit.mode: wait`, cap 6 h).
 - D8 `read_test_vector` is **known-failing**: excluded from the success predicate, wrapper verifies it is the only failure and fails on the documented assertion, prompt forbids suppressing callbacks, README and report disclose it, **owner raises it with course staff**; any ruling is injected into `configs/projects/project_2.yaml`.
-- D9 Cut-off **2026-11-15** for M12/M13; afterwards they are marked dropped and proxy numbers ship labelled.
-- D10 Jacob and Ross polish the report prose; Joseph + sessions do everything else.
+- D9 Cut-off **2026-11-15** for M12/M13; afterwards they are marked dropped and proxy numbers ship labelled. **Revised 2026-11-11 (owner: "Extend to Nov 17"):** the unsafe-metrics tool is released, so M12 has no cut-off; the validator row M13 is dropped if the script has not appeared by **2026-11-17**.
+- D10 Jacob and Ross polish the report prose; Joseph + sessions do everything else. **Superseded 2026-11-11 by D-REPORT.**
 - D-ALLOW (**confirmed M3 gate 2026-10-29: "One allow, that fn only"**) exactly one `#[allow(clippy::too_many_arguments)]` on `satc_is_separating_axis`; all other allow-attributes forbidden (grep-checked by the M8 review; M5 found the loop does not enforce it, review-1 G1 asks the owner at M6).
 - D-CLIMAIN (**confirmed M3 gate 2026-10-29: "Make it pub fn main"**) libpsbt `cli::main` becomes `pub fn main() -> i32`, no extra bin.
 - D-FAITHFUL (**confirmed M3 gate 2026-10-29: "Faithful; define UB safely"**) faithful where the C is well-defined; defined non-panicking behaviour where the C is UB; every ruling in the project yaml and README.
@@ -260,3 +260,6 @@ the repo as of 2026-11-11; O4/M13 stay blocked.
   The last three were asked as "applied before any rerun; otherwise the post-merge backlog". With M9 dropped
   they are approved changes in `post-merge.md`; none affects the committed runs.
 - D-STRUCTOUT (owner, M3 2026-10-29: "Allow StructuredOutput too") `--json-schema` adds a `StructuredOutput` tool to the init tools[]; the isolation check expects exactly the configured six plus `StructuredOutput`, anything else aborts. Evidence: `docs/programs/mp4/evidence/smoke/attempt1_isolation_abort/`.
+- D-REPORT (owner, 2026-11-11) The MP4 report section is **written by hand by the team in Overleaf**. The program's deliverable for Task 4 is a local draft (`MP4/docs/report_mp4_draft.md` / `.tex`, gitignored) offered as a recommendation, with numbers generated from committed artifacts. No row waits on an Overleaf export; O5 is superseded. When the program ends, everything is done except the hand-written report.
+- D-UNTRACK (owner, 2026-11-11, verbatim selection: "Only the two drafts, LaTeX table fragments, Forum-post draft, Rubric traceability") These stay on disk, are gitignored and are removed from the tracked tree going forward; history is left as it is ("It's okay if they're in history"): `MP4/docs/report_mp4_draft.md`, `MP4/docs/report_mp4_draft.tex`, `MP4/results/*.tex`, `docs/programs/mp4/forum-post-draft.md`, `MP4/docs/rubric_traceability.md`. `MP4/results/results.md` and the check JSON/logs stay tracked. Executed by M15.
+- D-TOOL (owner, 2026-11-11: "I'm okay with it as long as you make sure that it's safe ... If it is safe, go for it") The course `newmetrics` tool was read in full on 2026-11-11 (why.md N): it runs `cargo clean`/`cargo check` on the crate it is pointed at and writes four small files into the working directory; no network use, no writes elsewhere. Install is pre-approved: `rustc-dev` + `llvm-tools-preview` on nightly-2025-05-13, then the staff install command. Not vendored into this repo (the course repo has no licence file); cloned outside the repo at commit `4597e75`. Always run on a copy of the crate, never inside `MP4/translations/` (N3). If `--locked` fails because the tool ships no `Cargo.lock`, the session asks before retrying without it.

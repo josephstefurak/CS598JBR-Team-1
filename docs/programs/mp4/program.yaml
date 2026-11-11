@@ -24,9 +24,10 @@ git:
   base_branch: main
   base_commit: ffcb9721df7abcea20ae5b2ffbfabbe4068d0137
   branch: mp4-program
-  # push_ref intentionally absent: this program is COMMIT-ONLY. No session
-  # pushes any ref. The owner merges mp4-program into main with a merge commit
-  # and pushes main themself before the deadline.
+  push_ref: mp4-program           # owner authorization 2026-11-11 (why.md D2 revised). Sessions push this
+                                  # ref after each phase commit. main is NEVER pushed by a session: the
+                                  # owner merges mp4-program into main with a merge commit and pushes main
+                                  # themself before the deadline. (Until 2026-11-11 the program was commit-only.)
   merge_cadence: end             # single merge at the end, by the owner; no intermediate merges needed (no other branch touches MP4/)
   merge_style: merge-commit       # never squash
 
@@ -77,7 +78,8 @@ standing_priorities:
   - The generated Rust under MP4/translations/ is never edited by a human or by an agent-A session. Only prompts and orchestration change, every change logged in MP4/configs/CHANGELOG.md, then the pipeline reruns.
   - Every number in README, results and report is generated from committed artifacts and reproducible with `run_pipeline.py --check-only`; nothing is typed in by hand or invented.
   - Benchmark tests, interfaces, Cargo.toml and Cargo.lock are immutable and guarded by checksums in code, not prose.
-  - Owner-blocked work (course unsafe-metrics tool, course validation script, Overleaf, merge/push) stays in rows M12-M14; nothing earlier waits on it.
+  - Course-tool work and the final handoff stay in rows M12-M14 (plus M15, the 2026-11-11 alignment row that runs before M12); nothing earlier waits on them. The progress report is hand-written by the team; no row waits on Overleaf (why.md D-REPORT).
+  - Report drafts, LaTeX table fragments, the rubric traceability map and the forum-post draft stay local and gitignored (why.md D-UNTRACK).
   - Trajectories are complete, per-iteration, scrubbed of secrets, emails and home paths, and prove the loop was feedback-driven.
 
 owner_gates:
@@ -86,8 +88,9 @@ owner_gates:
   - Any spend outside the pre-authorized envelope (see spend_surface).
   - Choosing whether the optional tuning rerun M9 runs (asked at the M8 gate).
   - Which run is final when a rerun scores differently (M9).
-  - Supplying the course unsafe-metrics tool (M12), the validation script (M13), the Overleaf export (M14).
-  - Merging and pushing: owner only, never a session.
+  - Supplying the course validation script (M13). The unsafe-metrics tool install is pre-approved (why.md D-TOOL); retrying its install without `--locked` is a gate (M12).
+  - Authorizing a tuning rerun if the official unsafe metrics are nonzero (M12).
+  - Merging, opening a PR and pushing main: owner only, never a session. Sessions push only mp4-program.
 
 spend_surface:
   - cmd: python3 -I MP4/src/run_pipeline.py --project project_N [--yes]
@@ -112,8 +115,8 @@ tooling:
     - tool: Workflow (ultracode)
       for: M8 and M10 — parallel readers over the two trajectories to mine repair examples; a judge picks the three for the report
 
-external_boundary: Everything under MP4/ is grader-visible and graded; docs/programs/mp4/, .claude/commands/ and CLAUDE.md are internal process artifacts (visible in the repo but ungraded). The Overleaf report is the client-facing document.
-clock: 2026-11-18 23:59 hard deadline (course). Internal cut-off 2026-11-15 for owner-blocked rows M12/M13 (D9). Start M6 by ~2026-11-05 to leave room for a rerun and quota pauses.
+external_boundary: Everything under MP4/ is grader-visible and graded; docs/programs/mp4/, .claude/commands/ and CLAUDE.md are internal process artifacts (visible in the repo but ungraded). The Overleaf report is the client-facing document and is written by hand by the team; the in-repo draft is local only (gitignored).
+clock: 2026-11-18 23:59 hard deadline (course). Internal cut-off 2026-11-17 for the validator row M13 (D9, revised 2026-11-11; was 2026-11-15 for M12/M13). Start M6 by ~2026-11-05 to leave room for a rerun and quota pauses.
 assumptions:
   - Allow-attributes: exactly one `#[allow(clippy::too_many_arguments)]` permitted on satc_is_separating_axis (fixed 8-parameter interface signature); all others forbidden. Based on the interface being immutable and the rubric counting warnings. Confirmed at the M3 gate.
   - libpsbt cli::main becomes `pub fn main() -> i32` with no extra bin target (minor addition; removes dead_code). Confirmed at the M3 gate.

@@ -35,7 +35,7 @@ reshape the list. Nothing gated gets fixed until you do.
 
 ## Moment 2 — the merge
 
-A session never opens a PR, never merges, never pushes. When one reports ready
+A session never opens a PR, never merges, never pushes `main` (it pushes only `mp4-program`, since 2026-11-11). When one reports ready
 to merge, it hands you `docs/programs/mp4/handoff.md`. Then, per the runbook
 Stage 5: merge `mp4-program` into `main` with a merge commit and push `main`
 yourself before 2026-11-18 23:59.

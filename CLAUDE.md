@@ -17,10 +17,16 @@ exactly the first runnable row to its spec, honor its listed **owner gates**
 (ask, never assume), then update the ledger and phase log, commit, and report
 on that phase only.
 
-MP4 work lives on the **`mp4-program` branch**. This program is
-**commit-only**: no session pushes any ref, ever. The owner merges
-`mp4-program` into `main` with a merge commit (never squash) and pushes `main`
-themself before 2026-11-18 23:59.
+MP4 work lives on the **`mp4-program` branch**. Sessions commit and then
+**push `mp4-program`** (owner authorization, 2026-11-11; `program.yaml`
+`git.push_ref`). No session ever pushes `main`, opens a PR or merges. The
+owner merges `mp4-program` into `main` with a merge commit (never squash) and
+pushes `main` themself before 2026-11-18 23:59.
+
+The progress report is **written by hand by the team in Overleaf**. Sessions
+keep a local, gitignored draft (`MP4/docs/report_mp4_draft.*`) as a
+recommendation; report drafts, LaTeX table fragments, the rubric traceability
+map and the forum-post draft are never committed (why.md D-UNTRACK).
 
 Rules that hold in every session touching MP4:
 

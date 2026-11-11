@@ -24,8 +24,10 @@ clause is the scope fence. Keys like R-T2-SRC, Z1, H-L1, C4, D8 refer to
 5. **Real output only.** Phase logs paste command output and counts. Unknown
    numbers are PENDING, never guessed. Every phase log has a NOT demonstrated
    paragraph.
-6. **Commit, never push.** One intent per commit; the ledger and phase log
-   change in the phase's final commit.
+6. **Commit, then push `mp4-program` only.** One intent per commit; the ledger
+   and phase log change in the phase's final commit; then
+   `git push origin mp4-program` (owner authorization 2026-11-11, D2
+   revised). Never push `main`, never open a PR, never merge.
 7. **Python 3.9-compatible, `-I` safe, stdlib + PyYAML only.** Entry points
    insert their own directory on `sys.path`.
 8. **Scrub before commit.** `scrub_secrets.py --check MP4/` passes before every
@@ -34,6 +36,8 @@ clause is the scope fence. Keys like R-T2-SRC, Z1, H-L1, C4, D8 refer to
    ones in every clippy number, with the baseline from M1 as the reference.
 10. **Tooling pass each phase**: check `ListSkills`/available skills against
     the row's Tooling line; record what was used.
+11. **Report-type files are never committed** (D-UNTRACK): the report draft,
+    `MP4/results/*.tex`, the rubric traceability map, the forum-post draft.
 
 ### Pipeline design reference (shared by M2-M4)
 
@@ -776,53 +780,135 @@ pushing; polishing translations.
 
 ---
 
-## M12 — Official unsafe-metrics tool: adapter, retroactive measurement, table swap
+## M15 — Handout-v2 alignment: untrack report-type files, README to the course template
 
-**Goal**: The course unsafe-metrics tool replaces the proxy in the pipeline
-and the report, both final translations and every historical iteration
-snapshot carry official numbers recorded beside the trajectories, and the
-safety discussion rests on official data.
+*Added by the 2026-11-11 amendment. Numbered M15 because IDs are never
+reused; it runs **before M12** (ledger order).*
 
-**Why / findings covered**: R-T3-P1-SAFETY, R-T3-P2-SAFETY,
-R-T4-SAFETY-ANALYSIS, D6, D9.
+**Goal**: The repository no longer carries report drafts or other
+report-type files, the tooling works on a fresh clone without them, and
+`MP4/README.md` follows the course template's six headings with nothing lost.
+
+**Why / findings covered**: D-UNTRACK, D-REPORT, RC6, N6, R-T1-README,
+R-T1-TOOLLIST, R-T2-REPRO, Z11.
 
 **Tooling**: none.
 
 **Spec**:
-1. Precondition in code: `safety_check.py --tool course --probe` must find
-   the tool at `pipeline.yaml safety.course_cmd` (owner places it under
-   `MP4/tools/unsafe-metrics/` or a documented external path per the
-   runbook); if absent, keep the row blocked and stop.
-2. Write the course adapter (json key map or regex table) from the tool's
-   real output; add a fixture of its real output to `selftest.py`; set
-   `safety.tool: both` so proxy and official are reported side by side.
-3. Run `--check-only` for both projects and `safety_check.py --all-snapshots`
-   over every `run_*/iter_KK/src_after/`; store raw output as
-   `trajectories/project_N/official_safety/<date>/raw_final.txt` and
-   `raw_iter_KK.txt`; update `check.json` and `run_summary.json` safety
-   blocks.
-4. Regenerate results and the report/README safety tables and discussion with
-   official values (remove PENDING and the proxy label; keep a
-   proxy-vs-official comparison line); update `rubric_traceability.md`
-   T3-*-SAFETY and T4-SAFETY-ANALYSIS to verified.
-5. If any primary metric is nonzero on a final translation: do not edit Rust;
-   show the owner the counts and offending lines and propose a prompt /
-   orchestration change plus an owner-gated rerun as a new M9-shaped row.
-6. Nothing else. No Rust edits; no rerun inside this row; no retroactive
-   change to the proxy regexes to match the tool (log differences).
+1. Untrack, keep on disk, gitignore (`git rm --cached` + `.gitignore`):
+   `MP4/docs/report_mp4_draft.md`, `MP4/docs/report_mp4_draft.tex`,
+   `MP4/results/*.tex`, `docs/programs/mp4/forum-post-draft.md`,
+   `MP4/docs/rubric_traceability.md`. Confirm each file is still on disk.
+2. Find every reference first
+   (`git grep -n 'report_mp4_draft\|rubric_traceability\|results/.*\.tex\|forum-post-draft'`)
+   and fix each one in README, runbook and this file's later specs.
+3. `MP4/src/summarize.py`: keep generating the draft blocks and `.tex`
+   fragments locally when the files are present or asked for; on a clone
+   without them `--check-report` prints `local draft absent, skipped` and
+   exits 0, and no other mode fails. `MP4/src/selftest.py`: adjust case
+   "M11 S9" to that behaviour and add a case for the absent-draft path.
+4. Restructure `MP4/README.md` to the course template headings, in order:
+   `Environment` (with the template's six bullets: agent framework and
+   version; model(s) and provider/runtime; inference settings; OS/runtime;
+   tools available to the agent; API or usage limits), `Setup`, `Run`,
+   `Pipeline`, `Outputs`, `Evaluation`. The existing 14 sections become
+   subsections under the heading they belong to; no content is dropped
+   (infrastructure interventions and the academic-integrity statement
+   included). Update the heading list and generated-section markers that
+   `summarize.py --check-readme` and its selftest cases enforce.
+5. Log the change in `MP4/configs/CHANGELOG.md` as an infrastructure change,
+   "program logic affected: no".
+6. Nothing else. No change to prompts, pipeline behaviour, translations,
+   trajectories or measured numbers; no safety-tool work (M12).
 
-**Owner gates**: supplying the tool (O3); "If official metrics are nonzero:
-authorize a tuning rerun for the affected project?".
+**Owner gates**: none (the file list and the restructure were decided on
+2026-11-11).
+
+**Verification**: the floor; selftest PASS count and delta from 266; in a
+fresh clone of the branch: `selftest.py`, `run_pipeline.py --check-only` for
+both projects, `summarize.py --check-readme` and `--check-report` all exit 0
+(output pasted); `git ls-files` lists none of the five paths/patterns and
+`ls` shows all of them on disk; README has exactly the six template `##`
+headings in order and every former section title still greps; README tool
+list still equals the trajectory tool set; `results.md` unchanged
+(`git diff --stat`); provenance exit 0 both projects; scrub clean. After the
+push, `git ls-tree -r origin/mp4-program --name-only` shows none of the
+untracked files.
+
+**Out of scope**: rewriting README prose beyond what the move needs;
+rewriting git history; touching the report draft's content.
+
+---
+
+## M12 — Official unsafe-metrics tool: install, adapter, retroactive measurement, table swap
+
+*Rewritten by the 2026-11-11 amendment from the tool's real source (why.md N).*
+
+**Goal**: The course `newmetrics` tool replaces the proxy in the pipeline and
+in every published table, both final translations and every historical
+iteration snapshot carry official numbers recorded beside the trajectories,
+and the README tells a grader how to reproduce them.
+
+**Why / findings covered**: R-T3-P1-SAFETY, R-T3-P2-SAFETY,
+R-T4-SAFETY-ANALYSIS, RC4, RC5, N1-N5, N7, D6, D-TOOL.
+
+**Tooling**: none.
+
+**Spec**:
+1. Install (pre-approved, D-TOOL). Clone
+   `https://github.com/Intelligent-CAT-Lab/CS598JBR-Team-0` **outside this
+   repo** and check out `4597e75`; if `main` has moved, read the diff of
+   `MP4/newmetrics/` first and record the commit actually used. Then
+   `rustup component add rustc-dev llvm-tools-preview --toolchain nightly-2025-05-13`
+   and, in `MP4/newmetrics/`, `cargo install --debug --locked --path . --force`.
+   If that fails because there is no `Cargo.lock`, stop and ask the owner
+   before retrying without `--locked`. Record the tool commit, the resolved
+   dependency versions, the two binary paths and the added components in
+   `MP4/docs/environment.md`.
+2. Adapter in `MP4/src/safety_check.py` (`course()` is already stubbed) with
+   `safety.course_cmd` / `safety.course_version` set in
+   `MP4/configs/pipeline.yaml`: copy the crate without `target/` to a
+   temporary directory, run the staff command there
+   (`cargo newmetrics 2>&1 | python3 <path>/aggregate.py --out summary.json`),
+   parse `summary.json` into the existing schema (four primary metrics plus
+   raw-pointer dereferences and declarations), keep the raw output and
+   `unsafe_spans.txt`, `derefs.txt`, `decls.txt`, delete the copy. **Never run
+   the tool inside `MP4/translations/`** (N3). Add to `selftest.py` a fixture
+   of the tool's real output and a case proving the measured crate directory
+   is byte-identical before and after.
+3. Set `safety.tool: both`. Run `--check-only` for both projects and
+   `safety_check.py --all-snapshots` over every `run_*/iter_KK/src_after/`;
+   store raw outputs under
+   `MP4/trajectories/project_N/official_safety/<date>/` (`raw_final.txt`,
+   `raw_iter_KK.txt`, the three span files); update the safety blocks of
+   `check.json` and `run_summary.json`.
+4. Regenerate `MP4/results/results.md`, the README safety section and the
+   local report draft with official values; remove PENDING and the proxy
+   label, keep one proxy-vs-official comparison line. In the README: how to
+   obtain and run the tool, and its real counting rules where they differ
+   from the handout's prose (N5). Log in `MP4/configs/CHANGELOG.md`.
+5. If any primary metric is nonzero on a final translation: do not edit Rust;
+   show the owner the counts and the offending spans and propose a prompt /
+   orchestration change plus an owner-gated rerun as a new row.
+6. Nothing else. No Rust edits; no rerun inside this row; no change to the
+   proxy regexes to match the tool (log differences); no modification of the
+   tool; the tool is not committed to this repo.
+
+**Owner gates**: "The staff install command fails with `--locked`: retry
+without it?"; "Official metrics are nonzero: authorize a tuning rerun for the
+affected project?".
 
 **Verification**: `official_safety/` raw outputs present for both final
 translations and every snapshot; `check.json` safety block shows `tool: both`
-with the four official metrics and `tool_version`; results/README/report
-safety tables equal the raw tool output (pasted side by side); `grep -c
-PENDING` on report and README safety cells == 0; `selftest.py` still PASS
-including the course-output fixture; provenance exit 0; floor passes.
+with the four official metrics and `tool_version`; results and README safety
+tables equal the raw tool output (pasted side by side); `grep -c PENDING` on
+README and `results.md` safety cells == 0; selftest PASS including the
+fixture and the untouched-directory case; `git status --short` shows nothing
+new under `MP4/translations/`; provenance exit 0 before and after; floor
+passes; pushed.
 
 **Out of scope**: reworking the stop condition retroactively; hand-editing
-Rust to drive metrics to zero; modifying the tool.
+Rust to drive metrics to zero; "fixing" the tool's counting quirks.
 
 ---
 
@@ -840,7 +926,8 @@ R-T1-CONFIGS (structure), R-T2-TRAJECTORIES (presence), D9.
 **Spec**:
 1. Precondition: the script is present at the path the owner names (per the
    runbook, `MP4/tools/validate/` or external, recorded in the runbook);
-   otherwise keep the row blocked and stop.
+   otherwise keep the row blocked and stop. From 2026-11-17 (D9 revised) a
+   session marks the row dropped instead.
 2. Run it from a fresh clone of the branch on `MP4/translations/project_1`
    and `project_2` (and the MP4 layout if it checks structure); commit full
    output under `docs/programs/mp4/evidence/validation/<date>/` and
@@ -851,7 +938,7 @@ R-T1-CONFIGS (structure), R-T2-TRAJECTORIES (presence), D9.
    program-logic (requires an owner-gated pipeline rerun — new row) vs
    validator expectation mismatch (document; raise with staff if the owner
    agrees).
-4. Update `rubric_traceability.md` and the report's results section if the
+4. Update the local `rubric_traceability.md` and the local report draft if the
    validator's numbers differ from ours; `--check-only` both projects after
    any move.
 5. Nothing else. No manual Rust repair even if the fix is "one line"; no
@@ -871,47 +958,55 @@ full credit; editing translations.
 
 ---
 
-## M14 — Review 4: Overleaf placement check and merge handoff
+## M14 — Review 4: final rubric walk, local report draft, merge handoff
 
-**Goal**: The MP4 section is in the team's Overleaf report with tables and
-examples identical to the in-repo draft and final numbers, every rubric row is
-verified, and the owner has an exact handoff packet for merge and submission.
+*Rewritten by the 2026-11-11 amendment: the report is hand-written by the
+team (D-REPORT), so this row no longer waits on an Overleaf export.*
 
-**Why / findings covered**: R-T4-*, R-T1-README (final), D4, D9, D10.
+**Goal**: Every Task 1-3 rubric row is verified from a fresh clone with final
+numbers, the owner holds a finished local draft to write the report from, and
+there is an exact handoff packet for merge and submission.
 
-**Tooling**: `anthropic-skills:pdf` or pypdf for extracting the export.
+**Why / findings covered**: all R-T1-*, R-T2-*, R-T3-*; R-T4-* (draft only);
+RC1-RC6, D4, D9, D-REPORT, D8/O1.
+
+**Tooling**: `code-review` is not run here (the close passes run it).
 
 **Spec**:
-1. Precondition: the owner has pasted `report_mp4_draft.tex` (and the diagram)
-   into Overleaf and exported the PDF to
-   `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored); otherwise keep the row
-   blocked and stop.
-2. Extract the PDF text and verify each Task 4 row: 6 section headings, both
-   tables' exact column headings and the row labels satc/libpsbt, >= 3
-   examples x 5 sub-points, reflection 5 prompts; diff every table value and
-   example quote against `results.md` / `report_mp4_draft.md`; list
-   discrepancies for the owner to fix in Overleaf; re-check once; record in
-   `docs/programs/mp4/reviews/review-4.md`.
-3. Final consistency: regenerate tables (`summarize.py`), rerun the three-way
-   consistency table, secret scan, provenance, size guard; `grep -c PENDING`
-   == 0 or list what remains and why (if M12/M13 were dropped);
-   `rubric_traceability.md` every row verified; top-level repo README
-   mentions MP4.
-4. Write `docs/programs/mp4/handoff.md` and the runbook's final section: exact
-   owner commands to merge `mp4-program` into `main` (merge commit, never
-   squash), push `main`, and the submission checklist; sessions never push.
-5. Nothing else. No code changes, no translations changes, no push, no PR, no
-   edits to MP1-MP3 report sections.
+1. Precondition: M12 is done and M13 is done or dropped; otherwise stop.
+2. Fresh-clone rubric walk against the Canvas rubric (why.md RC): 21 rows.
+   Task 1-3 rows: verified from the clone with pasted evidence. Task 4 rows:
+   marked `owner: hand-written report`, each with the draft section that
+   feeds it. Record in `docs/programs/mp4/reviews/review-4.md`.
+3. Finalize the **local** draft (`MP4/docs/report_mp4_draft.md` and `.tex`,
+   gitignored): official safety numbers, generated tables current
+   (`summarize.py --report`), the >= 3 repair examples with citations that
+   grep, the five reflection prompts, and a short closing list "check these
+   when writing it by hand" (the tool's real counting rules, the
+   `read_test_vector` disclosure, iteration counts). Send both files to the
+   owner. They are never committed.
+4. Final consistency: README vs `results.md` vs the local draft, zero
+   mismatches; secret scan including `git log -p` on the branch; provenance;
+   size guard; `grep -c PENDING` on README and results == 0 or each listed
+   with its reason; the top-level repo README mentions MP4.
+5. O1: record its state as either resolved (ruling quoted and injected into
+   `MP4/configs/projects/project_2.yaml`, README and the draft) or
+   consciously accepted by the owner in this session.
+6. Write `docs/programs/mp4/handoff.md` and the runbook's final section: the
+   exact owner commands to merge `mp4-program` into `main` (merge commit,
+   never squash) and push `main`, and the submission checklist including
+   "write the MP4 report section by hand from the local draft".
+7. Nothing else. No pipeline, prompt or translation change; no PR; no merge;
+   no push of `main`; no edits to MP1-MP3 material.
 
-**Owner gates**: the Overleaf export (O5); "Confirm M12/M13 outcomes (done or
-dropped) before the numbers are declared final."
+**Owner gates**: "O1 is still unresolved: accept the 3/4 ceiling for libpsbt
+as submitted?" (only if no ruling has arrived).
 
-**Verification**: PDF text extraction shows the 6 section headings, both
-tables' column headings and row labels; value-by-value comparison with
-`results.md` shows zero mismatches (or the list the owner fixed and the
-re-check); `rubric_traceability.md` histogram all 22 verified; PENDING count
-printed; provenance exit 0 both projects; `git status -sb` shows the branch
-not pushed; review-4.md and handoff.md committed; floor passes.
+**Verification**: review-4.md with the 21-row table and pasted fresh-clone
+output (exit codes 0); consistency table with zero mismatches; PENDING count
+printed; provenance exit 0 both projects; draft files exist locally and
+`git ls-files` does not list them; handoff.md committed; floor passes;
+`git status -sb` shows `mp4-program` level with `origin/mp4-program`.
 
-**Out of scope**: rewriting MP1-MP3 sections; any pipeline or Rust change;
-pushing from a session; last-minute "small" Rust fixes.
+**Out of scope**: writing the Overleaf report; rewriting MP1-MP3 sections;
+any pipeline or Rust change; last-minute "small" Rust fixes.

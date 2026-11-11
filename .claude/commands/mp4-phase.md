@@ -6,6 +6,6 @@ the branch, the gates, the verification floor — comes from there.
 
 Implement exactly one phase. When the ledger runs out of rows, do not stop —
 the program closes itself in at most three capped review passes, per the state
-machine. Do not open a PR. Never push. Never edit anything under
+machine. Do not open a PR. Push only `mp4-program` (the manifest's `push_ref`), never `main`. Never edit anything under
 `MP4/translations/`. Spend only within the pre-authorized envelope in the
 manifest's `spend_surface`.
