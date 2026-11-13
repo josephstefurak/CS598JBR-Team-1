@@ -42,16 +42,16 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 To remove the toolchain entirely later: `~/.cargo/bin/rustup self uninstall`.
 
-**O1 — the `read_test_vector` question (OPEN, unsent).** Deferred on
-2026-10-28 until MP4 opened; MP4 is open since 2026-11-09. On 2026-11-11 the
-owner chose to ask in class rather than post. The written draft is kept
-locally at `docs/programs/mp4/forum-post-draft.md` (gitignored after M15); it
-covers the defect (`why.md` H-L1). Its question about the unsafe-metrics tool
-is answered; only the validation script is still unreleased. Relay any ruling
-to a session; it goes into `MP4/configs/projects/project_2.yaml`, the README
-and the local report draft. Until then every session works under D8
-(known-failing, 3/4 ceiling) and flags O1 as unresolved in its report.
-**This must be resolved or consciously accepted before submission** (M14 asks).
+**O1 — the `read_test_vector` question (RESOLVED 2026-11-13).** The owner
+asked on CampusWire; staff replied: implement the correct Rust behavior
+corresponding to the original C implementation, do not modify the provided
+tests, and document the issue in the discussion section of the report (full
+text in `where.md` O1). That is what D8 already does, so nothing in the
+pipeline or `MP4/configs/projects/project_2.yaml` changes and libpsbt stays
+3/4 on the provided tests. Left for the owner: the hand-written report's
+discussion section must describe the defect (the local draft carries
+recommended wording after M14). Staff did not say whether 3/4 earns full
+credit or whether Project 2 has additional grading tests.
 
 ## Stage 2 — during M3, M6, M7, M9 (runs that spend quota)
 
