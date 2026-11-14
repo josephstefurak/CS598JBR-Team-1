@@ -914,6 +914,9 @@ Rust to drive metrics to zero; "fixing" the tool's counting quirks.
 
 ## M13 — Course validation script run and structural fixes
 
+*Amended 2026-11-14 (D-ORDER): this is now the last build row. It runs after
+M14 and M16, so a clean validator run leaves only a short scoped close.*
+
 **Goal**: Both submissions pass the instructional team's validation script as
 the owner received it, and any infrastructure-only issue it reveals is fixed
 and documented without touching program logic.
@@ -941,7 +944,12 @@ R-T1-CONFIGS (structure), R-T2-TRAJECTORIES (presence), D9.
 4. Update the local `rubric_traceability.md` and the local report draft if the
    validator's numbers differ from ours; `--check-only` both projects after
    any move.
-5. Nothing else. No manual Rust repair even if the fix is "one line"; no
+5. Because M14 and M16 already ran: if this phase changed anything beyond
+   adding the validator output, re-run the affected rows of
+   `docs/programs/mp4/reviews/review-4.md` and correct
+   `docs/programs/mp4/handoff.md`; if it changed nothing else, say so in the
+   phase log with the `git diff --stat`.
+6. Nothing else. No manual Rust repair even if the fix is "one line"; no
    change to tests or interfaces to satisfy the validator.
 
 **Owner gates**: supplying the script (O4); confirming any file move it
@@ -961,7 +969,9 @@ full credit; editing translations.
 ## M14 — Review 4: final rubric walk, local report draft, merge handoff
 
 *Rewritten by the 2026-11-11 amendment: the report is hand-written by the
-team (D-REPORT), so this row no longer waits on an Overleaf export.*
+team (D-REPORT), so this row no longer waits on an Overleaf export. Amended
+2026-11-14 (D-ORDER): it runs before M16 and M13 and does not wait for the
+validator.*
 
 **Goal**: Every Task 1-3 rubric row is verified from a fresh clone with final
 numbers, the owner holds a finished local draft to write the report from, and
@@ -970,10 +980,11 @@ there is an exact handoff packet for merge and submission.
 **Why / findings covered**: all R-T1-*, R-T2-*, R-T3-*; R-T4-* (draft only);
 RC1-RC6, D4, D9, D-REPORT, D8/O1.
 
-**Tooling**: `code-review` is not run here (the close passes run it).
+**Tooling**: `code-review` is not run here (M16 and the close run it).
 
 **Spec**:
-1. Precondition: M12 is done and M13 is done or dropped; otherwise stop.
+1. Precondition: M12 is done; otherwise stop. M13 is not a precondition
+   (D-ORDER): the walk records the validator as "not yet run".
 2. Fresh-clone rubric walk against the Canvas rubric (why.md RC): 21 rows.
    Task 1-3 rows: verified from the clone with pasted evidence. Task 4 rows:
    marked `owner: hand-written report`, each with the draft section that
@@ -989,18 +1000,23 @@ RC1-RC6, D4, D9, D-REPORT, D8/O1.
    mismatches; secret scan including `git log -p` on the branch; provenance;
    size guard; `grep -c PENDING` on README and results == 0 or each listed
    with its reason; the top-level repo README mentions MP4.
-5. O1: record its state as either resolved (ruling quoted and injected into
-   `MP4/configs/projects/project_2.yaml`, README and the draft) or
-   consciously accepted by the owner in this session.
+5. O1 is resolved (staff ruling 2026-11-13, quoted in where.md O1): confirm
+   the README disclosure of `read_test_vector` matches the ruling, and put a
+   recommended discussion-section paragraph in the local draft (C keeps
+   `step` across calls through `user_data`, `c/test.c` 90-128; the Rust port
+   resets it, `src/bin/test.rs` 122; tests untouched; 3/4). Record D-CREDIT
+   as the team's assumption, not as a staff statement.
 6. Write `docs/programs/mp4/handoff.md` and the runbook's final section: the
    exact owner commands to merge `mp4-program` into `main` (merge commit,
    never squash) and push `main`, and the submission checklist including
-   "write the MP4 report section by hand from the local draft".
+   "write the MP4 report section by hand from the local draft". The handoff
+   states plainly that the merge happens only after M13 is done or dropped
+   and a session has reported `ready-to-merge`.
 7. Nothing else. No pipeline, prompt or translation change; no PR; no merge;
    no push of `main`; no edits to MP1-MP3 material.
 
-**Owner gates**: "O1 is still unresolved: accept the 3/4 ceiling for libpsbt
-as submitted?" (only if no ruling has arrived).
+**Owner gates**: none (the O1 gate was removed on 2026-11-14; the ruling
+arrived 2026-11-13).
 
 **Verification**: review-4.md with the 21-row table and pasted fresh-clone
 output (exit codes 0); consistency table with zero mismatches; PENDING count
@@ -1010,3 +1026,56 @@ printed; provenance exit 0 both projects; draft files exist locally and
 
 **Out of scope**: writing the Overleaf report; rewriting MP1-MP3 sections;
 any pipeline or Rust change; last-minute "small" Rust fixes.
+
+---
+
+## M16 — Pre-validation full review
+
+*Added by the 2026-11-14 amendment (D-ORDER).*
+
+**Goal**: The whole program has had its full closing review and the fixes
+that review calls for before the validation script arrives, so that after the
+validator only its own changes are left to check.
+
+**Why / findings covered**: D4, D-ORDER; every R-T1-*, R-T2-*, R-T3-* row
+(the review holds the code against them); Z-traps.
+
+**Tooling**: `code-review` at `max` with `--fix` (already the program's
+practice for M5, M8, M11 and the close; subscription quota, no billed step).
+`/code-review ultra` is never launched.
+
+**Spec**:
+1. Precondition: M14 is done; otherwise stop.
+2. Record the commit under review (`git rev-parse HEAD` at the start) in the
+   phase log and in this row's ledger notes as "reviewed commit".
+3. Run stages 0-5 of the skill's `references/close.md` as written, as this
+   row's work: verify, ground truth, `/code-review max --fix` over
+   `base_commit..HEAD`, triage into mechanical batch / owner decisions /
+   below-bar backlog. `--fix` never touches `MP4/translations/`, benchmark
+   tests, interfaces, `Cargo.toml` or `Cargo.lock`; provenance must exit 0
+   before and after, and any such hunk is reverted and logged as a
+   prompt/orchestration proposal.
+4. Commit the mechanical batch. Ask every owner decision in one
+   multiple-choice batch. Fix in this session what the answers allow and what
+   fits; anything larger becomes a remediation row (M17, M18, ...) inserted
+   in the ledger above M13. Below-bar findings go to
+   `docs/programs/mp4/post-merge.md`.
+5. If a fix changes anything M14 verified, re-run the affected rows of
+   `reviews/review-4.md` and regenerate the local draft's tables.
+6. `state` stays `building`: this row is a build row, not the close. The
+   close after M13 reviews only the diff since the reviewed commit (where.md
+   sequencing note).
+7. Nothing else. No pipeline rerun, no model spend through
+   `run_pipeline.py --project`, no translation edit, no PR, no merge.
+
+**Owner gates**: the review's owner-decision batch; any pipeline rerun a
+finding would require (new row, owner-gated).
+
+**Verification**: reviewed commit hash recorded; review findings table with
+counts per triage group; `git diff --stat` of the fixes; provenance exit 0
+both projects before and after; selftest count and delta; `--check-only`
+both projects exit 0; floor passes; `git status -sb` level with
+`origin/mp4-program`.
+
+**Out of scope**: running the validator; the scoped close; re-opening
+ratified decisions without new evidence.

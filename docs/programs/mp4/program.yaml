@@ -78,7 +78,7 @@ standing_priorities:
   - The generated Rust under MP4/translations/ is never edited by a human or by an agent-A session. Only prompts and orchestration change, every change logged in MP4/configs/CHANGELOG.md, then the pipeline reruns.
   - Every number in README, results and report is generated from committed artifacts and reproducible with `run_pipeline.py --check-only`; nothing is typed in by hand or invented.
   - Benchmark tests, interfaces, Cargo.toml and Cargo.lock are immutable and guarded by checksums in code, not prose.
-  - Course-tool work and the final handoff stay in rows M12-M14 (plus M15, the 2026-11-11 alignment row that runs before M12); nothing earlier waits on them. The progress report is hand-written by the team; no row waits on Overleaf (why.md D-REPORT).
+  - Course-tool work, the final review and the handoff stay in rows M12-M14 and M16 (plus M15, the 2026-11-11 alignment row that runs before M12); since 2026-11-14 the order is M14, M16, M13 with the validator row last (why.md D-ORDER); nothing earlier waits on them. The progress report is hand-written by the team; no row waits on Overleaf (why.md D-REPORT).
   - Report drafts, LaTeX table fragments, the rubric traceability map and the forum-post draft stay local and gitignored (why.md D-UNTRACK).
   - Trajectories are complete, per-iteration, scrubbed of secrets, emails and home paths, and prove the loop was feedback-driven.
 
@@ -105,7 +105,7 @@ tooling:
   checked: 2026-10-28
   candidates:
     - skill: code-review
-      for: M5, M8, M11 (and the automatic close); run at max over MP4/src and MP4/configs; its --fix must never touch MP4/translations (provenance check catches it)
+      for: M5, M8, M11, M16 (and the automatic close, scoped to the diff since M16); run at max over MP4/src and MP4/configs; its --fix must never touch MP4/translations (provenance check catches it)
     - skill: simplify
       for: M5 optional cleanup of pipeline code only
     - skill: anthropic-skills:pdf

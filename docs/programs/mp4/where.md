@@ -26,8 +26,9 @@ record real output → update this doc → commit → **push `mp4-program` only*
    typed in by hand or invented; unknown values are marked PENDING.
 3. Benchmark tests, interfaces, `Cargo.toml` and `Cargo.lock` are immutable and
    guarded by checksums in code.
-4. Course-tool work and the handoff stay in M12-M14, after M15 (the 2026-11-11
-   alignment row). The report is hand-written by the team; nothing waits on
+4. Course-tool work and the handoff stay in M12-M14 and M16, after M15 (the
+   2026-11-11 alignment row); since 2026-11-14 the validator row M13 runs last
+   (D-ORDER). The report is hand-written by the team; nothing waits on
    Overleaf. Report-type files are never committed (why.md D-UNTRACK).
 5. Trajectories are complete, per-iteration, scrubbed, and prove the loop was
    feedback-driven.
@@ -49,6 +50,7 @@ the specific conflict rather than picking an alternative.*
 - D9 **revised 2026-11-11**: no cut-off for M12 (tool released); M13 dropped if the validator has not appeared by 2026-11-17.
 - D10 superseded 2026-11-11 by D-REPORT: the team writes the report by hand in Overleaf; the program keeps a local gitignored draft only.
 - D-UNTRACK, D-TOOL (owner, 2026-11-11): report-type files untracked (M15); `newmetrics` install pre-approved, run on a copy only (M12).
+- D-ORDER (owner, 2026-11-14): everything that does not need the validator runs first (M14, then the full review as M16); M13 is the last build row; the close after it reviews only the diff since M16. D-CREDIT (owner, 2026-11-14): the team assumes 3/4 on libpsbt earns full correctness credit when justified in the report, and does not chase hidden Project 2 tests; no follow-up is sent to staff. Full text: why.md § D.
 - D-ALLOW, D-CLIMAIN, D-FAITHFUL, D-FORBID: defaults confirmed verbatim at the M3 gate (2026-10-29). D-TRAJ, D-DIAGRAM: defaults.
 - D-STRUCTOUT (M3): isolation check admits `StructuredOutput` (added by `--json-schema`) beside the six tools.
 
@@ -69,16 +71,25 @@ the specific conflict rather than picking an alternative.*
 | M11 | Review 3: fresh-clone rubric walk, consistency, submittable as-is | **done** | 2026-10-29 — 2cb0ce8 (fixes) | fresh clone at 16e2377: help/dry-run/check-only/provenance/summarize/check-readme/check-report all exit 0, selftest 233/0; 21 rubric rows: 13 verified, the 8 owner-blocked ones proxy/drafted; T4 vs handout 37/37; consistency 23 items 0 mismatches; integrity sweep clean (literal `sk-ant-` history count 8 = self-quoting doc lines, key-shaped 0); `/code-review max` 10 angles + 3 verifiers + sweep: 32 + 2 defects, 31 + 2 fixed or partly fixed, 1 refuted, M8 → PM6, D10 code → M12; selftest 233 → 266 (+33), 18/18 mutations caught; review-3.md with the submission-as-is statement |
 | M15 | Handout-v2 alignment: untrack report-type files, README to the course template | **done** | 2026-11-11 — c18bdd4 | 9 files untracked (2 drafts, 5 `results/*.tex`, traceability map, forum-post draft), all still on disk and gitignored; README: 6 template `##` headings in order, 6 Environment bullets, 14 former sections kept as `###` (239 of 246 old lines verbatim, the 7 others are the reference fixes); `summarize.py --tex` added, absent draft → `local draft absent, skipped` exit 0; selftest 266 → 279 (+13), 0 FAIL, same in a fresh clone; fresh clone: check-only, provenance, `--check-readme`, `--check-report` all exit 0; `results.md` byte-identical; runs before M12 (IDs are not reused) |
 | M12 | Course unsafe-metrics tool: install, adapter, retroactive run, table swap | **done** | 2026-11-11 — cf6a831 | `newmetrics` 0.1.0 @ 4597e75 installed outside the repo, staff command with `--locked` exit 0 (no gate needed); official metrics 0/0/0/0 and 0 raw-pointer derefs/decls for both final crates and all 4 snapshots (2 compilation units each); proxy equals course on both; `safety.tool: both`; `official_safety/2026-11-11/` 16 files per project; `results.md` and README PENDING count 0; selftest 279 → 316 (+37), 0 FAIL, same in a fresh clone; provenance exit 0 before and after; translations byte-identical; no nonzero-metric gate |
-| M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released as of 2026-11-11; when it appears the owner names its path and a session flips this row to not-started; from 2026-11-17 a session marks it dropped)** | — | Cut-off 2026-11-17 (D9 revised) |
-| M14 | Review 4: final rubric walk, local report draft, merge handoff | **not-started** | — | Spec rewritten 2026-11-11 (no Overleaf precondition, D-REPORT). Runs after M12 and after M13 is done or dropped |
+| M14 | Review 4: final rubric walk, local report draft, merge handoff | **not-started** | — | Moved ahead of M13 on 2026-11-14 (D-ORDER): runs now, needs M12 only. O1 is resolved (staff ruling 2026-11-13), so its gate is gone. Handoff is written as conditional on M13 and the close |
+| M16 | Pre-validation full review: the close's pass-1 review pulled forward | **not-started** | — | Added 2026-11-14 (D-ORDER). Full `/code-review max --fix` over the program diff with triage and fixes, before the validator arrives. Records the reviewed commit; the later close only reviews what changed after it |
+| M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released as of 2026-11-14; when it appears the owner names its path and a session flips this row to not-started; from 2026-11-17 a session marks it dropped)** | — | Cut-off 2026-11-17 (D9 revised). Deliberately the last build row since 2026-11-14 (D-ORDER) |
 
-> Sequencing note for `next` (rewritten 2026-11-11): the runnable order is
-> M15, then M12. After M12 the first non-done row is M13: while it is
-> `blocked` the session reports that and stops (per protocol), unless the
-> date is 2026-11-17 or later, in which case the session marks M13
-> `dropped (course validation script not released by the 2026-11-17 cut-off)`
-> and continues to M14 in the next session. If the validator appears before
-> then, the owner names its path and a session flips M13 to `not-started`.
+> Sequencing note for `next` (rewritten 2026-11-14, D-ORDER): the runnable
+> order is M14, then M16, then any remediation rows M16 seeds (inserted
+> above M13), then M13. M13 is last on purpose: while it is `blocked` the
+> session reports that and stops (per protocol), unless the date is
+> 2026-11-17 or later, in which case the session marks M13
+> `dropped (course validation script not released by the 2026-11-17 cut-off)`.
+> If the validator appears before then, the owner names its path and a session
+> flips M13 to `not-started` and runs it.
+>
+> Close scope (owner direction 2026-11-14): the full review is row M16. When
+> no runnable row is left after M13 is done or dropped, pass 1 of the close
+> reviews only `git diff <M16 reviewed commit>..HEAD` (the commit is in M16's
+> ledger notes), under the production bar of close.md. An empty or
+> evidence-only diff with a green floor goes straight to `ready-to-merge`.
+> If M16 is ever dropped, pass 1 is the full review again.
 
 ## Phase log
 
@@ -1945,6 +1956,29 @@ accepted before submission. O4 (validator) is open with the 2026-11-17
 cut-off: the next row, M13, is `blocked` until the validator appears or that
 date passes.
 
+### Amendment 2026-11-14 — remaining rows reordered (no phase; docs only)
+
+**Owner direction** (2026-11-14, in session): do all the heavy work now on the
+assumption that the validation script will pass, keep the program open until
+the script arrives, and make that last step a run-and-confirm. Also: assume
+3/4 on libpsbt earns full correctness credit when justified in the report, and
+do not chase possible hidden tests for Project 2.
+
+**Changed**: ledger order is now M14, M16, M13 (was M13, M14). M14 no longer
+waits on M13 and its O1 gate is removed (resolved 2026-11-13). New row M16
+carries the close's full pass-1 review ahead of the validator. M13 gained a
+step to refresh review-4 and the handoff if the validator changes anything.
+The close after M13 is scoped to the diff since M16's reviewed commit.
+Decisions D-ORDER and D-CREDIT recorded in why.md § D. No file under `MP4/`
+changed; no phase ran; `state` stays `building`.
+
+**Still true**: M13 is `blocked` until the owner names the script's path; the
+2026-11-17 cut-off stands. After the script arrives the remaining work is two
+short `/mp4-phase` runs (M13, then the scoped close), then the owner's merge.
+
+**NOT demonstrated**: nothing was executed; M14 and M16 have not run. Whether
+the validator will accept the current layout is unknown until it exists.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -1956,7 +1990,7 @@ date passes.
 | O1 | Post the `read_test_vector` defect (why.md H-L1) on the course forum, together with the question of when/where the unsafe-metrics tool and validation script will be released. Draft ready at `docs/programs/mp4/forum-post-draft.md` | D8; a staff ruling may lift the 3/4 ceiling; O3/O4 depend on the release | nothing in M1-M11 (ruling is injected whenever it arrives) | **resolved 2026-11-13 (staff ruling, no pipeline change).** The owner posted the question on CampusWire (the professor redirected the in-class question there) and pasted the staff reply into a session on 2026-11-13, verbatim: "1. If you encounter an issue with a provided test, please implement the correct Rust behavior corresponding to the original C implementation. Do not modify the provided tests, and document the issue in the discussion section of your report. 2. I will prepare and push the validation script to the GitHub repository today." This endorses D8 as built: faithful parser, test untouched, libpsbt stays 3/4 on the provided tests. Nothing to inject into `MP4/configs/projects/project_2.yaml`. Remaining duty: the hand-written report's discussion section must document the defect (C keeps `step` across calls through `user_data`, `c/test.c` 90-128; the Rust port resets it, `src/bin/test.rs` 122); M14 puts that in the local draft and checks the README disclosure. **Not answered by staff:** whether 3/4 receives full correctness credit, and whether Project 2 has additional grading tests (why.md RC3). History: deferred by the owner 2026-10-28 until MP4 opened; 2026-11-11 owner asked in class. The earlier draft stays local at `docs/programs/mp4/forum-post-draft.md` (untracked by M15). |
 | O2 | Approve the rustup + nightly-2025-05-13 install in the M1 session (commands shown first) | E2; invariant 4 | M1 | **done 2026-10-28** (approved in the M1 session; installed). Follow-on: owner puts `~/.cargo/bin` on PATH for the shell that launches Claude Code before M3 (runbook Stage 1) |
 | O3 | Supply the course unsafe-metrics tool at the path the runbook names, then flip M12 to not-started | R-T3-*-SAFETY official numbers, R-T4-SAFETY-ANALYSIS | M12 | **cleared 2026-11-11**: the course released the tool on 2026-11-09 and the owner pre-approved its install after a source review (why.md D-TOOL). M12 clones it outside the repo and installs it; nothing left for the owner unless the `--locked` install fails (M12 gate) |
-| O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off **2026-11-17**, D9 revised); still not released as of 2026-11-11 (the course repo has the newmetrics tool and a README template only; why.md N, N6); **2026-11-13: staff said on CampusWire the script would be pushed to the course repo "today"; checked the same day, course repo `main` still at `4597e75`, no script yet;** owner checks periodically and names the path to a session when it appears |
+| O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off **2026-11-17**, D9 revised; since 2026-11-14 M13 is the last build row, so nothing else waits on it, D-ORDER); still not released as of 2026-11-11 (the course repo has the newmetrics tool and a README template only; why.md N, N6); **2026-11-13: staff said on CampusWire the script would be pushed to the course repo "today"; checked the same day, course repo `main` still at `4597e75`, no script yet;** owner checks periodically and names the path to a session when it appears |
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | **superseded 2026-11-11 (D-REPORT)**: the team writes the MP4 report section by hand in Overleaf; no export is supplied to the program and no row waits on it. M14 hands the owner the finished local draft (`MP4/docs/report_mp4_draft.md` / `.tex`, gitignored). Writing the report before 2026-11-18 23:59 remains the team's task |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
 | O8 | Log the `claude` CLI in (`claude auth login`) and keep it logged in for model runs (runbook Stage 2) | The CLI's login is separate from the desktop app's; it was logged out, so agent B failed with "OAuth session expired" (first diagnosed, wrongly, as a sandbox issue) | M3 smoke; M6, M7, M9 | **done 2026-10-29** (owner ran `claude auth login`; status loggedIn true, claude.ai, max) |

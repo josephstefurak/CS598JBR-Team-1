@@ -23,6 +23,12 @@ mechanical findings; pass 2 re-checks only the fixes; pass 3 runs only if pass
 2 fixed something critical. Real-but-minor findings go to
 `docs/programs/mp4/post-merge.md`, a backlog that never blocks the merge.
 
+**Program-specific scope (owner direction 2026-11-14, why.md D-ORDER):** the
+full review runs earlier, as ledger row M16, before the course validation
+script arrives. The automatic close after M13 therefore reviews only the diff
+since M16's reviewed commit; if that diff is empty or evidence-only and the
+floor is green it reports ready to merge straight away.
+
 **Program-specific caution for the close:** `/code-review max --fix` must
 never touch `MP4/translations/`. The floor's `integrity.py --provenance`
 fails if it does; the session reverts those hunks and logs the finding as a

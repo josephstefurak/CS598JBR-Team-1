@@ -127,6 +127,10 @@ rustup component remove rustc-dev llvm-tools-preview --toolchain nightly-2025-05
 put it at `MP4/tools/validate/` or tell a session its path; the session flips
 M13 to `not-started`. From **2026-11-17** a session marks M13
 `dropped (course validation script not released by the 2026-11-17 cut-off)`.
+Since 2026-11-14 M13 is the last build row: the final review (M14) and the
+full code review (M16) run before it, so when the script arrives the rest is
+two short `/mp4-phase` runs (validate, then a scoped closing check) and your
+merge. As of 2026-11-14 the script is still not in the course repo.
 
 ## Stage 4 — the report (yours, by hand)
 
@@ -142,7 +146,8 @@ waits for an export.
 ## Stage 5 — after the program reports ready-to-merge
 
 **O7 — merge and push.** The close review runs itself over up to three
-`/mp4-phase` invocations once M14 is done. When a session says
+`/mp4-phase` invocations once M13 is done or dropped (the full review
+already ran as M16, so this close only covers what changed after it). When a session says
 **ready-to-merge**, read `docs/programs/mp4/handoff.md`, then (the branch is
 already on the remote; only the merge and `main` are yours):
 
