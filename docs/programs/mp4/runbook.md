@@ -135,28 +135,66 @@ merge. As of 2026-11-14 the script is still not in the course repo.
 ## Stage 4 — the report (yours, by hand)
 
 **O5 is superseded (2026-11-11).** The team writes the MP4 section in
-Overleaf by hand. M14 gives you a finished local draft,
+Overleaf by hand. **M14 (2026-11-14) finished the local draft**:
 `MP4/docs/report_mp4_draft.md` and `.tex` (gitignored, never committed), with
-generated tables and cited repair examples, as a recommendation to write
-from. The `.tex` has never been compiled; its first lines name what the
+the official safety numbers, generated tables, four cited repair examples,
+the five reflection answers, the recommended discussion paragraph on
+`read_test_vector` (required by the staff ruling) and a closing list "Check
+these when writing it by hand". Write the report from it; do not paste it
+unread. The `.tex` has never been compiled; its first lines name what the
 preamble needs (`\usepackage{tikz}`,
 `\usetikzlibrary{positioning,arrows.meta,shapes.geometric}`). No session
-waits for an export.
+waits for an export. The report can be written at any time; it does not wait
+for the merge.
 
-## Stage 5 — after the program reports ready-to-merge
+## Stage 5 — after the program reports ready-to-merge (final section)
 
-**O7 — merge and push.** The close review runs itself over up to three
-`/mp4-phase` invocations once M13 is done or dropped (the full review
-already ran as M16, so this close only covers what changed after it). When a session says
-**ready-to-merge**, read `docs/programs/mp4/handoff.md`, then (the branch is
-already on the remote; only the merge and `main` are yours):
+**O7 — merge and push.** Full text and the submission checklist:
+`docs/programs/mp4/handoff.md`. Not before **both**: M13 is `done` or
+`dropped`, and a session has said **ready-to-merge**. Until then keep
+invoking `/mp4-phase` (next: M16, the full code review; then M13 when the
+validation script exists or on 2026-11-17; then the short closing check,
+which only covers what changed after M16).
+
+The branch is already on the remote; only the merge and `main` are yours.
+From the repository root, in this order:
 
 ```bash
-git checkout main && git merge --no-ff mp4-program
+git checkout mp4-program && git pull --ff-only origin mp4-program
+```
+
+```bash
+git status --short
+```
+
+That must print nothing. Then:
+
+```bash
+git checkout main && git pull --ff-only origin main
+```
+
+```bash
+git merge --no-ff mp4-program -m "Merge mp4-program: MP4 agentic C-to-Rust translation (Group 1: satc, libpsbt)"
 ```
 
 ```bash
 git push origin main
 ```
 
-Merge commit, never squash. Submit before 2026-11-18 23:59.
+Merge commit, never squash. If a pull or the merge reports a conflict, stop
+and start a session. Then check what graders will clone:
+
+```bash
+git clone "$(git remote get-url origin)" ../mp4-submission-check && cd ../mp4-submission-check
+```
+
+```bash
+python3 -I MP4/src/run_pipeline.py --project project_1 --check-only && python3 -I MP4/src/run_pipeline.py --project project_2 --check-only
+```
+
+```bash
+python3 -I MP4/src/integrity.py --provenance project_1 && python3 -I MP4/src/integrity.py --provenance project_2
+```
+
+All exit 0; tests 4 of 4 and 3 of 4. Submit the hand-written report where the
+course asks for it. Everything before 2026-11-18 23:59.
