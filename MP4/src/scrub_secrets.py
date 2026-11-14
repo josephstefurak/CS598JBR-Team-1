@@ -61,7 +61,9 @@ def _upstream_emails():
 def _allowed(kind, text):
     if kind == "email":
         low = text.lower()
-        return low in EMAIL_ALLOW or low.endswith(EMAIL_ALLOW_DOMAINS) or low in _upstream_emails()
+        dom = low.rsplit("@", 1)[-1]   # the domain itself or a subdomain, not any name ending in the letters
+        return (low in EMAIL_ALLOW or dom in EMAIL_ALLOW_DOMAINS
+                or dom.endswith(tuple("." + d for d in EMAIL_ALLOW_DOMAINS)) or low in _upstream_emails())
     return False
 
 
@@ -77,6 +79,9 @@ def _is_binary(path):
 def iter_files(paths):
     for p in paths:
         p = os.path.abspath(p)
+        if not os.path.exists(p):   # a mistyped path, or the wrong directory, must not pass as "0 hits"
+            print("scrub_secrets: no such path: %s" % mc.rel(p, mc.REPO_DIR), file=sys.stderr)
+            raise SystemExit(2)
         files = [p] if os.path.isfile(p) else list(mc.walk_files(p))
         for f in files:
             r = mc.rel(f, mc.REPO_DIR)

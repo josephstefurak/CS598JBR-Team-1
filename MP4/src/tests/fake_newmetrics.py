@@ -4,6 +4,7 @@ It prints tests/newmetrics_fixture_raw.txt (real output of newmetrics 0.1.0 on s
 same files in the working directory that the real analyzer leaves (unsafe_spans.txt, derefs.txt, decls.txt, a
 target/ directory), so the adapter's copy-and-clean-up behaviour is tested without the tool being installed.
 With `--fail` it prints the tool's failure line and exits 1, as the real driver does when `cargo check` fails.
+With `--silent` it exits 0 without any metric line, as when no target of the package is supported.
 """
 import os
 import sys
@@ -15,6 +16,9 @@ def main(argv):
     if "--fail" in argv:
         print("Running cargo newmetrics\nFinished with non-zero exit code")
         return 1
+    if "--silent" in argv:
+        print("Running cargo newmetrics\nTarget test:test is not supported\ncargo newmetrics finished")
+        return 0
     with open(os.path.join(HERE, "newmetrics_fixture_raw.txt"), encoding="utf-8") as fh:
         sys.stdout.write(fh.read().replace("<crate>", os.getcwd()))
     for name in ("unsafe_spans.txt", "derefs.txt", "decls.txt"):

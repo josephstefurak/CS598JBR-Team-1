@@ -438,7 +438,8 @@ STOP_ABORT_ISOLATION = "ABORT_ISOLATION"
 PAUSE_OUTCOMES = ("usage_limit", "overloaded", "connection_error", "auth_error")
 NO_CLIPPY = 10 ** 6   # clippy count used in the score when the build failed and clippy could not run
 MEASURE_LOGS = ("build.log", "test.log", "clippy_rubric.log", "safety_proxy.json",   # + clippy_<group>.json
-                "safety_course.json", "raw_course.txt", "summary_course.json")        # course tool (safety.tool both)
+                "safety_course.json", "raw_course.txt", "summary_course.json",        # course tool (safety.tool both)
+                "course.unsafe_spans.txt", "course.derefs.txt", "course.decls.txt")
 
 
 class Interrupted(Exception):

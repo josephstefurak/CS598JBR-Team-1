@@ -27,8 +27,8 @@ sends the prompt on stdin, and records the whole event stream as the iteration's
 isolated from the machine owner's setup. No user settings, hooks, MCP servers, skills or memory are
 loaded (`--setting-sources project`, `--strict-mcp-config`, `--disable-slash-commands`,
 `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`). Every call's startup event
-is checked. The call is aborted if that event is missing, reports any capability beyond the configured
-tools, or shows an API key instead of the subscription login.
+is checked. The call is aborted if that event is missing, lists a tool beyond the configured ones, any MCP
+server, slash command, skill or plugin, or shows an API key instead of the subscription login.
 
 ### Model(s) and provider / runtime
 
@@ -150,6 +150,14 @@ one full run per project plus at most two tuning reruns, and the controller refu
    python3 -m pip install pyyaml
    ```
 
+   Every command below runs as `python3 -I` (isolated mode), which ignores packages installed with
+   `pip --user`. If pip reports "Defaulting to user installation" (the macOS system Python does), install
+   PyYAML into a virtual environment instead and run the commands with that interpreter:
+
+   ```bash
+   python3 -m venv .venv && . .venv/bin/activate && python3 -m pip install pyyaml
+   ```
+
 3. Only to run the agent, not to evaluate the results: Claude Code, logged in with a Claude subscription.
 
    ```bash
@@ -223,8 +231,10 @@ Each iteration is one fresh agent session capped at 60 turns and a 45-minute wal
 ### Infrastructure interventions
 
 No translated function was repaired by hand. Everything under `translations/` is produced by the
-agent, and `src/integrity.py --provenance` checks that it is byte-identical to the snapshot of the
-iteration the run shipped (`run_summary.json` `final_iteration_dir`). The controller performs these documented interventions:
+agent, and `src/integrity.py --provenance` checks that each crate's `src/` is byte-identical to the snapshot of
+the iteration the run shipped (`run_summary.json` `final_iteration_dir`). It compares `src/` with that
+snapshot; the files outside `src/` (`Cargo.toml`, `Cargo.lock`) are compared with the benchmark by
+`--check-only`, which reports any difference as an integrity violation. The controller performs these documented interventions:
 
 - **`#![forbid(unsafe_code)]` injection.** When a run starts, the controller writes this line at the top
   of each crate's `src/lib.rs`, before the agent's first turn, so unsafe code cannot compile. Program
@@ -271,7 +281,7 @@ iteration the run shipped (`run_summary.json` `final_iteration_dir`). The contro
   affected: no.
 - **Scrubbing the trajectories.** As trajectory files are written, the controller replaces the home
   directory with `~` and removes anything that looks like an API key, token or e-mail address
-  (`src/scrub_secrets.py`). `scrub_secrets.py --check MP4/` reports 0 hits on the committed tree. Program
+  (`src/scrub_secrets.py`); addresses already published in the benchmark's own licence headers are kept. `scrub_secrets.py --check MP4/` reports 0 hits on the committed tree. Program
   logic affected: no (only the logs are rewritten, never the crate).
 - **Official unsafe metrics measured after the runs.** The course tool was released on 2026-11-09, after
   both runs (2026-10-29). On 2026-11-11 the controller measured both final translations and every
@@ -287,8 +297,9 @@ iteration the run shipped (`run_summary.json` `final_iteration_dir`). The contro
 ### Academic integrity
 
 All Rust under `translations/` was written by the agent described above, inside the logged sessions in
-`trajectories/`. No person edited a translated function, and `src/integrity.py --provenance` checks this
-against the snapshots in the trajectories. The controller in `src/`, the configurations and prompts in
+`trajectories/`. No person edited a translated function, and `src/integrity.py --provenance` checks that
+each crate's `src/` equals the snapshot recorded in the trajectories; the agent's own `Write` and `Edit`
+calls that produced those snapshots are in each iteration's `agent.stream.jsonl`. The controller in `src/`, the configurations and prompts in
 `configs/` and this README were written by the team with the help of an AI coding assistant, and are our
 own work for this course. The benchmark C code, Rust interfaces and tests come unchanged from
 CRUST-bench (see `subjects/*/SOURCE.md`). The prompts contain no function implementations and no
@@ -327,7 +338,7 @@ writes `results/project_N.check.json`:
 python3 -I MP4/src/run_pipeline.py --project project_1 --check-only
 python3 -I MP4/src/summarize.py                      # results/results.md and results/repair_mining.md
 python3 -I MP4/src/summarize.py --check-readme       # the generated README sections equal configs/pipeline.yaml
-python3 -I MP4/src/integrity.py --provenance project_1   # translations/ is the agent's output, unchanged
+python3 -I MP4/src/integrity.py --provenance project_1   # translations/project_1/src equals the shipped iteration's snapshot
 python3 -I MP4/src/selftest.py                       # the controller's own test suite (no model calls)
 ```
 
@@ -353,13 +364,21 @@ cd ~/cs598jbr-course-tools/CS598JBR-Team-0/MP4/newmetrics && cargo install --deb
 ```
 
 If the clone lives elsewhere, set `MP4_NEWMETRICS_AGGREGATE` to the path of its `aggregate.py`
-(`configs/pipeline.yaml` `safety.course_aggregate` holds the default). Then, from the repository root:
+(`configs/pipeline.yaml` `safety.course_aggregate` holds the default). When `aggregate.py` is not found the
+tool still runs: the controller sums the tool's metric lines itself, with the same rule as `aggregate.py`,
+and records `"aggregate": "summed by the adapter ..."` in the result. Then, from the repository root:
 
 ```bash
 python3 -I MP4/src/run_pipeline.py --project project_1 --check-only     # the final crate; safety block has "tool": "both"
 python3 -I MP4/src/safety_check.py --project project_1 --tool course    # the course tool alone
-python3 -I MP4/src/safety_check.py --project project_1 --official       # final crate and every iteration snapshot
 ```
+
+`--check-only` and `--tool course` are the commands for verifying our numbers. The numbers in
+`trajectories/project_N/official_safety/` were recorded with
+`python3 -I MP4/src/safety_check.py --project project_N --official`, which measures the final crate and
+every iteration snapshot. That command is for recording, not for checking: it writes a new dated directory
+there and updates `run_summary.json`, and it records nothing if the tool is missing or any measurement
+fails.
 
 The controller never runs the tool inside `translations/`. The tool runs `cargo clean` and `cargo check`
 and writes `unsafe_spans.txt`, `derefs.txt`, `decls.txt` and `summary.json` into its working directory, so

@@ -109,6 +109,10 @@ def validate_pipeline(cfg):
             raise ConfigError("agent.%s must be a list of non-empty strings" % key)
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in a["env"].items()):
         raise ConfigError("agent.env must map strings to strings")
+    for key in ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"):
+        if a["env"].get(key) != "1":
+            raise ConfigError("agent.env.%s must be \"1\": the agent must not load CLAUDE.md files or memory, and "
+                              "the startup line cannot show whether it did" % key)
     if cfg["checks"]["clippy_rubric_args"] != HANDOUT_CLIPPY_ARGS:
         raise ConfigError("checks.clippy_rubric_args must equal the handout's rubric clippy command exactly")
     if cfg["toolchain"]["name"] != "nightly-2025-05-13":

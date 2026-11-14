@@ -15,6 +15,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -261,6 +262,7 @@ def _run(tmp_root):
     _run_m11(tmp_root)
     _run_m15(tmp_root)
     _run_m12(tmp_root)
+    _run_m16(tmp_root)
 
 
 def _fake_run(cfg, tmp_root, mode, wall_clock_s=30):
@@ -466,7 +468,7 @@ def _run_m4(tmp_root):
         expect("drill A: changes.diff shows the repair", "+    x * 2" in fh.read(), True)
 
     # summarize.py on drill A output, against --check-only of the final workspace
-    chk = run_pipeline.measure_crate(mc.copy_crate(cfg["workspace"]), cfg["skeleton"],
+    chk = run_pipeline.measure_crate(mc.copy_crate(cfg["workspace"], tempfile.mkdtemp(dir=tmp_root)), cfg["skeleton"],
                                      os.path.join(tmp_root, "A_check_logs"), cfg["project_cfg"]["allow_attributes"])
     with open(os.path.join(cfg["trajectory_root"], "run_summary.json"), encoding="utf-8") as fh:
         rsum = json.load(fh)
@@ -1666,7 +1668,7 @@ def _run_m11(tmp_root):
                                                  "clippy_agent": {}, "clippy_harness": {}, "safety_tool": "proxy"}),
                            ("iter_02", {"compiles": True, "tests_passed": 4, "tests_total": 4, "success": True,
                                         "clippy_agent": {g: 0 for g in summarize.GROUPS},
-                                        "clippy_harness": {"style": 2}, "safety_tool": "course"})):
+                                        "clippy_harness": {"style": 2}, "safety_tool": "both"})):
             with open(os.path.join(run_dir, d, "iteration_summary.json"), "w", encoding="utf-8") as fh:
                 json.dump(summary, fh)
             _m11_stream(os.path.join(run_dir, d, "agent.stream.jsonl"), [{"type": "result", "num_turns": 1}])
@@ -1920,8 +1922,7 @@ def _run_m12(tmp_root):
     failed = safety_check.course(crate, cfg=dict(fake_cfg, course_cmd=fake_cfg["course_cmd"] + ["--fail"]))
     expect("M12: a failed tool run reports no numbers, only the failure",
            ([failed[k] for k in P], [f["kind"] for f in failed["findings"]]), ([None] * 4, ["course_tool_failed"]))
-    for label, cfg in (("not configured", {}), ("not installed", {"course_cmd": ["cargo", "mp4-no-such-tool"]}),
-                       ("aggregate.py missing", dict(fake_cfg, course_aggregate=os.path.join(tmp_root, "none.py")))):
+    for label, cfg in (("not configured", {}), ("not installed", {"course_cmd": ["cargo", "mp4-no-such-tool"]})):
         why = safety_check.course_unavailable(cfg)
         try:
             safety_check.course(crate, cfg=cfg)
@@ -1940,9 +1941,8 @@ def _run_m12(tmp_root):
            sorted(n for n in os.listdir(os.path.join(tmp_root, "m12_logs")) if "course" in n or "proxy" in n),
            ["course.decls.txt", "course.derefs.txt", "course.unsafe_spans.txt", "raw_course.txt",
             "safety_course.json", "safety_proxy.json", "summary_course.json"])
-    expect_true("M12: every log both writes is in the list the loop scrubs",
-                all(n in run_pipeline.MEASURE_LOGS for n in (
-                    "safety_course.json", "raw_course.txt", "summary_course.json", "safety_proxy.json")))
+    expect("M12: every log both writes is in the list the loop scrubs",
+           sorted(n for n in os.listdir(os.path.join(tmp_root, "m12_logs")) if n not in run_pipeline.MEASURE_LOGS), [])
     u = safety_check.both(crate, cfg={"course_cmd": ["cargo", "mp4-no-such-tool"]})
     expect("M12: both without the tool falls back to the proxy and says so",
            (u["tool"], [u[k] for k in P], [f["kind"] for f in u["findings"] if f["kind"].startswith("course_")]),
@@ -2047,6 +2047,230 @@ def _run_m12(tmp_root):
                ([1, 2, 0, 1], 1, 1, "staff aggregate.py", "unsafe_lines"))
         expect("M12 live: the measured crate directory is byte-identical before and after",
                _tree_state(live_crate), before)
+
+
+def _run_m16(tmp_root):
+    """M16: the fixes of the pre-validation full review (docs/programs/mp4/reviews/review-5.md)."""
+    P = safety_check.PRIMARY
+    fake = os.path.join(mc.SRC_DIR, "tests", "fake_newmetrics.py")
+    fake_cfg = {"course_cmd": [sys.executable, "-I", fake], "course_version": "recorded newmetrics 0.1.0"}
+    with open(os.path.join(mc.SRC_DIR, "tests", "newmetrics_fixture_raw.txt"), encoding="utf-8") as fh:
+        recorded = fh.read()
+    cut = recorded.replace("Unsafe calls: 2\n", "", 1)
+    expect("M16: a compilation unit with a metric line missing is not read as 0",
+           (cut != recorded, safety_check.parse_course_output(cut)[1]), (True, 0))
+
+    # MP4_NEWMETRICS_AGGREGATE belongs to configs/pipeline.yaml, not to an explicit cfg; a missing aggregate.py
+    # is not a missing tool
+    crate = fresh_copy(tmp_root, "m16")
+    env_name, saved_env = safety_check.AGGREGATE_ENV, os.environ.get(safety_check.AGGREGATE_ENV)
+    os.environ[env_name] = os.path.join(tmp_root, "no_such_aggregate.py")
+    try:
+        expect("M16: the aggregate override is ignored for an explicit cfg and applies to pipeline.yaml",
+               (safety_check.course_config(fake_cfg)[1], safety_check.course_config()[1]),
+               (None, os.environ[env_name]))
+        res = safety_check.course(crate, cfg=dict(fake_cfg, course_aggregate=os.path.join(tmp_root, "none.py")))
+        expect("M16: without aggregate.py the tool still measures and says who summed",
+               ([res[k] for k in P], res["extra"]["aggregate"],
+                [f["kind"] for f in res["findings"] if f["kind"].startswith("course_")]),
+               ([1, 2, 0, 1], "summed by the adapter (no aggregate.py at safety.course_aggregate)", []))
+    finally:
+        if saved_env is None:
+            os.environ.pop(env_name, None)
+        else:
+            os.environ[env_name] = saved_env
+
+    # the staff aggregate.py cross-check: agreeing, disagreeing, hanging
+    sums = {"pointer_arithmetic": 1, "unsafe_lines": 1, "unsafe_calls": 2, "unsafe_casts": 0, "total_spans": 1528,
+            "raw_pointer_dereferences": 1, "raw_pointer_declarations": 1}
+
+    def agg_script(name, body):
+        path = os.path.join(tmp_root, name)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("import json, sys, time\nsys.stdin.read()\nout = sys.argv[sys.argv.index('--out') + 1]\n" + body)
+        return path
+
+    good = agg_script("m16_agg_good.py", "json.dump(%r, open(out, 'w'))\n" % (sums,))
+    wrong = agg_script("m16_agg_wrong.py", "json.dump(%r, open(out, 'w'))\n" % (dict(sums, unsafe_lines=0),))
+    hang = agg_script("m16_agg_hang.py", "time.sleep(30)\n")
+    res = safety_check.course(crate, cfg=dict(fake_cfg, course_aggregate=good))
+    expect("M16: an agreeing aggregate.py is recorded as the staff aggregate",
+           ([res[k] for k in P], res["extra"]["aggregate"]), ([1, 2, 0, 1], "staff aggregate.py"))
+    res = safety_check.course(crate, cfg=dict(fake_cfg, course_aggregate=wrong))
+    expect("M16: a disagreeing aggregate.py fails the measurement",
+           ([res[k] for k in P], [f["kind"] for f in res["findings"]]), ([None] * 4, ["course_tool_failed"]))
+    saved_timeout, safety_check.AGGREGATE_TIMEOUT_S = safety_check.AGGREGATE_TIMEOUT_S, 1
+    try:
+        res = safety_check.course(crate, cfg=dict(fake_cfg, course_aggregate=hang))
+        expect("M16: a hanging aggregate.py is a failed measurement, not a traceback",
+               ([res[k] for k in P], [f["kind"] for f in res["findings"]]), ([None] * 4, ["course_tool_failed"]))
+    finally:
+        safety_check.AGGREGATE_TIMEOUT_S = saved_timeout
+
+    # --official records only a complete measurement and never destroys an earlier one; --all-snapshots runs
+    root = os.path.join(tmp_root, "m16_mp4")
+    saved = (mc.PROJECTS, mc.TRAJECTORIES_DIR, mc.TRANSLATIONS_DIR, mc.SUBJECTS_DIR)
+    mc.PROJECTS = mc.PROJECTS + ("project_9",)
+    mc.TRAJECTORIES_DIR, mc.TRANSLATIONS_DIR, mc.SUBJECTS_DIR = (
+        os.path.join(root, d) for d in ("trajectories", "translations", "subjects"))
+    try:
+        shutil.copytree(fresh_copy(tmp_root, "m16t"), os.path.join(mc.TRANSLATIONS_DIR, "project_9"))
+        skel = os.path.join(mc.SUBJECTS_DIR, "project_9", "rust_skeleton")
+        os.makedirs(skel)
+        for name in ("Cargo.toml", "Cargo.lock"):
+            shutil.copy2(os.path.join(FIXTURE, name), os.path.join(skel, name))
+        traj = os.path.join(mc.TRAJECTORIES_DIR, "project_9")
+        shutil.copytree(os.path.join(FIXTURE, "src"), os.path.join(traj, "run_R", "iter_01", "src_after"))
+        rsum_path = os.path.join(traj, "run_summary.json")
+        with open(rsum_path, "w", encoding="utf-8") as fh:
+            json.dump({"run_id": "R"}, fh)
+        day = os.path.join(traj, "official_safety", "2026-01-01")
+        os.makedirs(day)
+        with open(os.path.join(day, "keep.txt"), "w", encoding="utf-8") as fh:
+            fh.write("an earlier measurement\n")
+
+        def state():
+            with open(rsum_path, encoding="utf-8") as fh:
+                return (sorted(os.listdir(os.path.join(traj, "official_safety"))), sorted(os.listdir(day)),
+                        "official_safety" in json.load(fh))
+
+        for label, cfg in (("is not installed", {"course_cmd": ["cargo", "mp4-no-such-tool"]}),
+                           ("fails", dict(fake_cfg, course_cmd=fake_cfg["course_cmd"] + ["--fail"]))):
+            try:
+                safety_check.official("project_9", "2026-01-01", cfg=cfg)
+                outcome = "returned"
+            except ValueError:
+                outcome = "ValueError"
+            expect("M16: --official when the tool %s records nothing and keeps the earlier directory" % label,
+                   (outcome, state()), ("ValueError", (["2026-01-01"], ["keep.txt"], False)))
+        index = safety_check.official("project_9", "2026-01-01", cfg=fake_cfg)
+        with open(rsum_path, encoding="utf-8") as fh:
+            off = json.load(fh)["official_safety"]
+        expect("M16: a complete --official measurement replaces the directory and is recorded",
+               ([index["final"][k] for k in P], sorted(index["iterations"]), "keep.txt" in os.listdir(day),
+                "raw_final.txt" in os.listdir(day), sorted(os.listdir(os.path.join(traj, "official_safety"))),
+                off["dir"] == index["dir"], index["dir"].replace(os.sep, "/").endswith("official_safety/2026-01-01")),
+               ([1, 2, 0, 1], ["iter_01"], False, True, ["2026-01-01"], True, True))
+        snaps = safety_check.all_snapshots("project_9", "proxy")
+        expect("M16: --all-snapshots skips run_summary.json and measures every iteration snapshot",
+               [(s["run"], s["iter"], s["result"]["tool"]) for s in snaps], [("run_R", "iter_01", "proxy")])
+    finally:
+        mc.PROJECTS, mc.TRAJECTORIES_DIR, mc.TRANSLATIONS_DIR, mc.SUBJECTS_DIR = saved
+
+    # results generator
+    def label(*tools):
+        return summarize._trend_safety({"rows": [{"safety_tool": t, "checked": True} for t in tools]})
+    expect("M16: the trend label knows the loop's own value `both`",
+           (label("both"), label("both", "course"), label("proxy"), label("both", "proxy"), label()),
+           ("course tool", "course tool", "proxy", "proxy", "proxy"))
+    row = {"label": "P", "clippy": {}, "harness": {}}
+    expect_true("M16: the idiom table prints n/a for a crate whose clippy did not run",
+                "| P | n/a | n/a | n/a | n/a |" in summarize.md_idiom([row]) and "correctness n/a" in
+                summarize.md_idiom([row]) and "n/a & n/a" in summarize.render_tex(
+                    [dict(row, compiles=False, passed=0, total=4, iterations=1,
+                          safety={m: 0 for m in summarize.SAFETY})])["idiom.tex"])
+
+    # a clippy that did not run is not "0 warnings"
+    saved_cargo = checks.mc.cargo
+    checks.mc.cargo = lambda args, cwd, log_path=None, env_extra=None, timeout=None: (
+        1, "error: 'cargo-clippy' is not installed for the toolchain\n")
+    try:
+        groups = checks.run_clippy_groups(crate, tempfile.mkdtemp(dir=tmp_root))
+    finally:
+        checks.mc.cargo = saved_cargo
+    expect("M16: clippy exiting non-zero without a message counts as an error, not as 0 warnings",
+           (groups["ok"], groups["errors"] >= 1, groups["agent_total"]), (False, True, 0))
+
+    # scrubber
+    try:
+        list(scrub_secrets.iter_files([os.path.join(tmp_root, "no_such_dir")]))
+        expect("M16: scrub --check on a missing path is an error", "0 files, clean", "SystemExit(2)")
+    except SystemExit as exc:
+        expect("M16: scrub --check on a missing path is an error", exc.code, 2)
+    expect("M16: the example-domain allowlist is the domain or a subdomain, not a suffix of letters",
+           [scrub_secrets._allowed("email", "a@" + dom)   # assembled, so this file itself scans clean
+            for dom in ("example.com", "mail.example.org", "gobyexample.com", "counterexample.org")],
+           [True, True, False, False])
+
+    # agent isolation
+    a = {"tools": ["Read", "Bash"], "permission_mode": "dontAsk", "model": "opus"}
+    init = {"tools": ["Bash", "Read", agent_runner.STRUCTURED_OUTPUT_TOOL], "mcp_servers": [], "slash_commands": [],
+            "permissionMode": "dontAsk", "model": "claude-opus-5", "skills": [], "plugins": []}
+    viol = [agent_runner.check_init(dict(init, **extra), {"pipeline": {"agent": a}})
+            for extra in ({}, {"skills": ["x"]}, {"plugins": ["y"]})]
+    expect("M16: a startup line that reports skills or plugins is an isolation violation",
+           (viol[0], len(viol[1]), "skills" in viol[1][0], len(viol[2]), "plugins" in viol[2][0]),
+           ([], 1, True, 1, True))
+    for key in ("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "CLAUDE_CODE_DISABLE_AUTO_MEMORY"):
+        data = mc.load_pipeline_config()
+        data["agent"]["env"].pop(key, None)
+        try:
+            config.validate_pipeline(data)
+            expect("M16: agent.env without %s is rejected" % key, "accepted", "ConfigError")
+        except config.ConfigError:
+            expect("M16: agent.env without %s is rejected" % key, "ConfigError", "ConfigError")
+
+    # the fake agent's guard resolves symlinks on both sides
+    real = os.path.realpath(os.path.join(tmp_root, "m16_real"))
+    os.makedirs(os.path.join(real, "MP4", "src"))
+    os.makedirs(os.path.join(real, "MP4", "translations", "project_1"))
+    for name in ("fake_agent.py", "mp4common.py"):
+        shutil.copy2(os.path.join(mc.SRC_DIR, name), os.path.join(real, "MP4", "src", name))
+    link = os.path.join(tmp_root, "m16_link")
+    os.symlink(real, link)
+    proc = subprocess.run([sys.executable, "-I", os.path.join(link, "MP4", "src", "fake_agent.py"), "--scenario", "x",
+                           "--iteration", "1", "--attempt", "1", "--tools", "x", "--permission-mode", "x",
+                           "--model", "x"], cwd=os.path.join(real, "MP4", "translations", "project_1"),
+                          stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+    expect("M16: the fake agent refuses MP4/translations/ when reached through a symlinked path",
+           (proc.returncode, b"refuses to run inside MP4/translations/" in proc.stderr), (2, True))
+
+    # rules a mutation run found unguarded (review M16, group C): each assertion below goes red when the rule
+    # it names is removed
+    res = safety_check.course(crate, cfg=dict(fake_cfg, course_cmd=fake_cfg["course_cmd"] + ["--silent"]))
+    expect("M16: a tool run that exits 0 without metric lines is a failure, not 0/0/0/0",
+           ([res[k] for k in P], [f["kind"] for f in res["findings"]]), ([None] * 4, ["course_tool_failed"]))
+    cfg = drill_cfg(tmp_root, "m16", {})
+    chk = run_pipeline.measure_crate(fresh_copy(tmp_root, "m16eval"), FIXTURE, os.path.join(tmp_root, "m16_eval_logs"),
+                                     cfg["project_cfg"]["allow_attributes"])
+    known = "known-failing test fails does not fail as documented"
+    elsewhere = json.loads(json.dumps(chk))
+    elsewhere["test"]["tests"]["fails"]["panic"] = "thread 'fails' panicked at src/other.rs:1:1:\nsomething else"
+    passing = json.loads(json.dumps(chk))
+    passing["test"]["failed_names"] = [n for n in passing["test"]["failed_names"] if n != "fails"]
+    passing["test"]["tests"]["fails"].update({"status": "ok", "panic": None})
+    expect("M16: a known-defective test must fail on its documented assertion to be excused",
+           [known in run_pipeline.evaluate(c, cfg["project_cfg"])["blockers"] for c in (chk, elsewhere, passing)],
+           [False, True, True])
+    for order in (("ok", "FAILED"), ("FAILED", "ok")):
+        out = "".join("     Running bin%d (x)\ntest a ... %s\n" % (i, st) for i, st in enumerate(order))
+        expect("M16: a test that fails in any of its executions is failed (%s then %s)" % order,
+               checks.parse_test_output(out)["a"]["status"], "FAILED")
+    idir, cdir = os.path.join(tmp_root, "m16_iface"), os.path.join(tmp_root, "m16_crate")
+    os.makedirs(idir)
+    os.makedirs(os.path.join(cdir, "src"))
+    with open(os.path.join(idir, "m.rs"), "w", encoding="utf-8") as fh:
+        fh.write("#[derive(Debug, Clone)]\npub struct A {\n    pub x: i32,\n}\n")
+    with open(os.path.join(cdir, "src", "m.rs"), "w", encoding="utf-8") as fh:
+        fh.write("#[derive(Debug)]\npub struct A {\n    pub x: i32,\n}\n")
+    rep = check_interface.compare(idir, cdir)
+    expect("M16: an interface item that lost a derive counts as changed",
+           [(c["item"].split()[-1], c["missing_derives"]) for c in rep["modules"]["m"]["changed"]],
+           [("A", ["Clone"])])
+
+    # PyYAML missing under -I: a sentence, not a traceback
+    saved_yaml = sys.modules.get("yaml")
+    sys.modules["yaml"] = None
+    try:
+        mc.load_pipeline_config()
+        expect("M16: a missing PyYAML is explained", "loaded", "SystemExit with the -I hint")
+    except SystemExit as exc:
+        expect_true("M16: a missing PyYAML is explained", "isolated mode" in str(exc.code))
+    finally:
+        if saved_yaml is None:
+            sys.modules.pop("yaml", None)
+        else:
+            sys.modules["yaml"] = saved_yaml
 
 
 if __name__ == "__main__":

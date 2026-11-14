@@ -46,8 +46,9 @@ def main():
     ap.add_argument("--model", required=True)
     a = ap.parse_args()
     sys.stdin.read()
-    cwd = os.path.abspath(os.getcwd())
-    if cwd == mc.TRANSLATIONS_DIR or cwd.startswith(mc.TRANSLATIONS_DIR + os.sep):
+    cwd = os.path.realpath(os.getcwd())   # both sides resolved: a symlinked ancestor must not hide the directory
+    guarded = os.path.realpath(mc.TRANSLATIONS_DIR)
+    if cwd == guarded or cwd.startswith(guarded + os.sep):
         print("fake_agent refuses to run inside MP4/translations/", file=sys.stderr)
         return 2
     with open(a.scenario, encoding="utf-8") as fh:

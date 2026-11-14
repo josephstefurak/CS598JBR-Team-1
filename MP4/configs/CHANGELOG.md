@@ -155,3 +155,39 @@ with it on 2026-11-11, both final translations and all four iteration snapshots 
   they are.
 - The config hash changes with `pipeline.yaml`, so the two finished runs cannot be resumed under the new
   configuration. Neither needs to be: both ended at SUCCESS.
+
+## 2026-11-14 — full-review fixes to the controller (program phase M16; no file under configs/ changed)
+
+Infrastructure change. Program logic affected: no. No prompt or configuration file changed, no run was
+repeated and no Rust changed (`integrity.py --provenance` exit 0 for both projects before and after; the
+committed results regenerate byte-identical).
+
+Evidence: a full code review of the whole pipeline (ten independent reviewer angles; probes in scratch
+copies). Most findings were in the course-tool adapter added on 2026-11-11, which had not been reviewed.
+None of them changes a committed number.
+
+- `src/safety_check.py`: a missing `aggregate.py` no longer counts as "tool not installed": when
+  `cargo newmetrics` is on PATH the tool runs and the controller's own sum of its metric lines is the
+  result (`"aggregate": "summed by the adapter ..."`). `MP4_NEWMETRICS_AGGREGATE` applies to
+  `pipeline.yaml` only, not to the self-test's own configurations. A compilation unit with a metric line
+  missing is a failed measurement, not a 0. The tool runs in its own process group, and a hanging
+  `aggregate.py` is a failed measurement. `--official` checks that the tool can run before it touches
+  anything, measures into a temporary directory, and records nothing (exit 2) unless every measurement
+  succeeded; before, it deleted the dated directory first and recorded null metrics with exit 0 when the
+  tool failed. `--all-snapshots` no longer crashes on `run_summary.json`.
+- `src/checks.py`: a clippy run that exits non-zero without an error message (component not installed,
+  timeout) counts as an error; before, it was read as 0 warnings.
+- `src/summarize.py`: the per-iteration table recognises `safety_tool: both`; the idiom table prints `n/a`
+  for a crate whose clippy did not run.
+- `src/scrub_secrets.py`: `--check` on a path that does not exist is an error (exit 2); the example-domain
+  allowlist matches the domain or a subdomain only.
+- `src/agent_runner.py`, `src/config.py`: a startup line that reports a skill or plugin is an isolation
+  violation; `agent.env` must set `CLAUDE_CODE_DISABLE_CLAUDE_MDS` and `CLAUDE_CODE_DISABLE_AUTO_MEMORY`
+  to `"1"`.
+- `src/mp4common.py`: a PyYAML that `python3 -I` cannot import is reported in one sentence with the
+  reason. `src/fake_agent.py`: its `translations/` guard resolves symlinks.
+- `src/run_pipeline.py`: the course tool's three span files are in the list of logs the loop scrubs.
+- `src/selftest.py`: 25 new assertions, including four rules that had none (known-defective test must
+  fail on its documented assertion; a test that fails in any execution is failed; a lost derive is an
+  interface change; a tool run without metric lines is a failure).
+- README: PyYAML and `python3 -I`; what `--provenance` compares; `--official` is the recording command.

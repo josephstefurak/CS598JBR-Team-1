@@ -43,6 +43,7 @@ import os
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,7 @@ COURSE_LABELS = {"pointer_arithmetic": "Pointer arithmetic", "unsafe_lines": "Un
                  "raw_pointer_declarations": "Raw pointer declarations"}
 COURSE_SIDE_FILES = ("unsafe_spans.txt", "derefs.txt", "decls.txt")
 COURSE_TIMEOUT_S = 1800
+AGGREGATE_TIMEOUT_S = 120
 AGGREGATE_ENV = "MP4_NEWMETRICS_AGGREGATE"   # overrides safety.course_aggregate (path to the staff aggregate.py)
 
 _UNSAFE_RE = re.compile(r"\bunsafe\b")
@@ -241,22 +243,26 @@ def proxy(crate, raw_path=None, build=True, source=None):
 
 def parse_course_output(text):
     """Sum every `Label: N` line of the tool's output, as the staff aggregate.py does. Returns (totals, units):
-    units is the number of compilation units that reported, 0 when the tool printed no metrics at all."""
-    totals, units = {}, 0
+    units is the number of compilation units that reported, 0 when the tool printed no metrics at all, and also
+    0 when the labels were not all reported the same number of times: a unit with a metric line missing must not
+    be read as that metric being 0 (review M16)."""
+    totals, counts = {}, set()
     for key, label in COURSE_LABELS.items():
         hits = re.findall(r"^\s*%s:\s*(\d+)\s*$" % re.escape(label), text, re.M)
         totals[key] = sum(int(h) for h in hits)
-        if key == "unsafe_lines":
-            units = len(hits)
-    return totals, units
+        counts.add(len(hits))
+    return totals, (counts.pop() if len(counts) == 1 else 0)
 
 
 def course_config(cfg=None):
     """(argv, aggregate path or None, version) from configs/pipeline.yaml `safety`, or from cfg when given."""
-    cfg = (mc.load_pipeline_config().get("safety") or {}) if cfg is None else cfg
+    real = cfg is None
+    cfg = (mc.load_pipeline_config().get("safety") or {}) if real else cfg
     cmd = cfg.get("course_cmd")
     argv = (shlex.split(cmd) if isinstance(cmd, str) else [str(x) for x in cmd]) if cmd else None
-    agg = os.environ.get(AGGREGATE_ENV) or cfg.get("course_aggregate")
+    # the environment override applies to configs/pipeline.yaml only: an explicit cfg (the self-test's) is taken
+    # as given, so the self-test does not depend on the caller's environment (review M16)
+    agg = (os.environ.get(AGGREGATE_ENV) if real else None) or cfg.get("course_aggregate")
     return argv, (os.path.abspath(os.path.expanduser(agg)) if agg else None), cfg.get("course_version")
 
 
@@ -270,8 +276,6 @@ def course_unavailable(cfg=None):
     exe = "cargo-" + argv[1] if os.path.basename(argv[0]) == "cargo" and len(argv) > 1 else argv[0]
     if not shutil.which(exe, path=path):
         return "course safety tool not installed (%s is not on PATH; see MP4/README.md)" % exe
-    if agg and not os.path.isfile(agg):
-        return "course safety tool not installed (no aggregate.py at safety.course_aggregate; see MP4/README.md)"
     return None
 
 
@@ -289,7 +293,9 @@ def course(crate, raw_path=None, cfg=None, keep_dir=None, keep_tag=None):
 
     Runs safety.course_cmd in the copy with stdout and stderr merged (the staff command's `2>&1`), sums the
     metric lines, and, when safety.course_aggregate names the staff aggregate.py, also pipes the same output
-    through it (`python3 aggregate.py --out summary.json`) and requires the two to agree. keep_dir/keep_tag: also
+    through it (`python3 aggregate.py --out summary.json`) and requires the two to agree. When that file does not
+    exist (the course repository is cloned somewhere else) the tool still runs and the summed lines are the
+    result; `extra.aggregate` says which of the two happened. keep_dir/keep_tag: also
     store the scrubbed raw output as raw_<tag>.txt, summary_<tag>.json and the tool's three span files there.
     Raises SystemExit(2) when the tool is not configured or not installed."""
     why = course_unavailable(cfg)
@@ -305,30 +311,43 @@ def course(crate, raw_path=None, cfg=None, keep_dir=None, keep_tag=None):
     copy = mc.copy_crate(crate)
     findings, summary, side = [], None, {}
     try:
+        # its own process group, like mc.cargo: on a timeout the whole tree (cargo, cargo-newmetrics, rustc) is
+        # killed before the copy is removed under it
+        proc = subprocess.Popen(argv, cwd=copy, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, start_new_session=True)
         try:
-            proc = subprocess.run(argv, cwd=copy, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                  stderr=subprocess.STDOUT, timeout=COURSE_TIMEOUT_S)
-            code, raw_bytes = proc.returncode, proc.stdout
-        except subprocess.TimeoutExpired as exc:
-            code, raw_bytes = 124, (exc.stdout or b"") + b"\n[mp4] course tool timed out\n"
+            raw_bytes, _ = proc.communicate(timeout=COURSE_TIMEOUT_S)
+            code = proc.returncode
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+            raw_bytes, _ = proc.communicate()
+            code, raw_bytes = 124, (raw_bytes or b"") + b"\n[mp4] course tool timed out\n"
         raw = raw_bytes.decode("utf-8", "replace")
         totals, units = parse_course_output(raw)
         if code != 0 or units == 0:
             findings.append({"kind": "course_tool_failed", "file": "",
                              "detail": "exit %d, %d compilation unit(s) reported" % (code, units)})
-        elif agg:
-            agg_proc = subprocess.run([sys.executable, "-I", agg, "--out", "summary.json"], cwd=copy, env=env,
-                                      input=raw_bytes, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=120)
+        elif agg and os.path.isfile(agg):
+            try:
+                agg_code = subprocess.run([sys.executable, "-I", agg, "--out", "summary.json"], cwd=copy, env=env,
+                                          input=raw_bytes, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                          timeout=AGGREGATE_TIMEOUT_S).returncode
+            except subprocess.TimeoutExpired:
+                agg_code = 124
             try:
                 with open(os.path.join(copy, "summary.json"), encoding="utf-8") as fh:
                     summary = json.load(fh)
             except (OSError, ValueError):
                 summary = None
-            if agg_proc.returncode != 0 or not isinstance(summary, dict) or any(
+            if agg_code != 0 or not isinstance(summary, dict) or any(
                     summary.get(k) != totals[k] for k in COURSE_LABELS):
+                summary = None
                 findings.append({"kind": "course_tool_failed", "file": "",
                                  "detail": "aggregate.py exit %d; its summary.json does not equal the summed "
-                                           "metric lines" % agg_proc.returncode})
+                                           "metric lines" % agg_code})
         for name in COURSE_SIDE_FILES:
             p = os.path.join(copy, name)
             if os.path.isfile(p) and not os.path.islink(p):
@@ -344,7 +363,9 @@ def course(crate, raw_path=None, cfg=None, keep_dir=None, keep_tag=None):
     extra = {"exit_code": code, "compilation_units": units,
              "targets": re.findall(r"^Target name: (.+)$", raw, re.M),
              "unsupported_targets": re.findall(r"^Target (\S+) is not supported$", raw, re.M),
-             "aggregate": "staff aggregate.py" if summary is not None else "summed by the adapter"}
+             "aggregate": "staff aggregate.py" if summary is not None else (
+                 "summed by the adapter (no aggregate.py at safety.course_aggregate)"
+                 if agg and not os.path.isfile(agg) else "summed by the adapter")}
     if ok:
         extra.update({k: totals[k] for k in ("raw_pointer_dereferences", "raw_pointer_declarations", "total_spans")})
     if keep_dir:
@@ -444,11 +465,22 @@ def official(project, date=None, cfg=None):
     date = date or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
         raise ValueError("date must be YYYY-MM-DD")
+    why = course_unavailable(cfg)
+    if why:   # before anything is touched: an earlier measurement of the same date stays as it is
+        raise ValueError(why)
     traj = os.path.join(mc.TRAJECTORIES_DIR, project)
     rsum, snaps = final_run_snapshots(project)
-    out_dir = os.path.join(traj, "official_safety", date)
-    if os.path.isdir(out_dir):
-        shutil.rmtree(out_dir)
+    final_dir = os.path.join(traj, "official_safety", date)
+    os.makedirs(os.path.dirname(final_dir), exist_ok=True)
+    # measured into a sibling temporary directory, which replaces <date>/ only when every measurement succeeded
+    out_dir = tempfile.mkdtemp(prefix=".%s.tmp_" % date, dir=os.path.dirname(final_dir))
+    try:
+        return _official(project, date, cfg, traj, rsum, snaps, out_dir, final_dir)
+    finally:
+        shutil.rmtree(out_dir, ignore_errors=True)
+
+
+def _official(project, date, cfg, traj, rsum, snaps, out_dir, final_dir):
     _, _, version = course_config(cfg)
 
     def entry(res):
@@ -470,14 +502,21 @@ def official(project, date=None, cfg=None):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
         iterations[it]["snapshot"] = mc.rel(snap, mc.REPO_DIR)
+    bad = [tag for tag, e in [("final", final)] + sorted(iterations.items()) if e["failed"]]
+    if bad:
+        raise ValueError("the course tool failed for %s (%s); nothing was recorded, run_summary.json and %s are "
+                         "unchanged" % (project, ", ".join(bad), mc.rel(final_dir, mc.REPO_DIR)))
     index = {"project": project, "run_id": rsum["run_id"], "tool": "course", "tool_version": version,
-             "measured": date, "dir": mc.rel(out_dir, mc.REPO_DIR), "final": final, "iterations": iterations,
+             "measured": date, "dir": mc.rel(final_dir, mc.REPO_DIR), "final": final, "iterations": iterations,
              "note": "Measured after the run, each on a temporary copy. An iteration is its src_after/ snapshot "
                      "with the benchmark's Cargo.toml and Cargo.lock. The tool rewrites its three span files for "
                      "every compilation unit, so they hold the last unit's spans only."}
     with open(os.path.join(out_dir, "official_safety.json"), "w", encoding="utf-8") as fh:
         json.dump(index, fh, indent=2)
         fh.write("\n")
+    if os.path.isdir(final_dir):
+        shutil.rmtree(final_dir)
+    os.replace(out_dir, final_dir)
     rsum["official_safety"] = {k: index[k] for k in ("tool", "tool_version", "measured", "dir", "final")}
     rsum["official_safety"]["iterations"] = {it: {k: e[k] for k in PRIMARY} for it, e in iterations.items()}
     path = os.path.join(traj, "run_summary.json")
@@ -502,9 +541,10 @@ def all_snapshots(project, tool):
     out = []
     if not os.path.isdir(traj):
         return out
-    for run in sorted(d for d in os.listdir(traj) if d.startswith("run_")):
-        run_dir = os.path.join(traj, run)
-        for it in sorted(d for d in os.listdir(run_dir) if re.match(r"^iter_\d+", d)):
+    for run in sorted(d for d in os.listdir(traj) if d.startswith("run_") and os.path.isdir(os.path.join(traj, d))):
+        run_dir = os.path.join(traj, run)   # (run_summary.json also starts with run_: review 3 D10, fixed at M16)
+        for it in sorted((d for d in os.listdir(run_dir) if integrity._ITER_DIR_RE.match(d)),
+                         key=integrity._iter_key):
             snap = os.path.join(run_dir, it, "src_after")
             if not os.path.isdir(snap):
                 continue

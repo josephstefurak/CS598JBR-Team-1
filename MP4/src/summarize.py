@@ -149,9 +149,10 @@ def md_safety(rows):
 def md_idiom(rows):
     out = ["| Project | Correctness | Style | Complexity | Performance |", "|---|---|---|---|---|"]
     for r in rows:
-        out.append("| %s | %s | %s | %s | %s |" % ((r["label"],) + tuple(r["clippy"][g] for g in GROUPS)))
+        # clippy does not run on a crate that does not build: n/a, never a KeyError or a 0 (review M16)
+        out.append("| %s | %s | %s | %s | %s |" % ((r["label"],) + tuple(_cell(r["clippy"].get(g)) for g in GROUPS)))
     out += [""] + ["Warnings from the immutable benchmark test file are excluded above: %s has %s." % (
-        r["label"], ", ".join("%s %d" % (g, r["harness"][g]) for g in GROUPS)) for r in rows]
+        r["label"], ", ".join("%s %s" % (g, _cell(r["harness"].get(g))) for g in GROUPS)) for r in rows]
     return "\n".join(out)
 
 
@@ -178,7 +179,7 @@ def render_tex(rows):
         _tex(r["label"]), "Yes" if r["compiles"] else "No", r["passed"], r["total"],
         _tex(_rate(r["passed"], r["total"])), r["iterations"]) for r in rows]
     safety = ["%s & %s \\\\" % (_tex(r["label"]), " & ".join(str(r["safety"][m]) for m in SAFETY)) for r in rows]
-    idiom = ["%s & %s \\\\" % (_tex(r["label"]), " & ".join(str(r["clippy"][g]) for g in GROUPS)) for r in rows]
+    idiom = ["%s & %s \\\\" % (_tex(r["label"]), " & ".join(_cell(r["clippy"].get(g)) for g in GROUPS)) for r in rows]
     return {"overall.tex": "\n".join(overall) + "\n", "safety.tex": "\n".join(safety) + "\n",
             "idiom.tex": "\n".join(idiom) + "\n"}
 
@@ -310,8 +311,11 @@ def iteration_trend(project, label, run_summary):
                 "added": sum(a for a, _ in stats.values()), "removed": sum(r for _, r in stats.values())})
             off = official.get(d)
             if isinstance(off, dict) and all(isinstance(off.get(m), int) for m in SAFETY):
-                # the course tool's count for this iteration's snapshot replaces the proxy's run-time count
-                row["proxy_total"], row["safety_total"] = row["safety_total"], sum(off[m] for m in SAFETY)
+                # the course tool's count for this iteration's snapshot replaces the run-time count; that count
+                # is kept as the proxy's only when the run really measured with the proxy
+                if row["safety_tool"] not in OFFICIAL_TOOLS:
+                    row["proxy_total"] = row["safety_total"]
+                row["safety_total"] = sum(off[m] for m in SAFETY)
                 row["safety_tool"] = "course"
         rows.append(row)
     retro = _dict(run_summary.get("official_safety")) if any("proxy_total" in r for r in rows) else {}
@@ -333,8 +337,9 @@ def _lines(r):
 
 
 def _trend_safety(trend):
+    # "both" is what the loop records under safety.tool: both; "course" is a row re-measured by --official
     tools = {r["safety_tool"] for r in trend["rows"] if r["checked"]}
-    return "course tool" if tools == {"course"} else "proxy"
+    return "course tool" if tools and tools <= set(OFFICIAL_TOOLS) else "proxy"
 
 
 def _trend_safety_note(trend, safety):

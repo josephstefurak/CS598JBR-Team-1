@@ -218,6 +218,10 @@ def run_clippy_groups(crate, log_dir):
                 "-A", "clippy::all", "-W", "clippy::%s" % group]
         code, out = mc.cargo(args, crate, log)
         sites, errors = parse_clippy_json(out)
+        if code != 0 and not errors:
+            # clippy did not run to the end and printed no error message (component not installed, timeout,
+            # crash): its empty output is not "0 warnings" (review M16)
+            errors = 1
         result["errors"] = max(result["errors"], errors)
         clippy_sites = [s for s in sites if s["lint"].startswith("clippy::")]
         g = {"exit_code": code, "agent": 0, "harness": 0, "external": 0, "lints": {}, "sites": clippy_sites,

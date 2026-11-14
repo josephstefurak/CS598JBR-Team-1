@@ -7,6 +7,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 
@@ -46,7 +47,14 @@ def load_pipeline_config():
     """Return configs/pipeline.yaml as a dict, or {} when it does not exist yet."""
     if not os.path.exists(PIPELINE_YAML):
         return {}
-    import yaml
+    try:
+        import yaml
+    except ImportError:
+        # python3 -I (isolated mode) ignores the per-user site-packages, so a `pip install --user pyyaml` (pip's
+        # default when the interpreter's own site-packages is not writable) is not visible here
+        raise SystemExit("PyYAML is not importable by %s in isolated mode (-I ignores pip --user installs). "
+                         "Install it into a virtual environment or the interpreter's own site-packages; see "
+                         "MP4/README.md, Setup." % sys.executable)
     with open(PIPELINE_YAML, encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     if not isinstance(data, dict):

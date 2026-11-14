@@ -113,6 +113,9 @@ def check_init(init, cfg):
         v.append("slash_commands missing from init")
     elif slash:
         v.append("slash_commands not empty: %r" % (slash,))
+    for key in ("skills", "plugins"):   # every recorded call reports both as empty lists
+        if init.get(key):
+            v.append("%s not empty: %r" % (key, init[key]))
     if init.get("permissionMode") != a["permission_mode"]:
         v.append("permissionMode %r != %r" % (init.get("permissionMode"), a["permission_mode"]))
     if a["model"] not in str(init.get("model", "")).lower():
