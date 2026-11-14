@@ -249,8 +249,13 @@ iteration the run shipped (`run_summary.json` `final_iteration_dir`). The contro
   step counter on every call, so it asserts that every record is of type 0, while the test vector
   contains records of other types. A faithful parser fails this test. The controller excludes it from the
   success condition, but only when it fails on exactly the documented assertion. It is still run and
-  reported in every result, and the agent is told never to suppress callbacks to make it pass. A ruling
-  from the course staff is pending. Program logic affected: no.
+  reported in every result, and the agent is told never to suppress callbacks to make it pass. The C
+  test keeps the counter across calls through `user_data` (`subjects/project_2/c/test.c` 90-128); the
+  benchmark's Rust port resets it (`src/bin/test.rs` line 122). The course staff ruled on 2026-11-13
+  that when a provided test has an issue, the translation implements the correct behaviour of the
+  original C, the test is not modified, and the issue is documented in the report. This repository
+  does exactly that: the test file is byte-identical to the benchmark's and libpsbt is reported as 3
+  of 4. Program logic affected: no.
 - **C behaviour rulings.** Where the C has bugs that the tests do not exercise, the agent is told to
   reproduce them exactly when the C is well defined, and to choose defined, non-panicking behaviour when
   it is undefined. The cases are listed in `configs/projects/*.yaml`. One clippy suppression is
