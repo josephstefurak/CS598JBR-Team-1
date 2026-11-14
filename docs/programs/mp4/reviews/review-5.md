@@ -69,7 +69,7 @@ command or a statement in the tree as committed; "future" = only a new agent run
 | B8 | `summarize.py:335-337` | cf6a831 | The trend table knew only `"course"`; the loop writes `"both"`, so a run under the current config would be labelled "proxy ... PENDING" (future) | CONFIRMED (3 reviewers) | **Fixed**; the "during the run the controller used the proxy" note now depends on what the run recorded |
 | B9 | `summarize.py:152-154`, `:181` | 73be41e | `KeyError` when the final crate does not build (future) | CONFIRMED | **Fixed**: `n/a` |
 | B10 | `scrub_secrets.py:79-80` | a8994d9 | `--check` on a path that does not exist printed `0 hit(s)`, exit 0: the pre-commit secret gate passed from the wrong directory | CONFIRMED | **Fixed**: exit 2 |
-| B11 | `scrub_secrets.py:64` | 1ac3cd4 | E-mail allowlist by bare suffix: `x@gobyexample.com` allowed | CONFIRMED | **Fixed** |
+| B11 | `scrub_secrets.py:64` | 1ac3cd4 | E-mail allowlist by bare suffix: an address at a domain that merely ends in `example.com` was allowed | CONFIRMED | **Fixed** |
 | B12 | `agent_runner.py:99-122` | be3de95 | The startup check ignored `skills` and `plugins` (future) | CONFIRMED | **Fixed** |
 | B13 | `config.py:110-111` | be3de95 | Nothing required the two isolation variables in `agent.env` (future) | CONFIRMED | **Fixed** |
 | B14 | `fake_agent.py:49-50` | 23c88b2 | The fake agent's `translations/` guard failed through a symlinked path | CONFIRMED | **Fixed** |
