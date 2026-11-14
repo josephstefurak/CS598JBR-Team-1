@@ -59,7 +59,7 @@ command or a statement in the tree as committed; "future" = only a new agent run
 | ID | Where (at `894ef53`) | From | Defect and failure scenario | Verdict | Went to |
 |---|---|---|---|---|---|
 | A1 | `safety_check.py:450-489`, `:552` | cf6a831 | `--official` deleted `official_safety/<date>/` before checking the tool could run, and on a failing tool wrote null metrics into `run_summary.json` and exited 0. Probe: `--official --date 2026-11-11` without the tool: 16 committed files deleted, exit 2; with a failing tool: `official_safety.final` all null, exit 0, then `summarize.py` exits 1 | CONFIRMED (4 reviewers) | **Fixed**: availability checked first; measured into a temporary directory that replaces `<date>/` only when every measurement succeeded; otherwise nothing is recorded and exit 2 |
-| B1 | `safety_check.py:273`, `run_pipeline.py:125`, `summarize.py:119-145`, `selftest.py:2028` | cf6a831 | A missing `aggregate.py` at the configured home path counted as "tool not installed". The README's own sequence then: `--check-only` exit 0 with `"safety_tool": "proxy"`, the six committed course-tool logs deleted, `summarize.py` rewrites the row to "interim proxy; official tool PENDING", `selftest.py` 1 FAIL | CONFIRMED (4 reviewers) | **Partly fixed**: with `cargo newmetrics` on PATH the tool now runs and the adapter's own sum is the result. A machine with no tool at all still falls back: **owner question Q1** |
+| B1 | `safety_check.py:273`, `run_pipeline.py:125`, `summarize.py:119-145`, `selftest.py:2028` | cf6a831 | A missing `aggregate.py` at the configured home path counted as "tool not installed". The README's own sequence then: `--check-only` exit 0 with `"safety_tool": "proxy"`, the six committed course-tool logs deleted, `summarize.py` rewrites the row to "interim proxy; official tool PENDING", `selftest.py` 1 FAIL | CONFIRMED (4 reviewers) | **Fixed**: with `cargo newmetrics` on PATH the tool now runs and the adapter's own sum is the result. With no tool at all (owner answer Q1, "Keep official files"): the committed `check.json` and logs stay, and that machine's proxy-only result goes to `project_N.check.proxy.json` (gitignored) |
 | B2 | `safety_check.py:259` | cf6a831 | `MP4_NEWMETRICS_AGGREGATE` overrode the self-test's explicit configurations: with the variable set as the README says, `selftest.py` reported 1 FAIL or aborted | CONFIRMED | **Fixed**: the override applies to `pipeline.yaml` only |
 | B3 | `MP4/README.md:150`, `mp4common.py:49` | 23c88b2 | `python3 -I` ignores `pip --user` installs, pip's default on the macOS system Python: every command dies with `ModuleNotFoundError: No module named 'yaml'` | CONFIRMED (2 reviewers; the pip step itself not observed, no network) | **Fixed**: README says so and gives the venv line; the error is one sentence with the reason |
 | B4 | `checks.py:219-240` | a8994d9 | A clippy that never ran (component missing, timeout) scored 0 warnings and `ok: true`; `evaluate` returned SUCCESS | CONFIRMED (2 reviewers) | **Fixed**: non-zero exit without an error message counts as an error |
@@ -73,7 +73,7 @@ command or a statement in the tree as committed; "future" = only a new agent run
 | B12 | `agent_runner.py:99-122` | be3de95 | The startup check ignored `skills` and `plugins` (future) | CONFIRMED | **Fixed** |
 | B13 | `config.py:110-111` | be3de95 | Nothing required the two isolation variables in `agent.env` (future) | CONFIRMED | **Fixed** |
 | B14 | `fake_agent.py:49-50` | 23c88b2 | The fake agent's `translations/` guard failed through a symlinked path | CONFIRMED | **Fixed** |
-| B15 | `run_pipeline.py:513-520`, `safety_check.py:392` | cf6a831 | Under `both`, the proxy's own unsafe counts no longer block SUCCESS (code the course tool does not compile, e.g. behind a dead `cfg`, passes). Before M12 they blocked (future) | CONFIRMED (2 reviewers) | **Owner question Q2** |
+| B15 | `run_pipeline.py:513-520`, `safety_check.py:392` | cf6a831 | Under `both`, the proxy's own unsafe counts no longer block SUCCESS (code the course tool does not compile, e.g. behind a dead `cfg`, passes). Before M12 they blocked (future) | CONFIRMED (2 reviewers) | **Fixed** (owner answer Q2, "Restore the blocker"): `unsafe metrics (proxy): N` blocks SUCCESS under `both` |
 | C1 | `selftest.py:1669` | 2cb0ce8 | The trend-label test used `"course"`, a value the loop cannot write | CONFIRMED | **Fixed**: fixture is `"both"`; new assertion, mutation caught |
 | C2 | `selftest.py:1943`, `run_pipeline.py:440` | cf6a831 | "every log both writes is in the list the loop scrubs" tested four typed names; three span files were not in the list | CONFIRMED (2 reviewers) | **Fixed**: asserted over the directory; the three files added to `MEASURE_LOGS` |
 | C3 | `run_pipeline.py:500-502` | 23c88b2 | The rule that makes libpsbt's 3 of 4 a legitimate SUCCESS (the known-defective test must fail on its documented assertion) had no assertion: removed, selftest 316/0 | CONFIRMED (mutation) | **Fixed**: assertion added, mutation caught |
@@ -86,13 +86,18 @@ command or a statement in the tree as committed; "future" = only a new agent run
 | D2 | `MP4/README.md:361` | cf6a831 | The README offered graders `--official`, which writes a new dated directory and edits `run_summary.json` | CONFIRMED | **Fixed (wording)**: it is the recording command; `--check-only` and `--tool course` verify |
 | D3 | `MP4/README.md:272-274` | 73be41e | "removes anything that looks like ... an e-mail address": six upstream licence-header addresses are kept on purpose | CONFIRMED | **Fixed (wording)** |
 | D4 | `MP4/README.md:29-31` | be3de95 | "aborted if ... any capability beyond the configured tools": skills and plugins were not checked | CONFIRMED | **Fixed** (B12; wording lists what is checked) |
-| D5 | `MP4/README.md:395-396` | cf6a831 | "both must be clean for SUCCESS" is not true of the proxy's four counts (B15) | CONFIRMED | **Owner question Q2** |
+| D5 | `MP4/README.md:395-396` | cf6a831 | "both must be clean for SUCCESS" is not true of the proxy's four counts (B15) | CONFIRMED | True again through B15 |
 | D6 | `where.md` M12 log | cf6a831 | "`--all-snapshots --tool course` also works": it crashed | CONFIRMED | True since B5; corrected in the M16 log |
 | D7 | `runbook.md:13`, `program.yaml:21`, `where.md:171` | 04dcc76, 0122f84 | Three tracked files held the owner's absolute home path; `runbook.md:13` was also a Stage 0 command that fails on any other checkout | CONFIRMED | **Fixed**: `~` |
-| D8 | `docs/programs/mp4/evidence/smoke/**` (11 files) | 2e0f3d2, 5cadf51 | The committed smoke evidence holds the per-user macOS temp path and the session scratch path with the numeric uid. No secret, e-mail or account id (all seven streams read). Reviews 3 and 4 said "temp paths: 0" because their grep was scoped to `MP4/` | CONFIRMED | **Owner question Q3** |
+| D8 | `docs/programs/mp4/evidence/smoke/**` (11 files) | 2e0f3d2, 5cadf51 | The committed smoke evidence holds the per-user macOS temp path and the session scratch path with the numeric uid. No secret, e-mail or account id (all seven streams read). Reviews 3 and 4 said "temp paths: 0" because their grep was scoped to `MP4/` | CONFIRMED | **Accepted as is** (owner answer Q3): evidence is not rewritten; recorded as why.md D-EVIDENCE; a temp-path scrub rule is backlog PM23 |
 
-Fixed: 27 (A1, B2-B14 = 13, C1-C8 = 8, D1-D4, D7 = 5). B1 is partly fixed and D6 became true through
-B5. Owner: B1 rest, B15 with D5, D8.
+Fixed in the mechanical batch (`9e9ee59`, `7b98412`): 27 (A1, B2-B14 = 13, C1-C8 = 8, D1-D4, D7 = 5); D6
+became true through B5. Fixed after the owner's answers, in the same session: B1 (rest), B15 and with it
+D5. Accepted by the owner: D8. No remediation row was needed.
+
+Owner batch, asked once with `AskUserQuestion` (answers verbatim): Q1 no-tool `--check-only` -> "Keep
+official files (Recommended)"; Q2 proxy counts under `both` -> "Restore the blocker (Recommended)"; Q3
+temp paths in the smoke evidence -> "Accept as is (Recommended)".
 
 ### Mutation check of the fixes
 

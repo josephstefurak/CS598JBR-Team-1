@@ -51,6 +51,7 @@ the specific conflict rather than picking an alternative.*
 - D10 superseded 2026-11-11 by D-REPORT: the team writes the report by hand in Overleaf; the program keeps a local gitignored draft only.
 - D-UNTRACK, D-TOOL (owner, 2026-11-11): report-type files untracked (M15); `newmetrics` install pre-approved, run on a copy only (M12).
 - D-ORDER (owner, 2026-11-14): everything that does not need the validator runs first (M14, then the full review as M16); M13 is the last build row; the close after it reviews only the diff since M16. D-CREDIT (owner, 2026-11-14): the team assumes 3/4 on libpsbt earns full correctness credit when justified in the report, and does not chase hidden Project 2 tests; no follow-up is sent to staff. Full text: why.md § D.
+- D-M16GATES, D-EVIDENCE (owner, 2026-11-14, the M16 review batch): `--check-only` never replaces a course-tool result with a proxy-only one; a nonzero proxy count blocks SUCCESS under `both`; the smoke evidence's temp paths are accepted as they are. Full text: why.md § D.
 - D-ALLOW, D-CLIMAIN, D-FAITHFUL, D-FORBID: defaults confirmed verbatim at the M3 gate (2026-10-29). D-TRAJ, D-DIAGRAM: defaults.
 - D-STRUCTOUT (M3): isolation check admits `StructuredOutput` (added by `--json-schema`) beside the six tools.
 
@@ -72,7 +73,7 @@ the specific conflict rather than picking an alternative.*
 | M15 | Handout-v2 alignment: untrack report-type files, README to the course template | **done** | 2026-11-11 — c18bdd4 | 9 files untracked (2 drafts, 5 `results/*.tex`, traceability map, forum-post draft), all still on disk and gitignored; README: 6 template `##` headings in order, 6 Environment bullets, 14 former sections kept as `###` (239 of 246 old lines verbatim, the 7 others are the reference fixes); `summarize.py --tex` added, absent draft → `local draft absent, skipped` exit 0; selftest 266 → 279 (+13), 0 FAIL, same in a fresh clone; fresh clone: check-only, provenance, `--check-readme`, `--check-report` all exit 0; `results.md` byte-identical; runs before M12 (IDs are not reused) |
 | M12 | Course unsafe-metrics tool: install, adapter, retroactive run, table swap | **done** | 2026-11-11 — cf6a831 | `newmetrics` 0.1.0 @ 4597e75 installed outside the repo, staff command with `--locked` exit 0 (no gate needed); official metrics 0/0/0/0 and 0 raw-pointer derefs/decls for both final crates and all 4 snapshots (2 compilation units each); proxy equals course on both; `safety.tool: both`; `official_safety/2026-11-11/` 16 files per project; `results.md` and README PENDING count 0; selftest 279 → 316 (+37), 0 FAIL, same in a fresh clone; provenance exit 0 before and after; translations byte-identical; no nonzero-metric gate |
 | M14 | Review 4: final rubric walk, local report draft, merge handoff | **done** | 2026-11-14 — fc9336b (README fixes 195f6c6) | fresh clone at 195f6c6: help, dry-run, check-only, provenance, summarize, check-readme, check-report, scrub, interface, scan all exit 0 for both projects; selftest 316 PASS / 0 FAIL (316 → 316, +0: no code changed); 21 rubric rows: 15 verified (Tasks 1-3), 6 `owner: hand-written report` (Task 4); satc 4/4, libpsbt 3/4 (`read_test_vector`, `test.rs:126`, left 4 right 0); agent clippy 0/0/0/0 both; course tool 0/0/0/0 both; consistency 0 mismatches of 32; `grep -c PENDING` README 0, results 0, local draft .md 0 / .tex 0; key-shaped secrets in branch history 0; 2 findings fixed (README said the staff ruling was pending; top-level README did not mention MP4); local draft finalized (387 + 278 lines, 68 citation checks, 13-item closing list), untracked; `handoff.md` written; validator recorded as not yet run |
-| M16 | Pre-validation full review: the close's pass-1 review pulled forward | **not-started** | — | Added 2026-11-14 (D-ORDER). Full `/code-review max --fix` over the program diff with triage and fixes, before the validator arrives. Records the reviewed commit; the later close only reviews what changed after it |
+| M16 | Pre-validation full review: the close's pass-1 review pulled forward | **done** | 2026-11-14 — 20e1cd1 (batch 9e9ee59, docs 7b98412) | **reviewed commit `894ef53`**; scope `ffcb9721..894ef53` 331 files / 47,262 lines; `/code-review max --fix`, 10 angles, 61 candidates, 47 distinct findings: 27 fixed in the mechanical batch, 3 to the owner (Q1 and Q2 fixed in session, Q3 accepted), 17 to the backlog (PM10-PM23), 0 refuted, 0 remediation rows; group A 1, B 15, C 8, D 8; no committed number changed (check-only summaries equal, `results.md` byte-identical, translations sha256 `214c0f7f...` before and after, provenance ok both); selftest 316 → 344 (+28), 0 FAIL; 16 of 16 reverted fixes caught; flake8 and pyflakes clean; `state` stays `building` |
 | M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released as of 2026-11-14; when it appears the owner names its path and a session flips this row to not-started; from 2026-11-17 a session marks it dropped)** | — | Cut-off 2026-11-17 (D9 revised). Deliberately the last build row since 2026-11-14 (D-ORDER) |
 
 > Sequencing note for `next` (rewritten 2026-11-14, D-ORDER): the runnable
@@ -168,7 +169,7 @@ sounds good continue with M1".
   executables, and with `--no-fail-fast` each reports `0 passed; 4 failed`.
 - `git grep --cached -nE 'sk-ant-|Bearer |api_key=' -- MP4/`: no output.
   The same grep over `docs/` matches only lines that quote the pattern
-  itself (see discoveries). `git grep -nE 'claude-501|/Users/josephstefurak'
+  itself (see discoveries). `git grep -nE 'claude-501|/Users/<name>'
   -- MP4/`: no output.
 - Floor items for M2+ (`py_compile`, selftest, scrub, `run_pipeline`,
   provenance) do not exist yet. Not run.
@@ -2149,6 +2150,118 @@ None asked. No model call, no quota spent, nothing installed.
   the way the team wants.
 - Next `/mp4-phase` runs M16 (full code review). O4 (validator) and O7
   (merge, after ready-to-merge; `handoff.md`, runbook Stage 5) stay open.
+
+### M16 — Pre-validation full review (2026-11-14, 7b98412 + 9e9ee59 + 20e1cd1 + this commit)
+
+**Reviewed commit: `894ef53`.** The close after M13 reviews only `894ef53..HEAD` (this phase's own
+fixes included) plus what M13 changes.
+
+**Shipped** (product terms): The whole pipeline has had its full closing review before the validator
+arrives. The review found one way a documented command could destroy committed evidence, and one way a
+grader without the course tool at our exact path would have turned the official safety table into
+"PENDING" and made the self-test fail; both are fixed. A clippy that never ran is no longer read as zero
+warnings, a setup step that breaks every command on the macOS system Python is explained, and four rules
+the results depend on now have tests that fail when the rule is removed. No number in the results
+changed, no run was repeated, and no generated Rust was touched. Details: `reviews/review-5.md`.
+
+**Deviations from spec / judgment calls**:
+- Third phase in one session (M14, then this): the owner invoked `/mp4-phase` again; treated as the
+  owner's waiver of one-phase-per-session, as before.
+- The session hit the owner's 5-hour usage limit once, with all ten reviewers running. They were resumed
+  in two waves. After the owner's "be mindful of usage limits", the recipe's per-candidate verifier
+  agents and the sweep agent were **not** run. Verification is instead: a probe with output in the
+  reviewer's report, independent reproduction (the main cluster by three or four reviewers each), or the
+  fix's assertion going red with the fix reverted. Three models' worth of reviewers: seven on the default
+  model, three on a smaller one.
+- Existing code changed (what it did before is in `MP4/configs/CHANGELOG.md`, 2026-11-14, and in
+  review-5's table): `safety_check.py` (`course_config`, `course_unavailable`, `course`, `official`,
+  `all_snapshots`, `parse_course_output`), `checks.run_clippy_groups`, `summarize._trend_safety` /
+  `iteration_trend` / `md_idiom` / `render_tex`, `scrub_secrets.iter_files` / `_allowed`,
+  `agent_runner.check_init`, `config.validate_pipeline`, `mp4common.load_pipeline_config`,
+  `fake_agent.main`, `run_pipeline.evaluate` / `main` / `MEASURE_LOGS`.
+- New function `run_pipeline.check_only_keep_official` wraps `check_only` (owner answer Q1) instead of
+  changing it.
+- Two selftest assertions were rewritten because they could not fail (trend label fixture, scrubbed-log
+  list), and one M12 case was removed because its premise changed ("aggregate.py missing -> exit 2" is
+  now "the tool still measures").
+- A course-tool preflight before a model run was written and then removed: it had no test, and it only
+  matters for a future run (backlog PM10).
+- `where.md:171` (the M1 log) quoted a grep pattern containing the owner's home path; the user name in
+  it was replaced by `<name>`. The M12 log's sentence "`--all-snapshots --tool course` also works" was
+  false when written (it crashed); it is true from this phase on.
+- `pipeline.yaml` did not change, so `config_hash` did not change.
+- README: five passages changed (PyYAML under `-I`, provenance scope, `--official`, the scrubber
+  sentence, the isolation sentence) and one added (what `--check-only` does without the tool).
+- Step 5 of the spec (re-run review-4 rows if a fix changes what M14 verified): the affected rows are the
+  grader commands. `--check-only`, `summarize.py`, `--check-readme` and provenance were re-run on a
+  scratch copy with the fixes: same exit codes and numbers as review-4. The local report draft's tables
+  did not change (`--check-report` up to date).
+
+**Owner gates**: the review's owner-decision batch, asked once (`AskUserQuestion`). Q1 "On a grader's
+machine with no course unsafe-metrics tool at all, `--check-only` currently overwrites the committed
+official check.json ... What should it do?" -> "Keep official files (Recommended)". Q2 "... the regex
+proxy's own unsafe counts no longer block SUCCESS ... Which side should move?" -> "Restore the blocker
+(Recommended)". Q3 "The committed smoke-test evidence ... contains this Mac's per-user temp directory
+path ... What do you want?" -> "Accept as is (Recommended)". Recorded as why.md D-M16GATES and
+D-EVIDENCE. No pipeline rerun was needed; no model call through `run_pipeline.py`; nothing installed.
+
+**Tooling**: `code-review` at `max` with `--fix` (subscription quota). `/code-review ultra` not used.
+
+**Verification** (real output):
+- Before: provenance `"ok": true` both; translations sha256 `214c0f7f...ce79`; `selftest: 316 PASS, 0
+  FAIL`; tree clean.
+- Findings: 61 candidates, 47 distinct, by group A 1 / B 15 / C 8 / D 8 plus 17 below the bar (table in
+  review-5). Triage: mechanical batch 27, owner 3, backlog 17 (13 rows PM10-PM22, plus PM23), refuted 0.
+- `git diff --stat 894ef53..HEAD -- MP4 .gitignore`: see the commit; 12 source files, README, CHANGELOG.
+- After: `selftest: 344 PASS, 0 FAIL` (316 -> 344, +28: 29 new in `_run_m16`, 1 removed in
+  `_run_m12`). Mutation check: 16 fixes reverted one at a time, 16 caught.
+- `flake8 --max-line-length 120` exit 0, `pyflakes` no output, `py_compile` exit 0 (no typechecker is
+  installed for this project).
+- Scratch copy with the fixes: `--check-only` exit 0 for both projects, `summary` equal to the committed
+  `check.json`, `"safety_tool": "both"`; `summarize.py` -> `results equal --check-only for 2 project(s)`,
+  `results.md` and `repair_mining.md` unchanged; `--check-readme` up to date; provenance `"ok": true`
+  both. With `MP4_NEWMETRICS_AGGREGATE=/nonexistent/aggregate.py`: `--check-only` exit 0, `"safety_tool":
+  "both"`, `aggregate: summed by the adapter (no aggregate.py at safety.course_aggregate)`, 0 committed
+  files deleted, `summarize.py` leaves `results.md` unchanged (before the fix: "official tool PENDING").
+- `safety_check.py --project project_1 --all-snapshots` exit 0, 2 snapshots, unsafe lines 0 and 0
+  (before: `NotADirectoryError`). `scrub_secrets.py --check MP4/` from inside `MP4/`: `no such path`,
+  exit 2 (before: `0 hit(s)`, exit 0). From the root: `0 hit(s)`.
+- Translations sha256 after: `214c0f7f...ce79`, identical. `git status --short MP4/translations
+  MP4/trajectories MP4/results MP4/subjects`: empty. Provenance exit 0 both, before and after.
+- Docs-claims check: grepped `PENDING|not installed|aggregate|--official|provenance|byte-identical|any
+  capability|e-mail` in `MP4/README.md` and `--all-snapshots|/Users/` in `docs/programs/mp4/*.md`,
+  `CLAUDE.md`; fixed 6 README passages, 3 home-path lines; `scrub_secrets.py --check docs/ CLAUDE.md
+  README.md` (smoke evidence aside): 0 hits.
+- Security: the fixes touch input handling and secrets hygiene. Paths: `--date` is still validated before
+  it names a directory, and the temporary directory is created beside it with `mkdtemp`. Subprocesses stay
+  argv lists without a shell. The scrub gate now fails closed on a missing path. Agent isolation is
+  stricter (skills, plugins, required environment). Rate limiting, CSRF and auth do not apply (local
+  command-line tools).
+
+**NOT demonstrated**:
+- A real machine without `cargo-newmetrics`: the no-tool path is tested by replacing
+  `course_unavailable` in the selftest, not on such a machine.
+- The PyYAML fix: the mechanism was shown with a stand-in user site and by removing the module; a real
+  `pip install` on the macOS system Python was not run (no network in the probes).
+- The course-tool timeout and group kill (needs a 30-minute hang); the aggregate timeout is tested at 1 s.
+- Any pipeline run under the changed `evaluate`: the restored proxy blocker and the clippy-exit rule are
+  unit-tested only.
+- Completeness: no sweep pass ran. The reviewers named what they did not read, mainly `selftest.py`
+  M4-M8, `check_interface.py`, `rustlex.py`, `prompt_builder.py` and the prompt templates.
+- The 17 backlog findings are real and open (review-5, `post-merge.md` PM10-PM23), among them: provenance
+  cannot detect the same edit made to a translation and its snapshot, and `--check-only` measures a
+  tampered benchmark file before reporting it.
+- The validator: not released, not run.
+
+**Discoveries logged for later rows**:
+- (M13) If the validator inspects `MP4/results/`, a `project_N.check.proxy.json` can now appear there on
+  a machine without the tool (gitignored).
+- (M13 / close) `handoff.md` Step 3 expects `"safety_tool": "both"`; that now also holds on a machine
+  whose course-tool clone is somewhere else.
+- (close) The close's scope is `894ef53..HEAD`: this phase's 3 commits plus M13.
+
+**Queued for owner**: nothing new to run. O4 (validator) and O7 (merge, after ready-to-merge) stay open.
+The local report draft is unaffected by this phase.
 
 ## Owner-action queue (only the owner can clear these)
 
