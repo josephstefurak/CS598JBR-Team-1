@@ -121,7 +121,7 @@ def _scrub_logs(log_dir, work, names=None, crate_label="<crate>"):
 def check_only(project, crate, out_path, allowed=(), safety_tool="proxy"):
     source = mc.skeleton_dir(project)
     out_path = os.path.abspath(out_path)
-    log_dir = out_path[:-5] + ".logs" if out_path.endswith(".json") else out_path + ".logs"
+    log_dir = _logs_of(out_path)
     if os.path.isdir(log_dir):
         shutil.rmtree(log_dir)
     os.makedirs(log_dir)
@@ -143,6 +143,50 @@ def check_only(project, crate, out_path, allowed=(), safety_tool="proxy"):
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(text + "\n")
     return json.loads(text)
+
+
+def _is_official(path):
+    """True when path is a check-only result whose safety numbers are the course tool's."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return ((json.load(fh).get("safety") or {}).get("tool")) == "both"
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _logs_of(out_path):
+    return out_path[:-5] + ".logs" if out_path.endswith(".json") else out_path + ".logs"
+
+
+def check_only_keep_official(project, crate, out_path, allowed=(), safety_tool="proxy"):
+    """check_only that never replaces an official result with a proxy-only one (owner decision, M16 Q1).
+
+    A machine without the course tool measures with the proxy alone. When out_path already holds a result
+    measured with the course tool (the committed one), that file and its logs stay as they are:
+    - the tool cannot run here: this machine's result goes to <name>.proxy.json (gitignored) instead;
+    - the tool ran and failed: the earlier result is put back and this run's result is only returned.
+    Returns (result, path written or None, official path kept or None)."""
+    out_path = os.path.abspath(out_path)
+    if safety_tool != "both" or not _is_official(out_path):
+        return check_only(project, crate, out_path, allowed, safety_tool), out_path, None
+    if safety_check.course_unavailable():
+        side = (out_path[:-5] if out_path.endswith(".json") else out_path) + ".proxy.json"
+        return check_only(project, crate, side, allowed, safety_tool), side, out_path
+    backup = tempfile.mkdtemp(prefix="mp4keep_")
+    try:
+        shutil.copy2(out_path, os.path.join(backup, "check.json"))
+        if os.path.isdir(_logs_of(out_path)):
+            shutil.copytree(_logs_of(out_path), os.path.join(backup, "logs"))
+        res = check_only(project, crate, out_path, allowed, safety_tool)
+        if res["safety"]["tool"] == "both":
+            return res, out_path, None
+        shutil.rmtree(_logs_of(out_path), ignore_errors=True)
+        if os.path.isdir(os.path.join(backup, "logs")):
+            shutil.copytree(os.path.join(backup, "logs"), _logs_of(out_path))
+        shutil.copy2(os.path.join(backup, "check.json"), out_path)
+        return res, None, out_path
+    finally:
+        shutil.rmtree(backup, ignore_errors=True)
 
 
 def summarize(res):
@@ -465,6 +509,10 @@ def measure_crate(work, source, log_dir, allowed=(), safety_tool="proxy"):
     return res
 
 
+def _dict_of(v):
+    return v if isinstance(v, dict) else {}
+
+
 def _build_error_count(check):
     """All build errors; check["build"]["errors"] keeps only the first 50 (a score on it stops moving)."""
     b = check["build"]
@@ -514,6 +562,12 @@ def evaluate(check, proj):
     safety_total = sum(v for v in s["safety"].values())
     if safety_total:
         blockers.append("unsafe metrics: %d" % safety_total)
+    # under safety.tool both the reported metrics are the course tool's; the proxy's own counts still have to
+    # be 0 (code the tool does not compile, a transmute): owner decision, M16 Q2
+    proxy_counts = _dict_of(_dict_of(check["safety"].get("extra")).get("proxy"))
+    proxy_total = sum(proxy_counts.get(k) or 0 for k in safety_check.PRIMARY)
+    if check["safety"].get("tool") == "both" and proxy_total:
+        blockers.append("unsafe metrics (proxy): %d" % proxy_total)
     for f in check["safety"]["findings"]:
         if f["kind"] in ("forbid_missing", "deny_unsafe_build_failed", "extern_c", "link_attr", "libc",
                          "cc_crate", "build_rs", "c_source", "new_dependency", "course_tool_unavailable",
@@ -1260,13 +1314,17 @@ def main(argv=None):
         return 2
     out = args.out or os.path.join(mc.RESULTS_DIR, "%s.check.json" % args.project)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
-    res = check_only(args.project, crate, out, allowed, cfg["pipeline"]["safety"]["tool"])
+    res, written, kept = check_only_keep_official(args.project, crate, out, allowed,
+                                                  cfg["pipeline"]["safety"]["tool"])
     for f in res["safety"]["findings"]:
         if f["kind"] in ("course_tool_unavailable", "course_tool_failed"):
             print("NOTE: the course unsafe-metrics tool did not run (%s); the safety numbers below are the "
                   "proxy's, not official ones" % f.get("detail"), file=sys.stderr)
+    if kept:
+        print("NOTE: %s holds a result measured with the course tool and was left as it is" % mc.rel(
+            kept, mc.REPO_DIR), file=sys.stderr)
     print(json.dumps(res["summary"], indent=2))
-    print("wrote %s" % (mc.rel(os.path.abspath(out), mc.REPO_DIR)))
+    print("wrote %s" % mc.rel(written, mc.REPO_DIR) if written else "nothing written (see the NOTE above)")
     return 0
 
 

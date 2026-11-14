@@ -393,7 +393,10 @@ translations score 0 unsafe lines, 0 unsafe calls, 0 unsafe casts and 0 pointer 
 crate and in every iteration.
 
 Without the tool installed, `--check-only` still runs: it prints a note, reports the interim proxy's
-numbers, and labels them as such (`"tool": "proxy"` plus a `course_tool_unavailable` finding).
+numbers, and labels them as such (`"tool": "proxy"` plus a `course_tool_unavailable` finding). It does not
+replace the committed result that was measured with the tool: `results/project_N.check.json` and its logs
+stay as they are, and that machine's proxy-only result is written to `results/project_N.check.proxy.json`
+(not tracked).
 
 How the tool counts, where that differs from the handout's wording (read from its source at `4597e75`):
 

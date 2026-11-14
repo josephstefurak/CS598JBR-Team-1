@@ -191,3 +191,8 @@ None of them changes a committed number.
   fail on its documented assertion; a test that fails in any execution is failed; a lost derive is an
   interface change; a tool run without metric lines is a failure).
 - README: PyYAML and `python3 -I`; what `--provenance` compares; `--official` is the recording command.
+- Two owner decisions from the same review (2026-11-14): `run_pipeline.py --check-only` never replaces a
+  result measured with the course tool by a proxy-only one (without the tool, that machine's result is
+  written to `results/project_N.check.proxy.json`, not tracked); and under `safety.tool: both` a nonzero
+  proxy count blocks SUCCESS again, as it did in the two committed runs
+  (`unsafe metrics (proxy): N`). Neither changes a committed number.

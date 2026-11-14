@@ -8,4 +8,8 @@ MP4/docs/report_mp4_draft.md
 MP4/docs/report_mp4_draft.tex
 MP4/docs/rubric_traceability.md
 MP4/results/*.tex
+
+# A proxy-only re-measurement on a machine without the course tool (run_pipeline.py --check-only)
+MP4/results/*.check.proxy.json
+MP4/results/*.check.proxy.logs/
 docs/programs/mp4/forum-post-draft.md

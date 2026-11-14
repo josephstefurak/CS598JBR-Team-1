@@ -2258,6 +2258,57 @@ def _run_m16(tmp_root):
            [(c["item"].split()[-1], c["missing_derives"]) for c in rep["modules"]["m"]["changed"]],
            [("A", ["Clone"])])
 
+    # owner decisions of the M16 batch
+    # Q2: under `both`, the proxy's own counts block SUCCESS again
+    ev = json.loads(json.dumps(chk))
+    ev["safety"].update({"tool": "both", "unsafe_lines": 0, "unsafe_calls": 0, "unsafe_casts": 0,
+                         "pointer_arithmetic": 0})
+    ev["safety"]["extra"] = dict(ev["safety"].get("extra") or {}, proxy={k: 0 for k in P})
+    clean = run_pipeline.evaluate(ev, cfg["project_cfg"])["blockers"]
+    ev["safety"]["extra"]["proxy"]["unsafe_casts"] = 2
+    expect("M16 Q2: a nonzero proxy count blocks SUCCESS when the course tool reports 0",
+           [b for b in run_pipeline.evaluate(ev, cfg["project_cfg"])["blockers"] if b not in clean],
+           ["unsafe metrics (proxy): 2"])
+
+    # Q1: --check-only never replaces an official result with a proxy-only one
+    out = os.path.join(tmp_root, "m16_keep", "p.check.json")
+    os.makedirs(out[:-5] + ".logs")
+    official_body = json.dumps({"safety": {"tool": "both"}, "marker": "official"})
+    for path, body in ((out, official_body), (os.path.join(out[:-5] + ".logs", "raw_course.txt"), "official log\n")):
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+
+    def kept_state():
+        with open(out, encoding="utf-8") as fh:
+            return fh.read() == official_body, sorted(os.listdir(out[:-5] + ".logs"))
+
+    saved_fns = (safety_check.course_unavailable, safety_check.both)
+    try:
+        safety_check.course_unavailable = lambda cfg=None: "not installed (self-test)"
+        res, written, kept = run_pipeline.check_only_keep_official("project_1", fresh_copy(tmp_root, "m16k1"), out,
+                                                                   safety_tool="both")
+        expect("M16 Q1: without the tool the official result and its logs stay, the proxy result goes beside them",
+               (res["safety"]["tool"], kept == out, os.path.basename(written), os.path.isfile(written), kept_state()),
+               ("proxy", True, "p.check.proxy.json", True, (True, ["raw_course.txt"])))
+        safety_check.course_unavailable = lambda cfg=None: None
+        failing = dict(fake_cfg, course_cmd=fake_cfg["course_cmd"] + ["--fail"])
+        real_both = saved_fns[1]
+        safety_check.both = lambda crate, log_dir=None, source=None, cfg=None: real_both(crate, log_dir, source,
+                                                                                         cfg=failing)
+        res, written, kept = run_pipeline.check_only_keep_official("project_1", fresh_copy(tmp_root, "m16k2"), out,
+                                                                   safety_tool="both")
+        expect("M16 Q1: when the tool fails the official result is put back and nothing is written",
+               (res["safety"]["tool"], written, kept == out, kept_state()),
+               ("proxy", None, True, (True, ["raw_course.txt"])))
+        safety_check.both = lambda crate, log_dir=None, source=None, cfg=None: real_both(crate, log_dir, source,
+                                                                                         cfg=fake_cfg)
+        res, written, kept = run_pipeline.check_only_keep_official("project_1", fresh_copy(tmp_root, "m16k3"), out,
+                                                                   safety_tool="both")
+        expect("M16 Q1: a measurement with the tool replaces the earlier result as before",
+               (res["safety"]["tool"], written == out, kept, kept_state()[0]), ("both", True, None, False))
+    finally:
+        safety_check.course_unavailable, safety_check.both = saved_fns
+
     # PyYAML missing under -I: a sentence, not a traceback
     saved_yaml = sys.modules.get("yaml")
     sys.modules["yaml"] = None
