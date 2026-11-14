@@ -18,7 +18,7 @@ docs:
   runbook: docs/programs/mp4/runbook.md
   closeout: docs/programs/mp4/closeout.md
   post_merge: docs/programs/mp4/post-merge.md
-  plan: /Users/josephstefurak/.claude/plans/okay-go-ahead-and-deep-cupcake.md   # ratified 2026-10-28 (local, not in repo)
+  plan: ~/.claude/plans/okay-go-ahead-and-deep-cupcake.md   # ratified 2026-10-28 (local, not in repo)
 
 git:
   base_branch: main

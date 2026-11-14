@@ -10,7 +10,7 @@ phases queue new items.*
 ## Stage 0 — every session
 
 ```bash
-cd /Users/josephstefurak/CS598JBR-Team-1
+cd ~/CS598JBR-Team-1
 git checkout mp4-program
 ```
 
