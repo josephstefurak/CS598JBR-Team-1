@@ -1,0 +1,488 @@
+   Compiling satc v0.1.0 (<baseline-B-workdir>)
+warning: unused import: `std::f64::MAX`
+ --> src/satc.rs:1:5
+  |
+1 | use std::f64::MAX;
+  |     ^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused import: `std::f64::consts::PI`
+ --> src/satc.rs:2:5
+  |
+2 | use std::f64::consts::PI;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused variable: `pos`
+  --> src/satc.rs:46:12
+   |
+46 | pub fn new(pos: [f64; 2], points: Vec<[f64; 2]>) -> Self {
+   |            ^^^ help: if this is intentional, prefix it with an underscore: `_pos`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `points`
+  --> src/satc.rs:46:27
+   |
+46 | pub fn new(pos: [f64; 2], points: Vec<[f64; 2]>) -> Self {
+   |                           ^^^^^^ help: if this is intentional, prefix it with an underscore: `_points`
+
+warning: unused variable: `pos`
+  --> src/satc.rs:51:12
+   |
+51 | pub fn new(pos: [f64; 2], w: f64, h: f64) -> Self {
+   |            ^^^ help: if this is intentional, prefix it with an underscore: `_pos`
+
+warning: unused variable: `w`
+  --> src/satc.rs:51:27
+   |
+51 | pub fn new(pos: [f64; 2], w: f64, h: f64) -> Self {
+   |                           ^ help: if this is intentional, prefix it with an underscore: `_w`
+
+warning: unused variable: `h`
+  --> src/satc.rs:51:35
+   |
+51 | pub fn new(pos: [f64; 2], w: f64, h: f64) -> Self {
+   |                                   ^ help: if this is intentional, prefix it with an underscore: `_h`
+
+warning: unused variable: `polygon`
+  --> src/satc.rs:60:32
+   |
+60 | pub fn satc_polygon_set_points(polygon: &mut SatcPolygon, points: Vec<[f64; 2]>) {
+   |                                ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_polygon`
+
+warning: unused variable: `points`
+  --> src/satc.rs:60:59
+   |
+60 | pub fn satc_polygon_set_points(polygon: &mut SatcPolygon, points: Vec<[f64; 2]>) {
+   |                                                           ^^^^^^ help: if this is intentional, prefix it with an underscore: `_points`
+
+warning: unused variable: `pos`
+  --> src/satc.rs:63:24
+   |
+63 | pub fn satc_box_create(pos: [f64; 2], w: f64, h: f64) -> SatcBox {
+   |                        ^^^ help: if this is intentional, prefix it with an underscore: `_pos`
+
+warning: unused variable: `w`
+  --> src/satc.rs:63:39
+   |
+63 | pub fn satc_box_create(pos: [f64; 2], w: f64, h: f64) -> SatcBox {
+   |                                       ^ help: if this is intentional, prefix it with an underscore: `_w`
+
+warning: unused variable: `h`
+  --> src/satc.rs:63:47
+   |
+63 | pub fn satc_box_create(pos: [f64; 2], w: f64, h: f64) -> SatcBox {
+   |                                               ^ help: if this is intentional, prefix it with an underscore: `_h`
+
+warning: unused variable: `box_`
+  --> src/satc.rs:66:28
+   |
+66 | pub fn satc_box_to_polygon(box_: &SatcBox) -> SatcPolygon {
+   |                            ^^^^ help: if this is intentional, prefix it with an underscore: `_box_`
+
+warning: unused variable: `a`
+  --> src/satc.rs:69:34
+   |
+69 | pub fn satc_test_polygon_polygon(a: &SatcPolygon, b: &SatcPolygon, response: &mut SatcResponse) -> bool {
+   |                                  ^ help: if this is intentional, prefix it with an underscore: `_a`
+
+warning: unused variable: `b`
+  --> src/satc.rs:69:51
+   |
+69 | pub fn satc_test_polygon_polygon(a: &SatcPolygon, b: &SatcPolygon, response: &mut SatcResponse) -> bool {
+   |                                                   ^ help: if this is intentional, prefix it with an underscore: `_b`
+
+warning: unused variable: `response`
+  --> src/satc.rs:69:68
+   |
+69 | pub fn satc_test_polygon_polygon(a: &SatcPolygon, b: &SatcPolygon, response: &mut SatcResponse) -> bool {
+   |                                                                    ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_response`
+
+warning: unused variable: `p`
+  --> src/satc.rs:72:24
+   |
+72 | pub fn satc_point_copy(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+   |                        ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `q`
+  --> src/satc.rs:72:38
+   |
+72 | pub fn satc_point_copy(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+   |                                      ^ help: if this is intentional, prefix it with an underscore: `_q`
+
+warning: unused variable: `p`
+  --> src/satc.rs:75:24
+   |
+75 | pub fn satc_point_perp(p: &[f64; 2]) -> [f64; 2] {
+   |                        ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `p`
+  --> src/satc.rs:78:27
+   |
+78 | pub fn satc_point_reverse(p: &[f64; 2]) -> [f64; 2] {
+   |                           ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `p`
+  --> src/satc.rs:81:23
+   |
+81 | pub fn satc_point_add(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+   |                       ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `q`
+  --> src/satc.rs:81:37
+   |
+81 | pub fn satc_point_add(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+   |                                     ^ help: if this is intentional, prefix it with an underscore: `_q`
+
+warning: unused variable: `p`
+  --> src/satc.rs:84:23
+   |
+84 | pub fn satc_point_sub(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+   |                       ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `q`
+  --> src/satc.rs:84:37
+   |
+84 | pub fn satc_point_sub(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+   |                                     ^ help: if this is intentional, prefix it with an underscore: `_q`
+
+warning: unused variable: `p`
+  --> src/satc.rs:87:28
+   |
+87 | pub fn satc_point_scale_xy(p: &[f64; 2], x: f64, y: f64) -> [f64; 2] {
+   |                            ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `x`
+  --> src/satc.rs:87:42
+   |
+87 | pub fn satc_point_scale_xy(p: &[f64; 2], x: f64, y: f64) -> [f64; 2] {
+   |                                          ^ help: if this is intentional, prefix it with an underscore: `_x`
+
+warning: unused variable: `y`
+  --> src/satc.rs:87:50
+   |
+87 | pub fn satc_point_scale_xy(p: &[f64; 2], x: f64, y: f64) -> [f64; 2] {
+   |                                                  ^ help: if this is intentional, prefix it with an underscore: `_y`
+
+warning: unused variable: `p`
+  --> src/satc.rs:90:27
+   |
+90 | pub fn satc_point_scale_x(p: &[f64; 2], x: f64) -> [f64; 2] {
+   |                           ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `x`
+  --> src/satc.rs:90:41
+   |
+90 | pub fn satc_point_scale_x(p: &[f64; 2], x: f64) -> [f64; 2] {
+   |                                         ^ help: if this is intentional, prefix it with an underscore: `_x`
+
+warning: unused variable: `x`
+  --> src/satc.rs:93:26
+   |
+93 | pub fn satc_point_create(x: f64, y: f64) -> [f64; 2] {
+   |                          ^ help: if this is intentional, prefix it with an underscore: `_x`
+
+warning: unused variable: `y`
+  --> src/satc.rs:93:34
+   |
+93 | pub fn satc_point_create(x: f64, y: f64) -> [f64; 2] {
+   |                                  ^ help: if this is intentional, prefix it with an underscore: `_y`
+
+warning: unused variable: `p`
+  --> src/satc.rs:96:26
+   |
+96 | pub fn satc_point_rotate(p: &[f64; 2], angle: f64) -> [f64; 2] {
+   |                          ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `angle`
+  --> src/satc.rs:96:40
+   |
+96 | pub fn satc_point_rotate(p: &[f64; 2], angle: f64) -> [f64; 2] {
+   |                                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_angle`
+
+warning: unused variable: `p`
+  --> src/satc.rs:99:29
+   |
+99 | pub fn satc_point_normalize(p: &[f64; 2]) -> [f64; 2] {
+   |                             ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `p`
+   --> src/satc.rs:102:27
+    |
+102 | pub fn satc_point_project(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+    |                           ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `q`
+   --> src/satc.rs:102:41
+    |
+102 | pub fn satc_point_project(p: &[f64; 2], q: &[f64; 2]) -> [f64; 2] {
+    |                                         ^ help: if this is intentional, prefix it with an underscore: `_q`
+
+warning: unused variable: `p`
+   --> src/satc.rs:105:27
+    |
+105 | pub fn satc_point_reflect(p: &[f64; 2], axis: &[f64; 2]) -> [f64; 2] {
+    |                           ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `axis`
+   --> src/satc.rs:105:41
+    |
+105 | pub fn satc_point_reflect(p: &[f64; 2], axis: &[f64; 2]) -> [f64; 2] {
+    |                                         ^^^^ help: if this is intentional, prefix it with an underscore: `_axis`
+
+warning: unused variable: `pos`
+   --> src/satc.rs:108:27
+    |
+108 | pub fn satc_circle_create(pos: [f64; 2], r: f64) -> SatcCircle {
+    |                           ^^^ help: if this is intentional, prefix it with an underscore: `_pos`
+
+warning: unused variable: `r`
+   --> src/satc.rs:108:42
+    |
+108 | pub fn satc_circle_create(pos: [f64; 2], r: f64) -> SatcCircle {
+    |                                          ^ help: if this is intentional, prefix it with an underscore: `_r`
+
+warning: unused variable: `circle`
+   --> src/satc.rs:111:29
+    |
+111 | pub fn satc_circle_get_aabb(circle: &SatcCircle) -> SatcPolygon {
+    |                             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_circle`
+
+warning: unused variable: `pos`
+   --> src/satc.rs:114:28
+    |
+114 | pub fn satc_polygon_create(pos: [f64; 2], points: Vec<[f64; 2]>) -> SatcPolygon {
+    |                            ^^^ help: if this is intentional, prefix it with an underscore: `_pos`
+
+warning: unused variable: `points`
+   --> src/satc.rs:114:43
+    |
+114 | pub fn satc_polygon_create(pos: [f64; 2], points: Vec<[f64; 2]>) -> SatcPolygon {
+    |                                           ^^^^^^ help: if this is intentional, prefix it with an underscore: `_points`
+
+warning: unused variable: `polygon`
+   --> src/satc.rs:117:30
+    |
+117 | pub fn satc_polygon_get_aabb(polygon: &SatcPolygon) -> SatcPolygon {
+    |                              ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_polygon`
+
+warning: unused variable: `polygon`
+   --> src/satc.rs:120:34
+    |
+120 | pub fn satc_polygon_get_centroid(polygon: &SatcPolygon) -> [f64; 2] {
+    |                                  ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_polygon`
+
+warning: unused variable: `len`
+   --> src/satc.rs:126:31
+    |
+126 | pub fn satc_flatten_points_on(len: usize, points: &[[f64; 2]], normal: &[f64; 2], result: &mut [f64; 2]) {
+    |                               ^^^ help: if this is intentional, prefix it with an underscore: `_len`
+
+warning: unused variable: `points`
+   --> src/satc.rs:126:43
+    |
+126 | pub fn satc_flatten_points_on(len: usize, points: &[[f64; 2]], normal: &[f64; 2], result: &mut [f64; 2]) {
+    |                                           ^^^^^^ help: if this is intentional, prefix it with an underscore: `_points`
+
+warning: unused variable: `normal`
+   --> src/satc.rs:126:64
+    |
+126 | pub fn satc_flatten_points_on(len: usize, points: &[[f64; 2]], normal: &[f64; 2], result: &mut [f64; 2]) {
+    |                                                                ^^^^^^ help: if this is intentional, prefix it with an underscore: `_normal`
+
+warning: unused variable: `result`
+   --> src/satc.rs:126:83
+    |
+126 | pub fn satc_flatten_points_on(len: usize, points: &[[f64; 2]], normal: &[f64; 2], result: &mut [f64; 2]) {
+    |                                                                                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_result`
+
+warning: unused variable: `a_pos`
+   --> src/satc.rs:130:1
+    |
+130 | a_pos: &[f64; 2],
+    | ^^^^^ help: if this is intentional, prefix it with an underscore: `_a_pos`
+
+warning: unused variable: `b_pos`
+   --> src/satc.rs:131:1
+    |
+131 | b_pos: &[f64; 2],
+    | ^^^^^ help: if this is intentional, prefix it with an underscore: `_b_pos`
+
+warning: unused variable: `a_len`
+   --> src/satc.rs:132:1
+    |
+132 | a_len: usize,
+    | ^^^^^ help: if this is intentional, prefix it with an underscore: `_a_len`
+
+warning: unused variable: `a_points`
+   --> src/satc.rs:133:1
+    |
+133 | a_points: &[[f64; 2]],
+    | ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_a_points`
+
+warning: unused variable: `b_len`
+   --> src/satc.rs:134:1
+    |
+134 | b_len: usize,
+    | ^^^^^ help: if this is intentional, prefix it with an underscore: `_b_len`
+
+warning: unused variable: `b_points`
+   --> src/satc.rs:135:1
+    |
+135 | b_points: &[[f64; 2]],
+    | ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_b_points`
+
+warning: unused variable: `axis`
+   --> src/satc.rs:136:1
+    |
+136 | axis: &[f64; 2],
+    | ^^^^ help: if this is intentional, prefix it with an underscore: `_axis`
+
+warning: unused variable: `response`
+   --> src/satc.rs:137:1
+    |
+137 | response: &mut SatcResponse,
+    | ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_response`
+
+warning: unused variable: `line`
+   --> src/satc.rs:141:28
+    |
+141 | pub fn satc_voronoi_region(line: &[f64; 2], point: &[f64; 2]) -> i32 {
+    |                            ^^^^ help: if this is intentional, prefix it with an underscore: `_line`
+
+warning: unused variable: `point`
+   --> src/satc.rs:141:45
+    |
+141 | pub fn satc_voronoi_region(line: &[f64; 2], point: &[f64; 2]) -> i32 {
+    |                                             ^^^^^ help: if this is intentional, prefix it with an underscore: `_point`
+
+warning: unused variable: `point`
+   --> src/satc.rs:144:29
+    |
+144 | pub fn satc_point_in_circle(point: &[f64; 2], circle: &SatcCircle) -> bool {
+    |                             ^^^^^ help: if this is intentional, prefix it with an underscore: `_point`
+
+warning: unused variable: `circle`
+   --> src/satc.rs:144:47
+    |
+144 | pub fn satc_point_in_circle(point: &[f64; 2], circle: &SatcCircle) -> bool {
+    |                                               ^^^^^^ help: if this is intentional, prefix it with an underscore: `_circle`
+
+warning: unused variable: `point`
+   --> src/satc.rs:147:30
+    |
+147 | pub fn satc_point_in_polygon(point: &[f64; 2], polygon: &SatcPolygon) -> bool {
+    |                              ^^^^^ help: if this is intentional, prefix it with an underscore: `_point`
+
+warning: unused variable: `polygon`
+   --> src/satc.rs:147:48
+    |
+147 | pub fn satc_point_in_polygon(point: &[f64; 2], polygon: &SatcPolygon) -> bool {
+    |                                                ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_polygon`
+
+warning: unused variable: `a`
+   --> src/satc.rs:150:32
+    |
+150 | pub fn satc_test_circle_circle(a: &SatcCircle, b: &SatcCircle, response: &mut SatcResponse) -> bool {
+    |                                ^ help: if this is intentional, prefix it with an underscore: `_a`
+
+warning: unused variable: `b`
+   --> src/satc.rs:150:48
+    |
+150 | pub fn satc_test_circle_circle(a: &SatcCircle, b: &SatcCircle, response: &mut SatcResponse) -> bool {
+    |                                                ^ help: if this is intentional, prefix it with an underscore: `_b`
+
+warning: unused variable: `response`
+   --> src/satc.rs:150:64
+    |
+150 | pub fn satc_test_circle_circle(a: &SatcCircle, b: &SatcCircle, response: &mut SatcResponse) -> bool {
+    |                                                                ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_response`
+
+warning: unused variable: `polygon`
+   --> src/satc.rs:153:33
+    |
+153 | pub fn satc_test_polygon_circle(polygon: &SatcPolygon, circle: &SatcCircle, response: &mut SatcResponse) -> bool {
+    |                                 ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_polygon`
+
+warning: unused variable: `circle`
+   --> src/satc.rs:153:56
+    |
+153 | pub fn satc_test_polygon_circle(polygon: &SatcPolygon, circle: &SatcCircle, response: &mut SatcResponse) -> bool {
+    |                                                        ^^^^^^ help: if this is intentional, prefix it with an underscore: `_circle`
+
+warning: unused variable: `response`
+   --> src/satc.rs:153:77
+    |
+153 | pub fn satc_test_polygon_circle(polygon: &SatcPolygon, circle: &SatcCircle, response: &mut SatcResponse) -> bool {
+    |                                                                             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_response`
+
+warning: unused variable: `circle`
+   --> src/satc.rs:156:33
+    |
+156 | pub fn satc_test_circle_polygon(circle: &SatcCircle, polygon: &SatcPolygon, response: &mut SatcResponse) -> bool {
+    |                                 ^^^^^^ help: if this is intentional, prefix it with an underscore: `_circle`
+
+warning: unused variable: `polygon`
+   --> src/satc.rs:156:54
+    |
+156 | pub fn satc_test_circle_polygon(circle: &SatcCircle, polygon: &SatcPolygon, response: &mut SatcResponse) -> bool {
+    |                                                      ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_polygon`
+
+warning: unused variable: `response`
+   --> src/satc.rs:156:77
+    |
+156 | pub fn satc_test_circle_polygon(circle: &SatcCircle, polygon: &SatcPolygon, response: &mut SatcResponse) -> bool {
+    |                                                                             ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_response`
+
+warning: `satc` (lib) generated 72 warnings (run `cargo fix --lib -p satc` to apply 2 suggestions)
+warning: `satc` (lib test) generated 72 warnings (72 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+     Running unittests src/lib.rs (target/debug/deps/satc-f3025dd73e2316b3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/satc_test.rs (target/debug/deps/satc_test-6718c6b847a619b3)
+
+running 4 tests
+test satc_point_scale_xy_test ... FAILED
+test satc_polygon_get_centroid_test ... FAILED
+test satc_collision_test ... FAILED
+test satc_point_test ... FAILED
+
+failures:
+
+---- satc_point_scale_xy_test stdout ----
+
+thread 'satc_point_scale_xy_test' panicked at src/satc.rs:88:1:
+not implemented
+
+---- satc_polygon_get_centroid_test stdout ----
+
+thread 'satc_polygon_get_centroid_test' panicked at src/satc.rs:115:1:
+not implemented
+
+---- satc_collision_test stdout ----
+
+thread 'satc_collision_test' panicked at src/satc.rs:109:1:
+not implemented
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- satc_point_test stdout ----
+
+thread 'satc_point_test' panicked at src/satc.rs:109:1:
+not implemented
+
+
+failures:
+    satc_collision_test
+    satc_point_scale_xy_test
+    satc_point_test
+    satc_polygon_get_centroid_test
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--bin satc_test`
+exit=101

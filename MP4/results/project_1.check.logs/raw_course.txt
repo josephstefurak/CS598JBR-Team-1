@@ -1,0 +1,50 @@
+Running cargo newmetrics
+Testing sysroot consistency...
+Done
+Target name: satc
+     Removed 0 files
+    Checking satc v0.1.0 (<crate>)
+Running cargo rustc
+Pointer arithmetic: 0
+Unsafe lines: 0
+Unsafe calls: 0
+Unsafe casts: 0
+Total spans: 20321
+Unsafe ratio: 0
+Raw pointer dereferences: 0
+Raw pointer declarations: 0
+cargo rustc finished
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s
+Target name: satc_test
+Running cargo rustc
+cargo rustc finished
+    Checking satc v0.1.0 (<crate>)
+Running cargo rustc
+warning: unused import: `satc::satc`
+ --> src/bin/satc_test.rs:1:5
+  |
+1 | use satc::satc;
+  |     ^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: function `satc_nearest_hundredth` is never used
+ --> src/bin/satc_test.rs:3:4
+  |
+3 | fn satc_nearest_hundredth(n: f64) -> f64 {
+  |    ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+Pointer arithmetic: 0
+Unsafe lines: 0
+Unsafe calls: 0
+Unsafe casts: 0
+Total spans: 4110
+Unsafe ratio: 0
+Raw pointer dereferences: 0
+Raw pointer declarations: 0
+cargo rustc finished
+warning: `satc` (bin "satc_test") generated 2 warnings (run `cargo fix --bin "satc_test"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+cargo newmetrics finished

@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "summary", "files_changed", "remaining_issues"],
+  "properties": {
+    "status": {"type": "string", "enum": ["done", "needs_more_work", "blocked"]},
+    "summary": {"type": "string", "description": "What you changed this session and why."},
+    "files_changed": {"type": "array", "items": {"type": "string"}},
+    "remaining_issues": {"type": "array", "items": {"type": "string"}},
+    "c_behaviour_notes": {"type": "array", "items": {"type": "string"},
+                          "description": "Places where you reproduced or defined C behaviour deliberately."}
+  }
+}

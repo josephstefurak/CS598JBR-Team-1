@@ -1,0 +1,129 @@
+# Program manifest — STATIC CONFIG ONLY.
+# Phase status lives in the ledger table in docs/programs/mp4/where.md, and
+# nowhere else.
+
+program:
+  slug: mp4
+  title: MP4 C-to-Rust agentic translation pipeline
+  created: 2026-10-28
+  builder_version: 1
+  state: ready-to-merge           # building | remediating | final-check | ready-to-merge | closed
+                                  # Set by sessions, not by hand.
+
+docs:
+  why: docs/programs/mp4/why.md
+  what: docs/programs/mp4/what.md
+  where: docs/programs/mp4/where.md
+  ledger_id_prefix: M
+  runbook: docs/programs/mp4/runbook.md
+  closeout: docs/programs/mp4/closeout.md
+  post_merge: docs/programs/mp4/post-merge.md
+  plan: ~/.claude/plans/okay-go-ahead-and-deep-cupcake.md   # ratified 2026-10-28 (local, not in repo)
+
+git:
+  base_branch: main
+  base_commit: ffcb9721df7abcea20ae5b2ffbfabbe4068d0137
+  branch: mp4-program
+  push_ref: mp4-program           # owner authorization 2026-11-11 (why.md D2 revised). Sessions push this
+                                  # ref after each phase commit. main is NEVER pushed by a session: the
+                                  # owner merges mp4-program into main with a merge commit and pushes main
+                                  # themself before the deadline. (Until 2026-11-11 the program was commit-only.)
+  merge_cadence: end             # single merge at the end, by the owner; no intermediate merges needed (no other branch touches MP4/)
+  merge_style: merge-commit       # never squash
+
+reserved_blocks: []               # no ordered namespaces in this repo
+
+verification_floor:               # run every phase, in addition to the phase's own checks
+  - python3 -I -m py_compile MP4/src/*.py            # once MP4/src exists (M2+)
+  - python3 -I MP4/src/selftest.py                   # once it exists (M2+); record PASS count and delta
+  - python3 -I MP4/src/scrub_secrets.py --check MP4/ # once it exists (M2+)
+  - python3 -I MP4/src/run_pipeline.py --help        # once it exists (M2+)
+  - python3 -I MP4/src/run_pipeline.py --check-only --project project_1   # once translations exist (M6+)
+  - python3 -I MP4/src/run_pipeline.py --check-only --project project_2   # once translations exist (M7+)
+  - python3 -I MP4/src/integrity.py --provenance project_1                # M6+
+  - python3 -I MP4/src/integrity.py --provenance project_2                # M7+
+  - git grep -nE 'sk-ant-|Bearer |api_key=' -- MP4/ docs/  # must print nothing
+  - git status --short                                     # must be clean after the phase commit
+
+baselines:                        # recorded by the phase that creates each harness
+  selftest_pass_count: 54         # M2 2026-10-28: `python3 -I MP4/src/selftest.py` -> 54 PASS, 0 FAIL
+  selftest_drills:                # M4 2026-10-29: all PASS (selftest 88 -> 120)
+    A: "SUCCESS at iteration 2, exit 0"
+    B: "MAX_ITERATIONS at 1, exit 0"
+    C: "NO_PROGRESS at 4, exit 0"
+    D: "violation recorded + restored, not green; SUCCESS at 2 (D2: two in a row -> ABORT, exit 1)"
+    E: "usage limit -> paused ~5 s -> iter_01_attempt2 -> SUCCESS (E2 mode exit: code 75, resume -> SUCCESS)"
+    F: "SIGTERM in agent step -> exit 143; resume -> aborted_interrupted, checks, SUCCESS"
+    G: "SIGKILL in checks -> resume (stale lock taken over) -> SUCCESS; rerun of checks byte-identical summary"
+    H: "hand edit between iterations -> workspace_tamper recorded and reverted"
+  m5_guard_traps:                 # M5 2026-10-29: all caught, through do_checks (selftest 120 -> 162); reviews/review-1.md
+    a_test_file_edit: "integrity violations: 1; restored, and the restored test is what gets measured"
+    b_new_dependency: "integrity violations: 1 (Cargo.toml restored); unrestored crate: new_dependency libc"
+    c_build_rs_extern_c: "safety finding: extern_c + safety finding: build_rs (M6 step 1, G1: now extern_c + integrity violation outside_src build.rs, removed before measuring)"
+    d_unsafe_block: "build fails + unsafe metrics: 2 + safety finding: deny_unsafe_build_failed"
+    e_test_literal: "hard-coding hits: 1"
+    f_pub_signature: "interface missing 0, changed 1"
+    g_hand_edit: "workspace_tamper modified [fixture.rs], reverted"
+  m5_open_gaps: "closed at M6 step 1 (f69ae8d): lint attributes block SUCCESS, files outside src/ and symlinks are removed and recorded (G1); selftest 166 -> 192"
+  m8_review_fixes: "M8 2026-10-29: review-2 fixes in MP4/src; selftest 192 -> 214, 0 FAIL; 14/14 mutation reverts caught by _run_m8; check-only of both translations unchanged (summary diff {})"
+  # M1 Baseline B, 2026-10-28: unique (lint, file, line) sites with primary span
+  # under src/bin/, from the rubric clippy run. rustc = non-clippy warnings.
+  # Evidence: MP4/trajectories/project_N/baseline/README.md + clippy.json.
+  satc_skeleton_clippy_harness_warnings: {correctness: 0, style: 0, complexity: 0, perf: 0, rustc: 2}
+  libpsbt_skeleton_clippy_harness_warnings: {correctness: 0, style: 2, complexity: 0, perf: 0, rustc: 8}   # style: single_match, uninlined_format_args
+  satc_interface_pub_items: 45                    # M2 check_interface.py (pub fn + impl pub fn + struct/enum/const/static/type/trait impl)
+  libpsbt_interface_pub_items: 52                 # M2: base64 3, cli 0, compactsize 4, psbt 38, tx 7
+
+standing_priorities:
+  - The generated Rust under MP4/translations/ is never edited by a human or by an agent-A session. Only prompts and orchestration change, every change logged in MP4/configs/CHANGELOG.md, then the pipeline reruns.
+  - Every number in README, results and report is generated from committed artifacts and reproducible with `run_pipeline.py --check-only`; nothing is typed in by hand or invented.
+  - Benchmark tests, interfaces, Cargo.toml and Cargo.lock are immutable and guarded by checksums in code, not prose.
+  - Course-tool work, the final review and the handoff stay in rows M12-M14 and M16 (plus M15, the 2026-11-11 alignment row that runs before M12); since 2026-11-14 the order is M14, M16, M13 with the validator row last (why.md D-ORDER); nothing earlier waits on them. The progress report is hand-written by the team; no row waits on Overleaf (why.md D-REPORT).
+  - Report drafts, LaTeX table fragments, the rubric traceability map and the forum-post draft stay local and gitignored (why.md D-UNTRACK).
+  - Trajectories are complete, per-iteration, scrubbed of secrets, emails and home paths, and prove the loop was feedback-driven.
+
+owner_gates:
+  - Installing software on the owner's machine (rustup, toolchain): exact commands shown first, in-session yes (M1).
+  - The M3 rulings batch (allow-attribute policy, cli::main visibility, faithful-vs-fixed C bugs, forbid injection) — defaults are recorded in why.md D-keys; the session confirms them in one AskUserQuestion batch.
+  - Any spend outside the pre-authorized envelope (see spend_surface).
+  - Choosing whether the optional tuning rerun M9 runs (asked at the M8 gate).
+  - Which run is final when a rerun scores differently (M9).
+  - Supplying the course validation script (M13). The unsafe-metrics tool install is pre-approved (why.md D-TOOL); retrying its install without `--locked` is a gate (M12).
+  - Authorizing a tuning rerun if the official unsafe metrics are nonzero (M12).
+  - Merging, opening a PR and pushing main: owner only, never a session. Sessions push only mp4-program.
+
+spend_surface:
+  - cmd: python3 -I MP4/src/run_pipeline.py --project project_N [--yes]
+    cost: Claude Max subscription quota (no dollar cost). Up to 8 iterations x 60 turns of Opus per run; 2-4 h wall clock; may hit the 5-hour or 7-day window.
+    authorization: PRE-AUTHORIZED 2026-10-28 by the owner (D7) within this envelope — at most 2 full runs (one per project), at most 2 tuning reruns, at most 3 smoke calls (--max-turns <= 2), max_iterations <= 8, max_turns <= 60 per iteration, model opus. Sessions announce each run with its estimate in the phase log but do not wait for a yes, and may auto-resume after a usage-limit pause. Anything beyond this envelope is an owner gate.
+  - cmd: python3 -I MP4/src/run_pipeline.py --smoke --project project_N
+    cost: subscription quota, <= 2 turns per call; 3 calls pre-authorized (M3).
+  - cmd: /code-review ultra
+    cost: billed separately; NEVER launched by a session.
+
+tooling:
+  checked: 2026-10-28
+  candidates:
+    - skill: code-review
+      for: M5, M8, M11, M16 (and the automatic close, scoped to the diff since M16); run at max over MP4/src and MP4/configs; its --fix must never touch MP4/translations (provenance check catches it)
+    - skill: simplify
+      for: M5 optional cleanup of pipeline code only
+    - skill: anthropic-skills:pdf
+      for: M14 reading the Overleaf export (pypdf also works)
+    - skill: security-review
+      for: M5 — the pipeline spawns subprocesses and writes files from model output
+    - tool: Workflow (ultracode)
+      for: M8 and M10 — parallel readers over the two trajectories to mine repair examples; a judge picks the three for the report
+
+external_boundary: Everything under MP4/ is grader-visible and graded; docs/programs/mp4/, .claude/commands/ and CLAUDE.md are internal process artifacts (visible in the repo but ungraded). The Overleaf report is the client-facing document and is written by hand by the team; the in-repo draft is local only (gitignored).
+clock: 2026-11-18 23:59 hard deadline (course). Internal cut-off 2026-11-17 for the validator row M13 (D9, revised 2026-11-11; was 2026-11-15 for M12/M13). Start M6 by ~2026-11-05 to leave room for a rerun and quota pauses.
+assumptions:
+  - Allow-attributes: exactly one `#[allow(clippy::too_many_arguments)]` permitted on satc_is_separating_axis (fixed 8-parameter interface signature); all others forbidden. Based on the interface being immutable and the rubric counting warnings. Confirmed at the M3 gate.
+  - libpsbt cli::main becomes `pub fn main() -> i32` with no extra bin target (minor addition; removes dead_code). Confirmed at the M3 gate.
+  - C bugs not exercised by tests are translated faithfully where the C is well-defined and given defined, non-panicking behaviour where the C is UB; rulings written in configs/projects/*.yaml and README. Confirmed at the M3 gate.
+  - Configs are YAML (PyYAML 6.0 is installed; the only Python dependency); prompts are Markdown; Python stays 3.9-compatible (host is 3.9.12).
+  - Trajectories commit every run (including non-final tuning runs) as stream-json plus diagnostics; ~/.claude session copies are NOT committed; home paths rewritten to ~, secrets and emails scrubbed on write.
+  - Report diagram is TikZ in the .tex plus Mermaid in README.
+  - Ledger lives at docs/programs/mp4/ (skill default).
+  - M1 re-fetches the CRUST-bench zip from https://github.com/anirudhkhatry/CRUST-bench (datasets/CRUST_bench.zip) and records its sha256, rather than relying on the session scratchpad copy.
+  - The owner stays logged in to Claude (`claude auth status`) and keeps the Mac awake (caffeinate) during M3, M6, M7, M9 so paused runs can auto-resume.

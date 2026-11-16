@@ -1,0 +1,144 @@
+# MP4 pipeline configuration. Loaded and validated by MP4/src/config.py
+# (unknown keys are errors). Paths are relative to MP4/configs/.
+# Changes after the first real run are logged in CHANGELOG.md with evidence.
+
+agent:                                  # agent B: Claude Code headless (D1)
+  kind: claude                          # claude | fake (fake = scripted stand-in, selftest fixture only)
+  fake_scenario: null                   # scenario JSON for kind: fake
+  resume_session: false                 # reuse the Claude session across iterations; not implemented, must stay false
+  claude_bin: claude
+  model: opus
+  effort: high
+  max_turns: 60                         # authoritative cap per iteration (C6)
+  max_budget_usd: 30                    # tripwire only; subscription auth (C6)
+  wall_clock_minutes: 45                # wrapper kill: SIGTERM, then SIGKILL (C7)
+  permission_mode: dontAsk              # anything not allowed is denied, never prompts (C2)
+  tools: [Read, Edit, Write, Glob, Grep, Bash]     # built-in tool set (C3); init must match exactly
+  # Reads (Read/Glob/Grep) inside the working directories (the crate and the --add-dir C dir) need no
+  # rule; with no unscoped Read allow, reads anywhere else are denied under dontAsk. Edits are scoped to
+  # the crate. (M3 smoke finding, 2026-10-29: unscoped Read/Glob/Grep and auto-approved read-only shell
+  # commands let the agent read outside its directories.)
+  allowed_tools:                        # pre-approved; {toolchain} is substituted
+    - Edit(./**)
+    - Write(./**)
+    - Bash(cargo +{toolchain} --version)
+    - Bash(cargo +{toolchain} build)
+    - Bash(cargo +{toolchain} build *)
+    - Bash(cargo +{toolchain} check)
+    - Bash(cargo +{toolchain} check *)
+    - Bash(cargo +{toolchain} test)
+    - Bash(cargo +{toolchain} test *)
+    - Bash(cargo +{toolchain} clippy)
+    - Bash(cargo +{toolchain} clippy *)
+  disallowed_tools:                     # explicit denials on top of dontAsk; {subjects} is substituted
+    - Bash(git *)
+    - Bash(rm *)
+    - Bash(curl *)
+    - Bash(wget *)
+    - Bash(cargo install *)
+    - Bash(cargo add *)
+    - Bash(cargo remove *)
+    - Bash(cargo update *)
+    - Bash(cargo publish *)
+    - Bash(cargo +{toolchain} install *)
+    - Bash(cargo +{toolchain} add *)
+    - Bash(cargo +{toolchain} remove *)
+    - Bash(cargo +{toolchain} update *)
+    # owner gate G4: no cargo flag that loads other configuration or another crate
+    - Bash(cargo *--config*)
+    - Bash(cargo *--manifest-path*)
+    - WebFetch
+    - WebSearch
+    - Edit(/{subjects}/**)
+    - Write(/{subjects}/**)
+    # read-only shell commands are auto-approved by Claude Code unless denied; the agent reads with
+    # Read/Glob/Grep instead
+    - Bash(ls)
+    - Bash(ls *)
+    - Bash(cat *)
+    - Bash(head *)
+    - Bash(tail *)
+    - Bash(less *)
+    - Bash(more *)
+    - Bash(find *)
+    - Bash(grep *)
+    - Bash(rg *)
+    - Bash(sed *)
+    - Bash(awk *)
+    - Bash(wc *)
+    - Bash(file *)
+    - Bash(stat *)
+    - Bash(tree *)
+    - Bash(du *)
+    - Bash(od *)
+    - Bash(xxd *)
+    - Bash(strings *)
+    - Bash(diff *)
+    - Bash(sort *)
+    - Bash(uniq *)
+    - Bash(cut *)
+    - Bash(echo *)
+    - Bash(printf *)
+    - Bash(pwd)
+    - Bash(env)
+    - Bash(env *)
+    - Bash(printenv)
+    - Bash(printenv *)
+    - Bash(which *)
+  setting_sources: project              # no user settings, hooks or permissions (C4)
+  settings_file: claude_settings.json
+  system_prompt_file: agent_system_prompt.md      # appended, keeps default tool guidance (C5)
+  status_schema_file: prompts/status_schema.json  # --json-schema structured final status (C6)
+  strict_mcp: true                      # --strict-mcp-config --mcp-config '{"mcpServers":{}}' (C3)
+  disable_slash_commands: true          # no skills (C3)
+  env:                                  # isolation (C4, C9)
+    CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1"
+    CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1"
+
+loop:
+  max_iterations: 8                     # D7 envelope
+  min_iterations: 2                     # owner gate G3: SUCCESS stops the run from this iteration on
+  no_progress_rounds: 3
+
+toolchain:
+  name: nightly-2025-05-13              # Z15: the pinned grading toolchain
+  cargo_locked: true
+  cargo_timeout_seconds: 900
+
+checks:
+  clippy_rubric_args: [clippy, --all-targets, --all-features, --,
+                       -W, "clippy::correctness", -W, "clippy::style",
+                       -W, "clippy::complexity", -W, "clippy::perf"]
+  clippy_groups: [correctness, style, complexity, perf]
+  forbid_unsafe_in_lib: true            # D-FORBID
+  forbid_line: "#![forbid(unsafe_code)]"
+  hardcode_min_literal: 20
+
+safety:
+  tool: both                            # course tool (official numbers) + proxy (forbid, build and FFI guards)
+  course_cmd: [cargo, newmetrics]       # the staff command; always run in a temporary copy of the crate
+  # the staff aggregate.py of the course repository; MP4_NEWMETRICS_AGGREGATE overrides this path
+  course_aggregate: ~/cs598jbr-course-tools/CS598JBR-Team-0/MP4/newmetrics/aggregate.py
+  course_version: newmetrics 0.1.0 (Intelligent-CAT-Lab/CS598JBR-Team-0 @ 4597e75)
+
+rate_limit:
+  mode: wait                            # D7: pause and resume the same iteration
+  fallback_minutes: 60
+  max_wait_hours: 6
+  resume_margin_seconds: 60             # sleep until resetsAt + this margin
+
+digest:                                 # caps on feedback fed into repair prompts
+  max_build_errors: 20
+  max_failing_tests: 10
+  max_panic_chars: 1200
+  max_clippy_sites: 40
+  max_chars: 24000
+
+prompts:
+  initial: prompts/initial.md
+  repair: prompts/repair.md
+  cheatsheet: cheatsheet_c_to_rust.md
+
+projects:
+  project_1: projects/project_1.yaml
+  project_2: projects/project_2.yaml

@@ -1,0 +1,107 @@
+$ cargo +nightly-2025-05-13 clippy --all-targets --all-features -- -W clippy::correctness -W clippy::style -W clippy::complexity -W clippy::perf
+warning: file `MP4/translations/project_2/src/bin/test.rs` found to be present in multiple build targets:
+  * `bin` target `test`
+  * `integration-test` target `test`
+    Checking libpsbt v0.1.0 (MP4/translations/project_2)
+warning: unused import: `libpsbt::psbt::*`
+ --> src/bin/test.rs:1:5
+  |
+1 | use libpsbt::psbt::*;
+  |     ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: function `hex_print` is never used
+ --> src/bin/test.rs:4:4
+  |
+4 | fn hex_print(data: &[u8]) {
+  |    ^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: constant `PSBT_HEX` is never used
+  --> src/bin/test.rs:12:7
+   |
+12 | const PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0...
+   |       ^^^^^^^^
+
+warning: constant `TRANSACTION` is never used
+  --> src/bin/test.rs:13:7
+   |
+13 | const TRANSACTION: &[u8] = &[
+   |       ^^^^^^^^^^^
+
+warning: constant `REDEEM_SCRIPT_A` is never used
+  --> src/bin/test.rs:23:7
+   |
+23 | const REDEEM_SCRIPT_A: &[u8] = &[
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `REDEEM_SCRIPT_B` is never used
+  --> src/bin/test.rs:30:7
+   |
+30 | const REDEEM_SCRIPT_B: &[u8] = &[
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `EMPTY_INPUTS` is never used
+  --> src/bin/test.rs:35:7
+   |
+35 | const EMPTY_INPUTS: &str =
+   |       ^^^^^^^^^^^^
+
+warning: value assigned to `step` is never read
+   --> src/bin/test.rs:133:9
+    |
+133 |         step += 1;
+    |         ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` on by default
+
+warning: variables can be used directly in the `format!` string
+ --> src/bin/test.rs:6:9
+  |
+6 |         print!("{:02x}", byte);
+  |         ^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#uninlined_format_args
+  = note: `-W clippy::uninlined-format-args` implied by `-W clippy::style`
+  = help: to override `-W clippy::style` add `#[allow(clippy::uninlined_format_args)]`
+help: change this to
+  |
+6 -         print!("{:02x}", byte);
+6 +         print!("{byte:02x}");
+  |
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src/bin/test.rs:123:9
+    |
+123 | /         match elem {
+124 | |             PsbtElem::Record { record, .. } => {
+125 | |                 match step {
+126 | |                     0 => assert_eq!(record.record_type, 0), // PSBT_GLOBAL_UNSIGNED_TX
+...   |
+131 | |             _ => {}
+132 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/master/index.html#single_match
+    = note: `-W clippy::single-match` implied by `-W clippy::style`
+    = help: to override `-W clippy::style` add `#[allow(clippy::single_match)]`
+help: try
+    |
+123 ~         if let PsbtElem::Record { record, .. } = elem {
+124 +             match step {
+125 +                 0 => assert_eq!(record.record_type, 0), // PSBT_GLOBAL_UNSIGNED_TX
+126 +                 1 => assert_eq!(record.record_type, 0), // PSBT_IN_NON_WITNESS_UTXO (simulated as 0)
+127 +                 _ => {}
+128 +             }
+129 +         }
+    |
+
+warning: `libpsbt` (bin "test") generated 8 warnings (run `cargo clippy --fix --bin "test"` to apply 2 suggestions)
+warning: `libpsbt` (bin "test" test) generated 4 warnings (3 duplicates) (run `cargo clippy --fix --bin "test" --tests` to apply 1 suggestion)
+warning: `libpsbt` (test "test") generated 4 warnings (3 duplicates)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s
+
+[exit 0]

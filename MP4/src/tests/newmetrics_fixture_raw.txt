@@ -1,0 +1,50 @@
+Running cargo newmetrics
+Testing sysroot consistency...
+Done
+Target name: fixture
+     Removed 0 files
+    Checking fixture v0.1.0 (<crate>)
+Running cargo rustc
+Pointer arithmetic: 1
+Unsafe lines: 1
+Unsafe calls: 2
+Unsafe casts: 0
+Total spans: 962
+Unsafe ratio: 0.0010395010395010396
+Raw pointer dereferences: 1
+Raw pointer declarations: 1
+cargo rustc finished
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
+Target name: fixture_test
+Running cargo rustc
+cargo rustc finished
+    Checking fixture v0.1.0 (<crate>)
+Running cargo rustc
+warning: unused import: `fixture::fixture::*`
+ --> src/bin/fixture_test.rs:1:5
+  |
+1 | use fixture::fixture::*;
+  |     ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: constant `GREETING` is never used
+ --> src/bin/fixture_test.rs:3:7
+  |
+3 | const GREETING: &str = "hello from the fixture harness";
+  |       ^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+Pointer arithmetic: 0
+Unsafe lines: 0
+Unsafe calls: 0
+Unsafe casts: 0
+Total spans: 566
+Unsafe ratio: 0
+Raw pointer dereferences: 0
+Raw pointer declarations: 0
+cargo rustc finished
+warning: `fixture` (bin "fixture_test") generated 2 warnings (run `cargo fix --bin "fixture_test"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+cargo newmetrics finished

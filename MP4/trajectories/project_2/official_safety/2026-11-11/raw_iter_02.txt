@@ -1,0 +1,131 @@
+Running cargo newmetrics
+Testing sysroot consistency...
+Done
+Target name: libpsbt
+     Removed 0 files
+warning: file `<crate>/src/bin/test.rs` found to be present in multiple build targets:
+  * `bin` target `test`
+  * `integration-test` target `test`
+   Compiling proc-macro2 v1.0.93
+   Compiling unicode-ident v1.0.17
+   Compiling thiserror v1.0.69
+    Checking base64 v0.21.7
+Running cargo rustc
+Running cargo rustc
+Running cargo rustc
+Running cargo rustc
+cargo rustc finished
+cargo rustc finished
+cargo rustc finished
+cargo rustc finished
+Running cargo rustc
+   Compiling quote v1.0.38
+Running cargo rustc
+cargo rustc finished
+   Compiling syn v2.0.98
+Running cargo rustc
+cargo rustc finished
+cargo rustc finished
+   Compiling thiserror-impl v1.0.69
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+    Checking libpsbt v0.1.0 (<crate>)
+Running cargo rustc
+Pointer arithmetic: 0
+Unsafe lines: 0
+Unsafe calls: 0
+Unsafe casts: 0
+Total spans: 45232
+Unsafe ratio: 0
+Raw pointer dereferences: 0
+Raw pointer declarations: 0
+cargo rustc finished
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.23s
+Target name: test
+warning: file `<crate>/src/bin/test.rs` found to be present in multiple build targets:
+  * `bin` target `test`
+  * `integration-test` target `test`
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+Running cargo rustc
+cargo rustc finished
+    Checking libpsbt v0.1.0 (<crate>)
+Running cargo rustc
+warning: unused import: `libpsbt::psbt::*`
+ --> src/bin/test.rs:1:5
+  |
+1 | use libpsbt::psbt::*;
+  |     ^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: function `hex_print` is never used
+ --> src/bin/test.rs:4:4
+  |
+4 | fn hex_print(data: &[u8]) {
+  |    ^^^^^^^^^
+  |
+  = note: `#[warn(dead_code)]` on by default
+
+warning: constant `PSBT_HEX` is never used
+  --> src/bin/test.rs:12:7
+   |
+12 | const PSBT_HEX: &str = "70736274ff01009a020000000258e87a21b56daf0c23be8e7070456c336f7cbaa5c8757924f545887bb2abdd750000000000ffffffff838d0...
+   |       ^^^^^^^^
+
+warning: constant `TRANSACTION` is never used
+  --> src/bin/test.rs:13:7
+   |
+13 | const TRANSACTION: &[u8] = &[
+   |       ^^^^^^^^^^^
+
+warning: constant `REDEEM_SCRIPT_A` is never used
+  --> src/bin/test.rs:23:7
+   |
+23 | const REDEEM_SCRIPT_A: &[u8] = &[
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `REDEEM_SCRIPT_B` is never used
+  --> src/bin/test.rs:30:7
+   |
+30 | const REDEEM_SCRIPT_B: &[u8] = &[
+   |       ^^^^^^^^^^^^^^^
+
+warning: constant `EMPTY_INPUTS` is never used
+  --> src/bin/test.rs:35:7
+   |
+35 | const EMPTY_INPUTS: &str =
+   |       ^^^^^^^^^^^^
+
+Pointer arithmetic: 0
+Unsafe lines: 0
+Unsafe calls: 0
+Unsafe casts: 0
+Total spans: 8853
+Unsafe ratio: 0
+Raw pointer dereferences: 0
+Raw pointer declarations: 0
+cargo rustc finished
+warning: `libpsbt` (bin "test") generated 7 warnings (run `cargo fix --bin "test"` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.04s
+Target name: test
+Target test:test is not supported
+cargo newmetrics finished

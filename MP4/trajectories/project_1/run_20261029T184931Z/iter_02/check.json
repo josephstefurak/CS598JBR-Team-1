@@ -1,0 +1,263 @@
+{
+  "build": {
+    "error_codes": [],
+    "error_count": 0,
+    "errors": [],
+    "exit_code": 0,
+    "first_error": "",
+    "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/build.log",
+    "ok": true
+  },
+  "clippy": {
+    "agent_total": 0,
+    "errors": 0,
+    "groups": {
+      "complexity": {
+        "agent": 0,
+        "exit_code": 0,
+        "external": 0,
+        "harness": 0,
+        "lints": {},
+        "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/clippy_complexity.json",
+        "sites": []
+      },
+      "correctness": {
+        "agent": 0,
+        "exit_code": 0,
+        "external": 0,
+        "harness": 0,
+        "lints": {},
+        "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/clippy_correctness.json",
+        "sites": []
+      },
+      "perf": {
+        "agent": 0,
+        "exit_code": 0,
+        "external": 0,
+        "harness": 0,
+        "lints": {},
+        "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/clippy_perf.json",
+        "sites": []
+      },
+      "style": {
+        "agent": 0,
+        "exit_code": 0,
+        "external": 0,
+        "harness": 0,
+        "lints": {},
+        "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/clippy_style.json",
+        "sites": []
+      }
+    },
+    "harness_total": 0,
+    "ok": true,
+    "rustc": {
+      "agent": 0,
+      "external": 0,
+      "harness": 2,
+      "lints": {
+        "dead_code": {
+          "agent": 0,
+          "external": 0,
+          "harness": 1
+        },
+        "unused_imports": {
+          "agent": 0,
+          "external": 0,
+          "harness": 1
+        }
+      },
+      "sites": [
+        {
+          "column": 5,
+          "file": "src/bin/satc_test.rs",
+          "line": 1,
+          "lint": "unused_imports",
+          "message": "unused import: `satc::satc`",
+          "origin": "harness"
+        },
+        {
+          "column": 4,
+          "file": "src/bin/satc_test.rs",
+          "line": 3,
+          "lint": "dead_code",
+          "message": "function `satc_nearest_hundredth` is never used",
+          "origin": "harness"
+        }
+      ]
+    }
+  },
+  "clippy_rubric": {
+    "error_count": 0,
+    "exit_code": 0,
+    "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/clippy_rubric.log",
+    "summary_lines": [
+      "warning: `satc` (bin \"satc_test\") generated 2 warnings (run `cargo clippy --fix --bin \"satc_test\"` to apply 1 suggestion)"
+    ]
+  },
+  "hardcode_hits": [],
+  "integrity": {
+    "violations": []
+  },
+  "interface": {
+    "changed": 0,
+    "extra": 1,
+    "interface_items": 45,
+    "missing": 0,
+    "modules": {
+      "satc": {
+        "changed": [],
+        "extra": [
+          "impl Default for SatcResponse"
+        ],
+        "file": "src/satc.rs",
+        "interface_items": 45,
+        "missing": [],
+        "parse_error": null
+      }
+    },
+    "ok": true
+  },
+  "known_failing_tests": [],
+  "lint_attributes": [],
+  "safety": {
+    "extra": {
+      "build_rs": false,
+      "c_sources": 0,
+      "deny_unsafe_build": {
+        "exit_code": 0,
+        "ok": true,
+        "unsafe_code_errors": 0
+      },
+      "dependencies": [],
+      "extra_dependencies": [],
+      "ffi": 0,
+      "forbid_unsafe_code_first_line": true,
+      "manual_alloc": 0,
+      "per_file": {
+        "src/lib.rs": {
+          "extra": {
+            "manual_alloc": 0,
+            "raw_pointer_types": 0,
+            "static_mut": 0,
+            "transmute": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "unsafe_impl": 0
+          },
+          "pointer_arithmetic": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "unsafe_lines": 0
+        },
+        "src/satc.rs": {
+          "extra": {
+            "manual_alloc": 0,
+            "raw_pointer_types": 0,
+            "static_mut": 0,
+            "transmute": 0,
+            "unsafe_blocks": 0,
+            "unsafe_fns": 0,
+            "unsafe_impl": 0
+          },
+          "pointer_arithmetic": 0,
+          "unsafe_calls": 0,
+          "unsafe_casts": 0,
+          "unsafe_lines": 0
+        }
+      },
+      "raw_pointer_types": 0,
+      "static_mut": 0,
+      "transmute": 0,
+      "unsafe_blocks": 0,
+      "unsafe_fns": 0,
+      "unsafe_impl": 0
+    },
+    "findings": [],
+    "pointer_arithmetic": 0,
+    "raw_path": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/safety_proxy.json",
+    "tool": "proxy",
+    "tool_version": "proxy-1",
+    "unsafe_calls": 0,
+    "unsafe_casts": 0,
+    "unsafe_lines": 0
+  },
+  "summary": {
+    "build_error_codes": [],
+    "clippy_agent": {
+      "complexity": 0,
+      "correctness": 0,
+      "perf": 0,
+      "style": 0
+    },
+    "clippy_agent_total": 0,
+    "clippy_harness": {
+      "complexity": 0,
+      "correctness": 0,
+      "perf": 0,
+      "style": 0
+    },
+    "compiles": true,
+    "hardcode_hits": 0,
+    "integrity_violations": 0,
+    "interface_changed": 0,
+    "interface_missing": 0,
+    "lint_attribute_hits": 0,
+    "safety": {
+      "pointer_arithmetic": 0,
+      "unsafe_calls": 0,
+      "unsafe_casts": 0,
+      "unsafe_lines": 0
+    },
+    "safety_tool": "proxy",
+    "tests_passed": 4,
+    "tests_total": 4
+  },
+  "test": {
+    "compiled": true,
+    "executables": [
+      "unittests src/lib.rs (target/debug/deps/satc-f3025dd73e2316b3)",
+      "unittests src/bin/satc_test.rs (target/debug/deps/satc_test-6718c6b847a619b3)"
+    ],
+    "exit_code": 0,
+    "extra_tests": {},
+    "failed": 0,
+    "failed_names": [],
+    "first_error": "",
+    "ignored": 0,
+    "log": "~/CS598JBR-Team-1/MP4/trajectories/project_1/run_20261029T184931Z/iter_02/test.log",
+    "missing": 0,
+    "missing_names": [],
+    "passed": 4,
+    "passed_names": [
+      "satc_collision_test",
+      "satc_point_scale_xy_test",
+      "satc_point_test",
+      "satc_polygon_get_centroid_test"
+    ],
+    "tests": {
+      "satc_collision_test": {
+        "executions": 1,
+        "panic": null,
+        "status": "ok"
+      },
+      "satc_point_scale_xy_test": {
+        "executions": 1,
+        "panic": null,
+        "status": "ok"
+      },
+      "satc_point_test": {
+        "executions": 1,
+        "panic": null,
+        "status": "ok"
+      },
+      "satc_polygon_get_centroid_test": {
+        "executions": 1,
+        "panic": null,
+        "status": "ok"
+      }
+    },
+    "timed_out": false,
+    "total": 4
+  }
+}
