@@ -123,7 +123,13 @@ cargo uninstall newmetrics
 rustup component remove rustc-dev llvm-tools-preview --toolchain nightly-2025-05-13
 ```
 
-**O4 — validation script.** Not released as of 2026-11-11. When it appears,
+**O4 — validation script. CLEARED 2026-11-16 (M13).** Staff pushed
+`MP4/validate.py` to the course repo on 2026-11-14 (commit `5f9213a`). It
+passed on `mp4-program`: exit 0, structure only; evidence in
+`docs/programs/mp4/evidence/validation/2026-11-16/`. It stays external (read
+from the course clone, whose checkout stays at `4597e75`). Re-run it on
+`main` after the merge: `handoff.md` Step 3. Nothing else to do here. The
+earlier text, kept as history: Not released as of 2026-11-11. When it appears,
 put it at `MP4/tools/validate/` or tell a session its path; the session flips
 M13 to `not-started`. From **2026-11-17** a session marks M13
 `dropped (course validation script not released by the 2026-11-17 cut-off)`.
@@ -152,9 +158,8 @@ for the merge.
 **O7 — merge and push.** Full text and the submission checklist:
 `docs/programs/mp4/handoff.md`. Not before **both**: M13 is `done` or
 `dropped`, and a session has said **ready-to-merge**. Until then keep
-invoking `/mp4-phase` (next: M16, the full code review; then M13 when the
-validation script exists or on 2026-11-17; then the short closing check,
-which only covers what changed after M16).
+invoking `/mp4-phase` (M16 and M13 are done as of 2026-11-16; what is left
+is the short closing check, which only covers what changed after M16).
 
 The branch is already on the remote; only the merge and `main` are yours.
 From the repository root, in this order:

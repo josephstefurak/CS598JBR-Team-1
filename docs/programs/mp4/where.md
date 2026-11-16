@@ -74,7 +74,7 @@ the specific conflict rather than picking an alternative.*
 | M12 | Course unsafe-metrics tool: install, adapter, retroactive run, table swap | **done** | 2026-11-11 — cf6a831 | `newmetrics` 0.1.0 @ 4597e75 installed outside the repo, staff command with `--locked` exit 0 (no gate needed); official metrics 0/0/0/0 and 0 raw-pointer derefs/decls for both final crates and all 4 snapshots (2 compilation units each); proxy equals course on both; `safety.tool: both`; `official_safety/2026-11-11/` 16 files per project; `results.md` and README PENDING count 0; selftest 279 → 316 (+37), 0 FAIL, same in a fresh clone; provenance exit 0 before and after; translations byte-identical; no nonzero-metric gate |
 | M14 | Review 4: final rubric walk, local report draft, merge handoff | **done** | 2026-11-14 — fc9336b (README fixes 195f6c6) | fresh clone at 195f6c6: help, dry-run, check-only, provenance, summarize, check-readme, check-report, scrub, interface, scan all exit 0 for both projects; selftest 316 PASS / 0 FAIL (316 → 316, +0: no code changed); 21 rubric rows: 15 verified (Tasks 1-3), 6 `owner: hand-written report` (Task 4); satc 4/4, libpsbt 3/4 (`read_test_vector`, `test.rs:126`, left 4 right 0); agent clippy 0/0/0/0 both; course tool 0/0/0/0 both; consistency 0 mismatches of 32; `grep -c PENDING` README 0, results 0, local draft .md 0 / .tex 0; key-shaped secrets in branch history 0; 2 findings fixed (README said the staff ruling was pending; top-level README did not mention MP4); local draft finalized (387 + 278 lines, 68 citation checks, 13-item closing list), untracked; `handoff.md` written; validator recorded as not yet run |
 | M16 | Pre-validation full review: the close's pass-1 review pulled forward | **done** | 2026-11-14 — 20e1cd1 (batch 9e9ee59, docs 7b98412) | **reviewed commit `894ef53`**; scope `ffcb9721..894ef53` 331 files / 47,262 lines; `/code-review max --fix`, 10 angles, 61 candidates, 47 distinct findings: 27 fixed in the mechanical batch, 3 to the owner (Q1 and Q2 fixed in session, Q3 accepted), 17 to the backlog (PM10-PM23), 0 refuted, 0 remediation rows; group A 1, B 15, C 8, D 8; no committed number changed (check-only summaries equal, `results.md` byte-identical, translations sha256 `214c0f7f...` before and after, provenance ok both); selftest 316 → 344 (+28), 0 FAIL; 16 of 16 reverted fixes caught; flake8 and pyflakes clean; `state` stays `building` |
-| M13 | Course validation script run, structural fixes | **blocked (course validation script not yet released as of 2026-11-14; when it appears the owner names its path and a session flips this row to not-started; from 2026-11-17 a session marks it dropped)** | — | Cut-off 2026-11-17 (D9 revised). Deliberately the last build row since 2026-11-14 (D-ORDER) |
+| M13 | Course validation script run, structural fixes | **done** | 2026-11-16 — this commit | script `MP4/validate.py` at course commit `5f9213a` (pushed 2026-11-14, sha256 `36e76f12...c305`), read with `git show` from the course clone (checkout stays at `4597e75`), not vendored; run on its own fresh clone of `mp4-program` at `a737093`: exit 0, `MP4 STRUCTURE VALIDATION PASSED!`, 20 checks passed, 0 errors, 0 warnings; 0 issues to classify; 0 structural fixes, 0 moves; it checks structure only (no build, tests, clippy or safety); evidence `evidence/validation/2026-11-16/` and `MP4/docs/validation_output.txt`; diff is evidence and docs only; selftest 344 → 344 (+0: no code changed), 0 FAIL; check-only and provenance exit 0 both; not run on `main` (no `MP4/` there until the merge) |
 
 > Sequencing note for `next` (rewritten 2026-11-14, D-ORDER): the runnable
 > order is M14, then M16, then any remediation rows M16 seeds (inserted
@@ -2263,6 +2263,86 @@ D-EVIDENCE. No pipeline rerun was needed; no model call through `run_pipeline.py
 **Queued for owner**: nothing new to run. O4 (validator) and O7 (merge, after ready-to-merge) stay open.
 The local report draft is unaffected by this phase.
 
+### M13 — Course validation script run and structural fixes — 2026-11-16
+
+**Shipped**: the course validation script was run against the branch graders will receive and it
+passed. Nothing in the repository had to move. The run's full output is committed in two places:
+`docs/programs/mp4/evidence/validation/2026-11-16/` (with the script's commit, hash, command and
+package versions) and `MP4/docs/validation_output.txt`.
+
+**Existing files changed**: none under `MP4/src`, `MP4/configs`, `MP4/translations`,
+`MP4/trajectories`, `MP4/subjects` or `MP4/results`. Docs only: this ledger (M13 row, O4, this
+entry), `handoff.md` (it said M13 was blocked and the validator unverified), `runbook.md` Stage 3 and
+Stage 5 (same). Before: those files said the script was not released.
+
+**Deviations from the spec**:
+- Spec step 2 says to run it "on `MP4/translations/project_1` and `project_2`". The script takes a
+  GitHub URL and a branch and checks the whole `MP4/` layout in one run; there is no per-project
+  invocation. One run covers both projects.
+- The script was not placed at `MP4/tools/validate/`. It stays external, read from the course clone
+  with `git show origin/main:MP4/validate.py`, like the course tool (not vendored). The clone's
+  checkout was not moved off `4597e75`, because `environment.md` and the results cite that commit for
+  `newmetrics`; the new commit adds only `MP4/validate.py`.
+- The cut-off sentence in the row (drop from 2026-11-17) no longer applies: the script arrived first.
+- Third phase reported in one session (M14, M16, M13), each on the owner's explicit instruction.
+
+**Owner gates**: O4, supplying the script. The owner wrote "Check the remote repo I think the
+validation script arrived"; the session found it, reported the path and what it checks, and asked "Run
+M13 now with the validator at this path?" -> "Yes, run M13". Installing the script's two Python packages
+was announced in that report ("in a throwaway virtual environment, not in the project") before the yes.
+No file move and no rerun were needed, so those two gates were not reached. No spend: no model call.
+
+**Tooling**: none (spec). Considered nothing else; the phase is one script run.
+
+**Verification** (real output):
+- Script: sha256 `36e76f12fe0d8027351e91a9f2ca42b13122e5133fc6d942e7b3451d57e0c305`, 236 lines, course
+  commit `5f9213a`. Read in full before running: it clones, walks directories and prints; it runs no
+  code from the cloned repository.
+- `python -I validate.py <origin URL> mp4-program` from an empty directory, Python 3.9.12, GitPython
+  3.2.1, colorama 0.4.6: `exit=0`. Its clone: branch `mp4-program`, HEAD `a737093`. Output: 20 checks
+  passed (`Valid repository name`, `MP4/README.md found!`, 8 directories, `src/` and `configs/` contain
+  files, and for each project C source, Rust source, `Cargo.toml`, trajectory files), then
+  `MP4 STRUCTURE VALIDATION PASSED!`. 0 error lines, 0 warning lines.
+- Classification table: 0 issues reported, so 0 layout fixes, 0 program-logic issues, 0 expectation
+  mismatches.
+- `git diff --stat a737093..HEAD`: 6 files changed, 202 insertions(+), 14 deletions(-) (this ledger, `handoff.md`, `runbook.md`, the two evidence files and
+  `MP4/docs/validation_output.txt`); nothing under `MP4/src`, `configs`, `translations`, `trajectories`,
+  `subjects` or `results`.
+- Floor: `py_compile` exit 0; `selftest: 344 PASS, 0 FAIL` (344 -> 344, +0: no code changed);
+  `scrub_secrets: 0 hit(s)` for `MP4/` and for `docs/`; `run_pipeline.py --help` exit 0; `--check-only`
+  exit 0 for both projects (4 of 4 and 3 of 4, `"safety_tool": "both"`, `summary` equal to the committed
+  `check.json`; the regenerated timestamps and logs were restored with `git checkout -- MP4/results`);
+  provenance `"ok": true` exit 0 for both. The floor's `git grep` for key patterns prints 29 lines, the
+  same 29 as at `a737093`: all are program docs quoting the pattern itself (0 under `MP4/`, 0 key-shaped
+  matches for `sk-ant-` followed by 20 or more characters). No typechecker or linter run: no Python changed.
+- Docs-claims check: grepped `validat` in `MP4/README.md`, `CLAUDE.md`, `docs/programs/mp4/*.md` and the
+  local drafts; fixed the stale "not released / blocked" statements in `handoff.md` (4 passages) and
+  `runbook.md` (2 passages); `MP4/README.md` never mentioned the validator. Local, untracked:
+  `report_mp4_draft.md` closing item 11 and `rubric_traceability.md` row Z11 updated to "passed
+  2026-11-16, structure only". Earlier phase-log entries and `reviews/review-4.md` keep their dated
+  "not released" statements as history.
+- Spec step 5: this phase changed nothing beyond adding the validator output and correcting docs, so no
+  row of `reviews/review-4.md` was re-run.
+- Security: the phase touches network (one `git fetch` of the public course repo, one clone of this
+  repository by the script, one `pip install` of two packages from PyPI into a scratch environment). No
+  credential was typed or printed; the remote URL carries none. The script ran from its own directory
+  with `-I`, with an empty working directory. Injection, CSRF, auth and rate limiting do not apply.
+
+**NOT demonstrated**:
+- The script on `main`, its default branch: `main` has no `MP4/` until the owner merges. The owner
+  re-runs it after the merge (`handoff.md` Step 3).
+- That graders use this script unchanged, or only this script. It checks that directories and file
+  types exist; it does not build, test, lint or measure anything.
+- The script under a newer GitPython or Python than the ones above.
+- Full credit: the script's own note says passing does not guarantee it.
+
+**Discoveries logged for later rows**:
+- (close) The close's scope is `894ef53..HEAD`: M16's commits plus this evidence-and-docs commit.
+- (owner) The script's header calls itself `validate_mp4.py`; the file is `validate.py`.
+
+**Queued for owner**: O4 is cleared. O7 (merge) still waits for a session to report ready-to-merge: one
+more `/mp4-phase`, the scoped closing check.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -2274,7 +2354,7 @@ The local report draft is unaffected by this phase.
 | O1 | Post the `read_test_vector` defect (why.md H-L1) on the course forum, together with the question of when/where the unsafe-metrics tool and validation script will be released. Draft ready at `docs/programs/mp4/forum-post-draft.md` | D8; a staff ruling may lift the 3/4 ceiling; O3/O4 depend on the release | nothing in M1-M11 (ruling is injected whenever it arrives) | **resolved 2026-11-13 (staff ruling, no pipeline change).** The owner posted the question on CampusWire (the professor redirected the in-class question there) and pasted the staff reply into a session on 2026-11-13, verbatim: "1. If you encounter an issue with a provided test, please implement the correct Rust behavior corresponding to the original C implementation. Do not modify the provided tests, and document the issue in the discussion section of your report. 2. I will prepare and push the validation script to the GitHub repository today." This endorses D8 as built: faithful parser, test untouched, libpsbt stays 3/4 on the provided tests. Nothing to inject into `MP4/configs/projects/project_2.yaml`. Remaining duty: the hand-written report's discussion section must document the defect (C keeps `step` across calls through `user_data`, `c/test.c` 90-128; the Rust port resets it, `src/bin/test.rs` 122); M14 puts that in the local draft and checks the README disclosure. **Not answered by staff:** whether 3/4 receives full correctness credit, and whether Project 2 has additional grading tests (why.md RC3). History: deferred by the owner 2026-10-28 until MP4 opened; 2026-11-11 owner asked in class. The earlier draft stays local at `docs/programs/mp4/forum-post-draft.md` (untracked by M15). |
 | O2 | Approve the rustup + nightly-2025-05-13 install in the M1 session (commands shown first) | E2; invariant 4 | M1 | **done 2026-10-28** (approved in the M1 session; installed). Follow-on: owner puts `~/.cargo/bin` on PATH for the shell that launches Claude Code before M3 (runbook Stage 1) |
 | O3 | Supply the course unsafe-metrics tool at the path the runbook names, then flip M12 to not-started | R-T3-*-SAFETY official numbers, R-T4-SAFETY-ANALYSIS | M12 | **cleared 2026-11-11**: the course released the tool on 2026-11-09 and the owner pre-approved its install after a source review (why.md D-TOOL). M12 clones it outside the repo and installs it; nothing left for the owner unless the `--locked` install fails (M12 gate) |
-| O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | open (cut-off **2026-11-17**, D9 revised; since 2026-11-14 M13 is the last build row, so nothing else waits on it, D-ORDER); still not released as of 2026-11-11 (the course repo has the newmetrics tool and a README template only; why.md N, N6); **2026-11-13: staff said on CampusWire the script would be pushed to the course repo "today"; checked the same day, course repo `main` still at `4597e75`, no script yet;** owner checks periodically and names the path to a session when it appears |
+| O4 | Supply the course validation script at the path the runbook names, then flip M13 to not-started | Z11, Z16 | M13 | **cleared 2026-11-16 (M13)**: staff pushed `MP4/validate.py` to the course repo on 2026-11-14 (commit `5f9213a`); the owner noticed it on 2026-11-16 and told the session to run M13; exit 0, passed. History: open (cut-off **2026-11-17**, D9 revised; since 2026-11-14 M13 is the last build row, so nothing else waits on it, D-ORDER); still not released as of 2026-11-11 (the course repo has the newmetrics tool and a README template only; why.md N, N6); **2026-11-13: staff said on CampusWire the script would be pushed to the course repo "today"; checked the same day, course repo `main` still at `4597e75`, no script yet;** owner checks periodically and names the path to a session when it appears |
 | O5 | After M10: paste `MP4/docs/report_mp4_draft.tex` into Overleaf, compile, export the PDF to `MP4/docs/CS598JBR_Report_Team_1.pdf` (gitignored), flip M14 to not-started | R-T4-* | M14 | **superseded 2026-11-11 (D-REPORT)**: the team writes the MP4 report section by hand in Overleaf; no export is supplied to the program and no row waits on it. M14 hands the owner the finished local draft (`MP4/docs/report_mp4_draft.md` / `.tex`, gitignored). **2026-11-14 (M14): the draft is finished and on disk**, with the required `read_test_vector` discussion paragraph and a closing check list. Writing the report before 2026-11-18 23:59 remains the team's task |
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
 | O8 | Log the `claude` CLI in (`claude auth login`) and keep it logged in for model runs (runbook Stage 2) | The CLI's login is separate from the desktop app's; it was logged out, so agent B failed with "OAuth session expired" (first diagnosed, wrongly, as a sandbox issue) | M3 smoke; M6, M7, M9 | **done 2026-10-29** (owner ran `claude auth login`; status loggedIn true, claude.ai, max) |

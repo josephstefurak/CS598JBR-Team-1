@@ -8,15 +8,15 @@ end; `runbook.md` Stage 5 has the same commands in dependency order.*
 **The merge happens only after both of these are true:**
 
 1. Ledger row **M13** (course validation script) is `done` or `dropped` in
-   `where.md`. It is `blocked` today: the script is not in the course
-   repository as of 2026-11-14. From 2026-11-17 a session marks it `dropped`.
+   `where.md`. **It is `done` (2026-11-16):** the script passed on
+   `mp4-program`, exit 0, no errors or warnings, nothing moved.
 2. A `/mp4-phase` session has reported **ready-to-merge** (`program.yaml`
    `state: ready-to-merge`).
 
-Still to run before that, one `/mp4-phase` session each: **M16** (the full
-code review), any remediation row M16 adds, **M13**, then the short closing
-check. If M16 or M13 changes anything a grader reads, that session re-runs
-the affected rows of `reviews/review-4.md` and updates this file.
+Still to run before that: one `/mp4-phase` session, the short closing check.
+M16 (the full code review, 2026-11-14) and M13 (2026-11-16) are done. M16
+changed controller code but no committed number; M13 added only the
+validator's output.
 
 ## What the branch holds (verified at M14)
 
@@ -30,7 +30,9 @@ Evidence: `reviews/review-4.md`, fresh clone of `mp4-program`.
 | Unsafe metrics, course tool (lines / calls / casts / pointer arithmetic) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | Agent iterations, stop reason | 2, SUCCESS | 2, SUCCESS |
 
-Not verified by anyone yet: the course validation script (not released).
+Course validation script (`MP4/validate.py`, course commit `5f9213a`): passed
+on `mp4-program` at `a737093` on 2026-11-16, exit 0. It checks structure only.
+Evidence: `evidence/validation/2026-11-16/`. Not yet run on `main`.
 
 ## Step 1 — write the report (yours, by hand, any time before the deadline)
 
@@ -106,9 +108,24 @@ Expected: exit 0 for all four, tests 4 of 4 and 3 of 4, `"safety_tool":
 `MP4/results/project_N.check.json` with a new timestamp; that is normal. Do
 not commit it from this check clone.)
 
+Then the course validation script on `main`, from an empty directory outside
+the repository (it clones the repository itself). It needs
+`pip install GitPython colorama`, best in a virtual environment. `<URL>` is
+the output of `git remote get-url origin`:
+
+```bash
+python3 ~/cs598jbr-course-tools/CS598JBR-Team-0/MP4/validate.py <URL> main
+```
+
+The file is only there after `git -C ~/cs598jbr-course-tools/CS598JBR-Team-0
+checkout origin/main -- MP4/validate.py`. Expected: `MP4 STRUCTURE VALIDATION
+PASSED!`, exit 0, as on `mp4-program` on 2026-11-16.
+
 ## Submission checklist
 
-- [ ] M13 is `done` or `dropped`, and a session reported **ready-to-merge**.
+- [x] M13 is `done` (validator passed on `mp4-program`, 2026-11-16).
+- [ ] A session reported **ready-to-merge**.
+- [ ] After the merge, the validation script passes on `main` (Step 3).
 - [ ] The MP4 report section is written by hand from the local draft, and the
       discussion section documents `read_test_vector`.
 - [ ] The report's numbers equal `MP4/results/results.md` (4/4 and 3/4,

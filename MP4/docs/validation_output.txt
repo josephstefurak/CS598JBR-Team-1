@@ -1,0 +1,36 @@
+Course validation script (MP4/validate.py, course repository commit 5f9213a,
+sha256 36e76f12fe0d8027351e91a9f2ca42b13122e5133fc6d942e7b3451d57e0c305)
+run on 2026-11-16 against a fresh clone of branch mp4-program at a737093.
+Command: python -I validate.py <repository URL> mp4-program
+Exit code: 0. Output below, ANSI colour codes removed.
+The script checks repository structure only.
+----
+Valid repository name: CS598JBR-Team-1
+Cloning CS598JBR-Team-1...
+MP4/README.md found!
+src/ found!
+configs/ found!
+subjects/project_1/ found!
+subjects/project_2/ found!
+translations/project_1/ found!
+translations/project_2/ found!
+trajectories/project_1/ found!
+trajectories/project_2/ found!
+src/ contains files!
+configs/ contains files!
+
+Checking Project 1...
+Project 1: C source files found!
+Project 1: Rust source files found!
+Project 1: Cargo.toml found!
+Project 1: Trajectory files found!
+
+Checking Project 2...
+Project 2: C source files found!
+Project 2: Rust source files found!
+Project 2: Cargo.toml found!
+Project 2: Trajectory files found!
+
+==================================================
+MP4 STRUCTURE VALIDATION PASSED!
+Note: Passing validation does not guarantee full credit.
