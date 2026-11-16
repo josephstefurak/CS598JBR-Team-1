@@ -75,6 +75,7 @@ the specific conflict rather than picking an alternative.*
 | M14 | Review 4: final rubric walk, local report draft, merge handoff | **done** | 2026-11-14 — fc9336b (README fixes 195f6c6) | fresh clone at 195f6c6: help, dry-run, check-only, provenance, summarize, check-readme, check-report, scrub, interface, scan all exit 0 for both projects; selftest 316 PASS / 0 FAIL (316 → 316, +0: no code changed); 21 rubric rows: 15 verified (Tasks 1-3), 6 `owner: hand-written report` (Task 4); satc 4/4, libpsbt 3/4 (`read_test_vector`, `test.rs:126`, left 4 right 0); agent clippy 0/0/0/0 both; course tool 0/0/0/0 both; consistency 0 mismatches of 32; `grep -c PENDING` README 0, results 0, local draft .md 0 / .tex 0; key-shaped secrets in branch history 0; 2 findings fixed (README said the staff ruling was pending; top-level README did not mention MP4); local draft finalized (387 + 278 lines, 68 citation checks, 13-item closing list), untracked; `handoff.md` written; validator recorded as not yet run |
 | M16 | Pre-validation full review: the close's pass-1 review pulled forward | **done** | 2026-11-14 — 20e1cd1 (batch 9e9ee59, docs 7b98412) | **reviewed commit `894ef53`**; scope `ffcb9721..894ef53` 331 files / 47,262 lines; `/code-review max --fix`, 10 angles, 61 candidates, 47 distinct findings: 27 fixed in the mechanical batch, 3 to the owner (Q1 and Q2 fixed in session, Q3 accepted), 17 to the backlog (PM10-PM23), 0 refuted, 0 remediation rows; group A 1, B 15, C 8, D 8; no committed number changed (check-only summaries equal, `results.md` byte-identical, translations sha256 `214c0f7f...` before and after, provenance ok both); selftest 316 → 344 (+28), 0 FAIL; 16 of 16 reverted fixes caught; flake8 and pyflakes clean; `state` stays `building` |
 | M13 | Course validation script run, structural fixes | **done** | 2026-11-16 — cf89ff4 | script `MP4/validate.py` at course commit `5f9213a` (pushed 2026-11-14, sha256 `36e76f12...c305`), read with `git show` from the course clone (checkout stays at `4597e75`), not vendored; run on its own fresh clone of `mp4-program` at `a737093`: exit 0, `MP4 STRUCTURE VALIDATION PASSED!`, 20 checks passed, 0 errors, 0 warnings; 0 issues to classify; 0 structural fixes, 0 moves; it checks structure only (no build, tests, clippy or safety); evidence `evidence/validation/2026-11-16/` and `MP4/docs/validation_output.txt`; diff is evidence and docs only; selftest 344 → 344 (+0: no code changed), 0 FAIL; check-only and provenance exit 0 both; not run on `main` (no `MP4/` there until the merge) |
+| M17 | Close, pass 1: review of the diff since M16's reviewed commit | **done** | 2026-11-16 — this commit | scope `894ef53..bc78d11`, 24 files / +1018 -78 (10 controller files about 260 lines, selftest +289, the rest docs and evidence); production bar with proof; two independent reads (the session, and one fresh reviewer with probes in scratch clones) instead of the ten-reviewer recipe; **0 findings meet the bar, 0 code changes**; 5 unproven below-bar items to the backlog (PM24-PM28); reviewer probes: selftest 344 PASS / 0 FAIL in a clone (342 with the course tool hidden), 4 of 4 reverted guarantees caught, check-only with the tool hidden keeps the committed `check.json` hash, `--official` with the tool hidden exits 2 and leaves the evidence intact, timeout kill leaves 0 processes; floor green (selftest 344 → 344, +0); findings in `reviews/review-6.md`; `state` → **`ready-to-merge`** |
 
 > Sequencing note for `next` (rewritten 2026-11-14, D-ORDER): the runnable
 > order is M14, then M16, then any remediation rows M16 seeds (inserted
@@ -2342,6 +2343,71 @@ No file move and no rerun were needed, so those two gates were not reached. No s
 
 **Queued for owner**: O4 is cleared. O7 (merge) still waits for a session to report ready-to-merge: one
 more `/mp4-phase`, the scoped closing check.
+
+### M17 — Close, pass 1 (scoped review) — 2026-11-16
+
+**Shipped**: the program's closing review. It covered only what changed after M16's full review, found
+nothing that would hurt a grader or the owner, changed no code, and moved the program to
+**ready-to-merge**. What is left is the owner's: the hand-written report, the merge, the push of `main`.
+
+**Stage 0** (ledger against the repo): every row is `done` or `dropped` with numbers and a log entry;
+the commits named in M14, M16 and M13 exist; tree clean; `main` has no commit the branch lacks.
+
+**Scope**: `894ef53..bc78d11` (owner direction 2026-11-14, D-ORDER). Starting commit of this review:
+`bc78d11`. Cumulative and PR scope are both `ffcb9721..HEAD`.
+
+**Existing files changed**: no code. Docs: this ledger, `program.yaml` (`state`), `post-merge.md`
+(PM24-PM28), `handoff.md` and `runbook.md` (they said a session still had to report ready-to-merge),
+`CLAUDE.md` (the program stanza said "in progress"). New: `reviews/review-6.md`.
+
+**Deviations**:
+- The protocol's `/code-review max --fix` (ten reviewers, a verifier each, a sweep) was not run. The
+  owner said on 2026-11-14 "be mindful of usage limits", after the same recipe exhausted the 5-hour
+  window at M16, and this range is about 260 source lines. Instead: the session read every source hunk,
+  and one fresh reviewer who was given the diff and the bar, not the session's conclusions, read the
+  changed functions and ran probes. Alternative considered: the session's read alone (rejected: it wrote
+  most of the diff).
+- No `ReportFindings` list with fixes: there was nothing to fix.
+- Fourth phase reported in one session, on the owner's "Yes, run it".
+
+**Owner gates**: none reached. No owner decision was needed, so no question batch was asked. No spend
+through `run_pipeline.py`; no model call by the pipeline; nothing installed.
+
+**Tooling**: one general-purpose reviewer agent (subscription quota). `/code-review ultra` not used.
+
+**Verification** (real output):
+- Reviewer, in scratch clones of `bc78d11`: `selftest: 344 PASS, 0 FAIL` (342 with the course tool
+  hidden from PATH); `--check-only` exit 0 for both projects with only the timestamp, cargo timings and
+  one key order differing from the committed files; with the tool hidden, exit 0, the committed
+  `project_1.check.json` hash unchanged and the result written to the ignored
+  `project_1.check.proxy.json`; `safety_check.py --official --date 2026-11-11` with the tool hidden: exit
+  2, the dated directory intact; a 2-second timeout against a forking command: exit 124 in 2.0 s, 0
+  processes left; 4 of 4 reverted guarantees turn their assertion red. Full table: `reviews/review-6.md`.
+- Session floor, on the M13 commit's tree (only the ledger hash line changed after it): `py_compile` exit
+  0; `selftest: 344 PASS, 0 FAIL` (344 -> 344, +0); `--help` exit 0; `--check-only` exit 0 both, summaries
+  equal to the committed ones; provenance `"ok": true` both. After this pass's doc edits:
+  `scrub_secrets: 0 hit(s)` for `MP4/` and `docs/`; the key-pattern `git grep` prints the same 29
+  self-quoting doc lines as before (0 under `MP4/`, 0 key-shaped).
+- Conformance: every `done` row's numbers were re-read against today's floor; selftest count 344 matches
+  M16's and M13's cells.
+- Docs-claims check: grepped `ready-to-merge|ready to merge|in progress|closing check` in `CLAUDE.md`,
+  `handoff.md`, `runbook.md`, `closeout.md`; fixed 5 passages in `handoff.md`, 1 in `runbook.md`, 1 in
+  `CLAUDE.md`.
+- Security: nothing in this pass touches input, auth, storage or network.
+
+**NOT demonstrated**:
+- Completeness of the review: two readers, no sweep. The reviewer read `agent_runner.check_init`,
+  `config.validate_pipeline`, the `summarize.py` hunks, `check_only`'s body and `selftest.py` outside
+  `_run_m16` as hunks only.
+- The five backlog items PM24-PM28 are reasoning, not probes.
+- The validator on `main`, and anything else about `main`: the merge has not happened.
+- That the hand-written report matches the repository: no session has seen it.
+- A pipeline run under M16's changed stop rules (unit-tested only), as recorded at M16.
+
+**Discoveries logged for later rows**: none; there are no later rows.
+
+**Queued for owner**: O7 is now actionable: `handoff.md` Steps 1 to 3 before 2026-11-18 23:59. After
+the merge, tell a session so it can set `state: closed`.
 
 ## Owner-action queue (only the owner can clear these)
 

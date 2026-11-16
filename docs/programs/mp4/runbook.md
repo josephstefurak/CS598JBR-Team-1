@@ -158,8 +158,8 @@ for the merge.
 **O7 — merge and push.** Full text and the submission checklist:
 `docs/programs/mp4/handoff.md`. Not before **both**: M13 is `done` or
 `dropped`, and a session has said **ready-to-merge**. Until then keep
-invoking `/mp4-phase` (M16 and M13 are done as of 2026-11-16; what is left
-is the short closing check, which only covers what changed after M16).
+invoking `/mp4-phase`. **Both are true as of 2026-11-16** (M13 done, closing
+check M17 reported ready-to-merge): the steps below are yours now.
 
 The branch is already on the remote; only the merge and `main` are yours.
 From the repository root, in this order:

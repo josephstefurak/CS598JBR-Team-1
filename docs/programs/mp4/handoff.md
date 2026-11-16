@@ -3,7 +3,11 @@
 *Written by M14 (2026-11-14). For the owner. This file says what to do at the
 end; `runbook.md` Stage 5 has the same commands in dependency order.*
 
-## Do not merge yet
+## Ready to merge (2026-11-16)
+
+**Both conditions below are met.** The closing review found nothing to fix
+(`reviews/review-6.md`) and `program.yaml` says `state: ready-to-merge`. Go
+to Step 1 and Step 2.
 
 **The merge happens only after both of these are true:**
 
@@ -11,10 +15,11 @@ end; `runbook.md` Stage 5 has the same commands in dependency order.*
    `where.md`. **It is `done` (2026-11-16):** the script passed on
    `mp4-program`, exit 0, no errors or warnings, nothing moved.
 2. A `/mp4-phase` session has reported **ready-to-merge** (`program.yaml`
-   `state: ready-to-merge`).
+   `state: ready-to-merge`). **Reported 2026-11-16 (M17).**
 
-Still to run before that: one `/mp4-phase` session, the short closing check.
-M16 (the full code review, 2026-11-14) and M13 (2026-11-16) are done. M16
+Nothing is left for a session to run before the merge. M16 (the full code
+review, 2026-11-14), M13 (2026-11-16) and the closing check (M17,
+2026-11-16) are done. M16
 changed controller code but no committed number; M13 added only the
 validator's output.
 
@@ -124,7 +129,7 @@ PASSED!`, exit 0, as on `mp4-program` on 2026-11-16.
 ## Submission checklist
 
 - [x] M13 is `done` (validator passed on `mp4-program`, 2026-11-16).
-- [ ] A session reported **ready-to-merge**.
+- [x] A session reported **ready-to-merge** (2026-11-16).
 - [ ] After the merge, the validation script passes on `main` (Step 3).
 - [ ] The MP4 report section is written by hand from the local draft, and the
       discussion section documents `read_test_vector`.
@@ -151,4 +156,5 @@ PASSED!`, exit 0, as on `mp4-program` on 2026-11-16.
   `run_manifest.json` in its `safety` block only: the course tool was added
   after the runs (`MP4/configs/CHANGELOG.md`, 2026-11-11). The other seven
   configuration files are the ones the runs used.
-- Post-merge backlog: `post-merge.md`. Nothing in it blocks the merge.
+- Post-merge backlog: `post-merge.md` (PM1 to PM28). Nothing in it blocks the
+  merge.

@@ -1,8 +1,9 @@
 # CS598JBR-Team-1
 
 Course repository for CS598JBR machine problems. MP1-MP3 are complete
-(Python scripts, logs and datasets under `MP1/`, `MP2/`, `MP3/`). MP4 is in
-progress under `MP4/` and is built by the program below.
+(Python scripts, logs and datasets under `MP1/`, `MP2/`, `MP3/`). MP4 is under
+`MP4/`, built by the program below, which reported **ready-to-merge** on
+2026-11-16 (the owner's merge is what remains).
 
 ## MP4 program (2026-10-28 →)
 
