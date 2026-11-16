@@ -2386,8 +2386,8 @@ through `run_pipeline.py`; no model call by the pipeline; nothing installed.
 - Session floor, on the M13 commit's tree (only the ledger hash line changed after it): `py_compile` exit
   0; `selftest: 344 PASS, 0 FAIL` (344 -> 344, +0); `--help` exit 0; `--check-only` exit 0 both, summaries
   equal to the committed ones; provenance `"ok": true` both. After this pass's doc edits:
-  `scrub_secrets: 0 hit(s)` for `MP4/` and `docs/`; the key-pattern `git grep` prints the same 29
-  self-quoting doc lines as before (0 under `MP4/`, 0 key-shaped).
+  `scrub_secrets: 0 hit(s)` for `MP4/` and `docs/`; the key-pattern `git grep` prints 30 lines, the earlier 29 plus the M13 log line that quotes the pattern;
+  all are program docs quoting the pattern itself (0 under `MP4/`, 0 key-shaped).
 - Conformance: every `done` row's numbers were re-read against today's floor; selftest count 344 matches
   M16's and M13's cells.
 - Docs-claims check: grepped `ready-to-merge|ready to merge|in progress|closing check` in `CLAUDE.md`,
