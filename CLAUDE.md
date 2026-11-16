@@ -8,6 +8,12 @@ owner's one-time exception for that merge).
 
 ## MP4 program (2026-10-28 →)
 
+**Since 2026-11-16 `docs/programs/mp4/` is local only** (gitignored, owner
+decision): the ledger, specs, reviews and evidence are not in the remote
+repository's current tree. Do not check out a commit older than the removal
+in this working copy without backing that directory up first: git would
+overwrite the local files and delete them on the way back.
+
 The MP4 C-to-Rust agentic translation pipeline runs **one phase per session**
 against the ledger in `docs/programs/mp4/where.md`. Per-phase specs:
 `docs/programs/mp4/what.md`. Findings, rubric keys and decisions:
