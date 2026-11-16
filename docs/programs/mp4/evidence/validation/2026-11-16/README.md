@@ -19,8 +19,10 @@ The script checks structure only. Its header: it "does not run Rust
 compilation, tests, Clippy, or safety analysis" and "Passing validation does
 not guarantee full credit."
 
-Not run: the script's default branch, `main`. `main` has no `MP4/` until the
-owner merges; `handoff.md` Step 3 has the command for after the merge.
+**After the merge (same day):** the same script, environment and command with
+branch `main`, on its own fresh clone of `main` at the merge commit `ca12d2a`:
+exit 0, `MP4 STRUCTURE VALIDATION PASSED!`, 20 checks passed, 0 errors, 0
+warnings. Output: `validate_output_main.txt`.
 
 ## Classification of reported issues
 

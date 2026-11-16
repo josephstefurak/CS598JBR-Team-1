@@ -7,7 +7,7 @@ program:
   title: MP4 C-to-Rust agentic translation pipeline
   created: 2026-10-28
   builder_version: 1
-  state: ready-to-merge           # building | remediating | final-check | ready-to-merge | closed
+  state: closed                   # building | remediating | final-check | ready-to-merge | closed
                                   # Set by sessions, not by hand.
 
 docs:

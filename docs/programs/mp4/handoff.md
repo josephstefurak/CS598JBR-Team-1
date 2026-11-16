@@ -3,6 +3,14 @@
 *Written by M14 (2026-11-14). For the owner. This file says what to do at the
 end; `runbook.md` Stage 5 has the same commands in dependency order.*
 
+## Merged (2026-11-16)
+
+**Steps 2 and 3 are done.** `main` is at merge commit `ca12d2a` on the
+remote, made and pushed by a session on the owner's one-time exception
+(why.md D-MERGE). A fresh clone of `main` passed Step 3 and the course
+validation script. What remains is Step 1 (the hand-written report) and
+submitting the report PDF. The text below is kept as the record.
+
 ## Ready to merge (2026-11-16)
 
 **Both conditions below are met.** The closing review found nothing to fix
@@ -130,17 +138,18 @@ PASSED!`, exit 0, as on `mp4-program` on 2026-11-16.
 
 - [x] M13 is `done` (validator passed on `mp4-program`, 2026-11-16).
 - [x] A session reported **ready-to-merge** (2026-11-16).
-- [ ] After the merge, the validation script passes on `main` (Step 3).
+- [x] After the merge, the validation script passes on `main` (Step 3): exit 0
+      at `ca12d2a`, 2026-11-16.
 - [ ] The MP4 report section is written by hand from the local draft, and the
       discussion section documents `read_test_vector`.
 - [ ] The report's numbers equal `MP4/results/results.md` (4/4 and 3/4,
       2 iterations each, clippy 0/0/0/0, unsafe metrics 0/0/0/0).
-- [ ] `main` has the merge commit (not a squash) and is pushed.
-- [ ] A fresh clone of `main` contains `MP4/src`, `MP4/configs`,
+- [x] `main` has the merge commit (not a squash) and is pushed (`ca12d2a`).
+- [x] A fresh clone of `main` contains `MP4/src`, `MP4/configs`,
       `MP4/trajectories/project_1`, `MP4/trajectories/project_2`,
       `MP4/translations/project_1`, `MP4/translations/project_2` and
       `MP4/README.md`, and Step 3 exits 0.
-- [ ] No PDF, report draft or API key is in the repository
+- [x] No PDF, report draft or API key is in the repository
       (`git ls-files | grep -iE '\.pdf$|report_mp4_draft'` prints nothing).
 - [ ] The report PDF is submitted where the course asks for it. The handout
       is the authority on where; this program did not verify the submission

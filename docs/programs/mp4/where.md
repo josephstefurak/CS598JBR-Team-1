@@ -2409,6 +2409,38 @@ through `run_pipeline.py`; no model call by the pipeline; nothing installed.
 **Queued for owner**: O7 is now actionable: `handoff.md` Steps 1 to 3 before 2026-11-18 23:59. After
 the merge, tell a session so it can set `state: closed`.
 
+### Merge and close — 2026-11-16
+
+**Shipped**: `mp4-program` is merged into `main` with a merge commit and `main` is pushed, so the MP4
+submission is on the branch graders clone. The program is **closed**.
+
+**Owner gate**: merging and pushing `main` are reserved for the owner by both CLAUDE.md files and the
+manifest. The owner asked the session to do them ("can you do all of these please"); the session named
+the conflict and asked "Do you want a one-time exception for this merge?" -> "Yes, merge and push"
+(why.md D-MERGE). One merge, one push of `main`. No PR was opened.
+
+**Verification** (real output):
+- Before: tree clean; `mp4-program` level with the remote; `main` at `ffcb972` locally and on the
+  remote, 0 commits the branch lacks; 0 tracked PDF or report-draft files.
+- `git merge --no-ff mp4-program`: commit `ca12d2a`, 2 parents, tree identical to `mp4-program` at
+  `ebf8fec`. `git push origin main`: `ffcb972..ca12d2a`; `git ls-remote` shows `main` at `ca12d2a`.
+- Fresh clone of the remote (default branch `main`, HEAD `ca12d2a`): `--check-only` exit 0 for both
+  projects, tests 4 of 4 and 3 of 4, `"safety_tool": "both"`; provenance `"ok": true`, exit 0, both;
+  `MP4/src`, `MP4/configs`, both trajectories, both translations and `MP4/README.md` present; 0 tracked
+  PDF or report-draft files.
+- Course validation script on `main` (its own clone at `ca12d2a`): exit 0, `MP4 STRUCTURE VALIDATION
+  PASSED!`, 20 checks, 0 errors, 0 warnings. Output:
+  `evidence/validation/2026-11-16/validate_output_main.txt`.
+
+**NOT demonstrated**: the hand-written report (not seen by any session) and its submission; the
+`selftest.py` run on the clone of `main` (same tree as the branch, where it is 344 PASS); grading.
+
+**State of the branches**: this entry, `state: closed` and the validator's `main` output are committed
+on `mp4-program` after the merge, so `mp4-program` is ahead of `main` by this docs-only commit (nothing
+under `MP4/`). It was not merged again: the exception covered one push of `main`.
+
+**Queued for owner**: write the MP4 report section by hand and submit the PDF before 2026-11-18 23:59.
+
 ## Owner-action queue (only the owner can clear these)
 
 > **Running these? Use `runbook.md`.** It is the same items in DEPENDENCY
@@ -2425,4 +2457,4 @@ the merge, tell a session so it can set `state: closed`.
 | O6 | Stay logged in (`claude auth status`) and keep the Mac awake (`caffeinate -dims`) during M3, M6, M7, M9 | D7 auto-resume | M3, M6, M7, M9 | open |
 | O8 | Log the `claude` CLI in (`claude auth login`) and keep it logged in for model runs (runbook Stage 2) | The CLI's login is separate from the desktop app's; it was logged out, so agent B failed with "OAuth session expired" (first diagnosed, wrongly, as a sandbox issue) | M3 smoke; M6, M7, M9 | **done 2026-10-29** (owner ran `claude auth login`; status loggedIn true, claude.ai, max) |
 | O9 | Answer the M6 gate batch G1–G7 (stop semantics and tool permissions), each with options and a recommendation in `docs/programs/mp4/reviews/review-1.md` § "Owner decisions for M6 step 1" | M5 found holes whose fixes change stop semantics or permissions; what.md M5/M6 route them to the owner at M6 step 1 | M6 | **answered 2026-10-29** (in the M5 session, at the owner's request): G1 "Both guards" (revert and record files outside src/ that are not in the skeleton, plus symlinks; and a lint-attribute scan that blocks SUCCESS except the D-ALLOW pair); G2 "Pause, resumable" (auth failure exits 75, resume after `claude auth login`); G3 "Require 2 iterations" (`loop.min_iterations: 2`); G4 "Keep env, deny flags" (keep the smoke-verified environment, M6 scans iteration 1 for leak markers, deny `--config` and `--manifest-path` on the allowed cargo commands); G5 "Add the project note" (keep every public item in `src/<module>.rs`); G6 "Ship the best" (restore the best-scoring snapshot into translations/ and name it in `final_iteration_dir`); G7 "Pause" (overloaded/connection failures pause like a usage limit, same 3-attempt cap). M6 step 1 applies them; it does not re-ask |
-| O7 | After the program reports ready-to-merge: merge `mp4-program` into `main` with a merge commit and push `main` before 2026-11-18 23:59 | invariant 6/7 | submission | open. **2026-11-14 (M14): exact commands and the submission checklist are in `docs/programs/mp4/handoff.md` and runbook Stage 5.** Not before M13 is done or dropped and a session has reported ready-to-merge |
+| O7 | After the program reports ready-to-merge: merge `mp4-program` into `main` with a merge commit and push `main` before 2026-11-18 23:59 | invariant 6/7 | submission | **done 2026-11-16**: merged and pushed by a session on the owner's one-time exception (why.md D-MERGE), merge commit `ca12d2a`, two parents, tree equal to `mp4-program` at `ebf8fec`; Step 3 and the validator pass on a fresh clone of `main`. History: open. **2026-11-14 (M14): exact commands and the submission checklist are in `docs/programs/mp4/handoff.md` and runbook Stage 5.** Not before M13 is done or dropped and a session has reported ready-to-merge |

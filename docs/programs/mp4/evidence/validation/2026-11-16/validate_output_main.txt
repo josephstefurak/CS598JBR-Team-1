@@ -1,0 +1,29 @@
+Valid repository name: CS598JBR-Team-1
+Cloning CS598JBR-Team-1...
+MP4/README.md found!
+src/ found!
+configs/ found!
+subjects/project_1/ found!
+subjects/project_2/ found!
+translations/project_1/ found!
+translations/project_2/ found!
+trajectories/project_1/ found!
+trajectories/project_2/ found!
+src/ contains files!
+configs/ contains files!
+
+Checking Project 1...
+Project 1: C source files found!
+Project 1: Rust source files found!
+Project 1: Cargo.toml found!
+Project 1: Trajectory files found!
+
+Checking Project 2...
+Project 2: C source files found!
+Project 2: Rust source files found!
+Project 2: Cargo.toml found!
+Project 2: Trajectory files found!
+
+==================================================
+MP4 STRUCTURE VALIDATION PASSED!
+Note: Passing validation does not guarantee full credit.
