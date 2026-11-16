@@ -12,4 +12,7 @@ MP4/results/*.tex
 # A proxy-only re-measurement on a machine without the course tool (run_pipeline.py --check-only)
 MP4/results/*.check.proxy.json
 MP4/results/*.check.proxy.logs/
-docs/programs/mp4/forum-post-draft.md
+
+# The MP4 program's process records (ledger, specs, reviews, evidence): kept on the team's machines,
+# not part of the submission (untracked 2026-11-16; earlier commits still hold them)
+docs/programs/mp4/

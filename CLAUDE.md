@@ -2,10 +2,17 @@
 
 Course repository for CS598JBR machine problems. MP1-MP3 are complete
 (Python scripts, logs and datasets under `MP1/`, `MP2/`, `MP3/`). MP4 is under
-`MP4/`, built by the program below, which reported **ready-to-merge** on
-2026-11-16 (the owner's merge is what remains).
+`MP4/`, built by the program below, which was merged into `main` and
+**closed** on 2026-11-16 (merge commit `ca12d2a`; why.md D-MERGE records the
+owner's one-time exception for that merge).
 
 ## MP4 program (2026-10-28 →)
+
+**Since 2026-11-16 `docs/programs/mp4/` is local only** (gitignored, owner
+decision): the ledger, specs, reviews and evidence are not in the remote
+repository's current tree. Do not check out a commit older than the removal
+in this working copy without backing that directory up first: git would
+overwrite the local files and delete them on the way back.
 
 The MP4 C-to-Rust agentic translation pipeline runs **one phase per session**
 against the ledger in `docs/programs/mp4/where.md`. Per-phase specs:

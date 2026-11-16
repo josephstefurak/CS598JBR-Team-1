@@ -4,6 +4,12 @@ Every change under `MP4/configs/` after the first real run gets a dated entry
 here, citing the trajectory evidence that motivated it (what.md session
 invariant 2).
 
+Note (2026-11-16): entries below cite files under `docs/programs/mp4/` (smoke
+evidence, review notes, `what.md`). Those are the team's process records.
+They were removed from the repository's current tree on 2026-11-16 and are
+kept locally; the repository's earlier commits still contain them. The
+trajectory evidence under `MP4/trajectories/` is unaffected.
+
 ## 2026-10-29 — initial
 
 Initial configuration written in program phase M3 (no run evidence yet):
